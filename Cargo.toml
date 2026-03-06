@@ -16,6 +16,14 @@ crate-type = ["cdylib", "rlib"]
 rand = { version = "0.8", features = ["small_rng"] }
 rand_xoshiro = "0.6"
 wasm-bindgen = "0.2"
+anyhow = "1"
+
+[dependencies.cudarc]
+version = "0.12"
+optional = true
+
+[features]
+cuda = ["dep:cudarc"]
 
 # getrandom needs the js feature to work in wasm
 [target.'cfg(target_arch = "wasm32")'.dependencies]
