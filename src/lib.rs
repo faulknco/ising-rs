@@ -3,6 +3,7 @@ pub mod cuda;
 
 pub mod coarsening;
 pub mod fitting;
+pub mod kibble_zurek;
 pub mod fss;
 pub mod lattice;
 pub mod metropolis;
