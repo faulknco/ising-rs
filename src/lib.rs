@@ -1,3 +1,4 @@
+pub mod coarsening;
 pub mod fitting;
 pub mod fss;
 pub mod lattice;
