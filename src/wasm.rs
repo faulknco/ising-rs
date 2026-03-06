@@ -181,6 +181,8 @@ fn parse_csv(csv: &str) -> Vec<Observables> {
                 magnetisation: cols[2],
                 heat_capacity: cols[3],
                 susceptibility: cols[4],
+                m2: 0.0,
+                m4: 0.0,
             })
         })
         .collect()

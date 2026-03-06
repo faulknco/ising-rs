@@ -8,6 +8,8 @@ pub struct Observables {
     pub magnetisation: f64, // |⟨M⟩| per spin
     pub heat_capacity: f64, // Cv
     pub susceptibility: f64,// χ
+    pub m2: f64,            // ⟨M²⟩ per spin² — needed for Binder cumulant
+    pub m4: f64,            // ⟨M⁴⟩ per spin⁴ — needed for Binder cumulant
 }
 
 /// Compute observables by averaging over `samples` sweeps.
@@ -29,6 +31,7 @@ pub fn measure(
     let mut sum_e2 = 0.0_f64;
     let mut sum_m = 0.0_f64;
     let mut sum_m2 = 0.0_f64;
+    let mut sum_m4 = 0.0_f64;
 
     for _ in 0..samples {
         sweep(lattice, beta, j, h, rng);
@@ -41,6 +44,7 @@ pub fn measure(
         sum_e2 += e_per * e_per;
         sum_m += m_per;
         sum_m2 += m_per * m_per;
+        sum_m4 += m_per * m_per * m_per * m_per;
     }
 
     let s = samples as f64;
@@ -48,6 +52,7 @@ pub fn measure(
     let avg_e2 = sum_e2 / s;
     let avg_m = sum_m / s;
     let avg_m2 = sum_m2 / s;
+    let avg_m4 = sum_m4 / s;
 
     let t = 1.0 / beta;
     let cv = beta * beta * (avg_e2 - avg_e * avg_e) * n2;
@@ -59,6 +64,8 @@ pub fn measure(
         magnetisation: avg_m,
         heat_capacity: cv,
         susceptibility: chi,
+        m2: avg_m2,
+        m4: avg_m4,
     }
 }
 
