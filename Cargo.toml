@@ -11,6 +11,10 @@ path = "src/bin/sweep.rs"
 name = "kz"
 path = "src/bin/kz.rs"
 
+[[bin]]
+name = "mesh_sweep"
+path = "src/bin/mesh_sweep.rs"
+
 [lib]
 name = "ising"
 path = "src/lib.rs"
