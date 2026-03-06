@@ -32,6 +32,8 @@ pub fn measure(
     let mut sum_m = 0.0_f64;
     let mut sum_m2 = 0.0_f64;
     let mut sum_m4 = 0.0_f64;
+    let mut sum_m_signed = 0.0_f64;
+    let mut sum_m_signed2 = 0.0_f64;
 
     for _ in 0..samples {
         sweep(lattice, beta, j, h, rng);
@@ -39,12 +41,15 @@ pub fn measure(
         let (e, m) = energy_magnetisation(lattice, j, h);
         let e_per = e / n2;
         let m_per = (m / n2).abs();
+        let m_signed = m / n2;
 
         sum_e += e_per;
         sum_e2 += e_per * e_per;
         sum_m += m_per;
         sum_m2 += m_per * m_per;
         sum_m4 += m_per * m_per * m_per * m_per;
+        sum_m_signed += m_signed;
+        sum_m_signed2 += m_signed * m_signed;
     }
 
     let s = samples as f64;
@@ -53,10 +58,12 @@ pub fn measure(
     let avg_m = sum_m / s;
     let avg_m2 = sum_m2 / s;
     let avg_m4 = sum_m4 / s;
+    let avg_m_signed = sum_m_signed / s;
+    let avg_m_signed2 = sum_m_signed2 / s;
 
     let t = 1.0 / beta;
     let cv = beta * beta * (avg_e2 - avg_e * avg_e) * n2;
-    let chi = beta * (avg_m2 - avg_m * avg_m) * n2;
+    let chi = beta * (avg_m_signed2 - avg_m_signed * avg_m_signed) * n2;
 
     Observables {
         temperature: t,

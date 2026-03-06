@@ -14,6 +14,14 @@ use ising::fss::{FssConfig, run_fss};
 use ising::lattice::Geometry;
 use ising::sweep::Algorithm;
 
+fn get_arg(args: &[String], i: usize, flag: &str) -> String {
+    if i + 1 >= args.len() {
+        eprintln!("Error: {} requires a value", flag);
+        std::process::exit(1);
+    }
+    args[i + 1].clone()
+}
+
 fn main() {
     let args: Vec<String> = env::args().collect();
     let mut config = FssConfig::default();
@@ -25,28 +33,28 @@ fn main() {
     while i < args.len() {
         match args[i].as_str() {
             "--sizes" => {
-                config.sizes = args[i+1].split(',')
+                config.sizes = get_arg(&args, i, "--sizes").split(',')
                     .filter_map(|s| s.parse().ok())
                     .collect();
                 i += 2;
             }
             "--geometry" => {
-                config.geometry = match args[i+1].as_str() {
+                config.geometry = match get_arg(&args, i, "--geometry").as_str() {
                     "cubic"      => Geometry::Cubic3D,
                     "triangular" => Geometry::Triangular2D,
                     _            => Geometry::Square2D,
                 };
                 i += 2;
             }
-            "--j"       => { config.j = args[i+1].parse().unwrap(); i += 2; }
-            "--warmup"  => { config.warmup_sweeps = args[i+1].parse().unwrap(); i += 2; }
-            "--samples" => { config.sample_sweeps = args[i+1].parse().unwrap(); i += 2; }
-            "--tmin"    => { config.t_min = args[i+1].parse().unwrap(); i += 2; }
-            "--tmax"    => { config.t_max = args[i+1].parse().unwrap(); i += 2; }
-            "--steps"   => { config.t_steps = args[i+1].parse().unwrap(); i += 2; }
-            "--seed"    => { config.seed = args[i+1].parse().unwrap(); i += 2; }
+            "--j"       => { config.j = get_arg(&args, i, "--j").parse().unwrap(); i += 2; }
+            "--warmup"  => { config.warmup_sweeps = get_arg(&args, i, "--warmup").parse().unwrap(); i += 2; }
+            "--samples" => { config.sample_sweeps = get_arg(&args, i, "--samples").parse().unwrap(); i += 2; }
+            "--tmin"    => { config.t_min = get_arg(&args, i, "--tmin").parse().unwrap(); i += 2; }
+            "--tmax"    => { config.t_max = get_arg(&args, i, "--tmax").parse().unwrap(); i += 2; }
+            "--steps"   => { config.t_steps = get_arg(&args, i, "--steps").parse().unwrap(); i += 2; }
+            "--seed"    => { config.seed = get_arg(&args, i, "--seed").parse().unwrap(); i += 2; }
             "--wolff"   => { config.algorithm = Algorithm::Wolff; i += 1; }
-            "--outdir"  => { outdir = args[i+1].clone(); i += 2; }
+            "--outdir"  => { outdir = get_arg(&args, i, "--outdir"); i += 2; }
             "--gpu"     => { use_gpu = true; i += 1; }
             _           => { i += 1; }
         }

@@ -50,7 +50,7 @@ pub fn run_fss(config: &FssConfig) -> Vec<(usize, Vec<Observables>)> {
             t_steps: config.t_steps,
             warmup_sweeps: config.warmup_sweeps,
             sample_sweeps: config.sample_sweeps,
-            seed: config.seed,
+            seed: config.seed.wrapping_add(n as u64),
             algorithm: config.algorithm,
         };
         let obs = run(&sweep_cfg);

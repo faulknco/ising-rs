@@ -12,6 +12,14 @@ use std::path::Path;
 use ising::coarsening::{CoarseningConfig, run_coarsening};
 use ising::lattice::Geometry;
 
+fn get_arg(args: &[String], i: usize, flag: &str) -> String {
+    if i + 1 >= args.len() {
+        eprintln!("Error: {} requires a value", flag);
+        std::process::exit(1);
+    }
+    args[i + 1].clone()
+}
+
 fn main() {
     let args: Vec<String> = env::args().collect();
     let mut config = CoarseningConfig::default();
@@ -22,23 +30,23 @@ fn main() {
     let mut i = 1;
     while i < args.len() {
         match args[i].as_str() {
-            "--n"            => { config.n = args[i+1].parse().unwrap(); i += 2; }
+            "--n"            => { config.n = get_arg(&args, i, "--n").parse().unwrap(); i += 2; }
             "--geometry"     => {
-                config.geometry = match args[i+1].as_str() {
+                config.geometry = match get_arg(&args, i, "--geometry").as_str() {
                     "cubic"      => Geometry::Cubic3D,
                     "triangular" => Geometry::Triangular2D,
                     _            => Geometry::Square2D,
                 };
                 i += 2;
             }
-            "--j"            => { config.j = args[i+1].parse().unwrap(); i += 2; }
-            "--t-high"       => { config.t_high = args[i+1].parse().unwrap(); i += 2; }
-            "--t-quench"     => { config.t_quench = args[i+1].parse().unwrap(); i += 2; }
-            "--warmup"       => { config.warmup_sweeps = args[i+1].parse().unwrap(); i += 2; }
-            "--steps"        => { config.total_steps = args[i+1].parse().unwrap(); i += 2; }
-            "--sample-every" => { config.sample_every = args[i+1].parse().unwrap(); i += 2; }
-            "--seed"         => { config.seed = args[i+1].parse().unwrap(); i += 2; }
-            "--outdir"       => { outdir = args[i+1].clone(); i += 2; }
+            "--j"            => { config.j = get_arg(&args, i, "--j").parse().unwrap(); i += 2; }
+            "--t-high"       => { config.t_high = get_arg(&args, i, "--t-high").parse().unwrap(); i += 2; }
+            "--t-quench"     => { config.t_quench = get_arg(&args, i, "--t-quench").parse().unwrap(); i += 2; }
+            "--warmup"       => { config.warmup_sweeps = get_arg(&args, i, "--warmup").parse().unwrap(); i += 2; }
+            "--steps"        => { config.total_steps = get_arg(&args, i, "--steps").parse().unwrap(); i += 2; }
+            "--sample-every" => { config.sample_every = get_arg(&args, i, "--sample-every").parse().unwrap(); i += 2; }
+            "--seed"         => { config.seed = get_arg(&args, i, "--seed").parse().unwrap(); i += 2; }
+            "--outdir"       => { outdir = get_arg(&args, i, "--outdir"); i += 2; }
             "--gpu"          => { use_gpu = true; i += 1; }
             _                => { i += 1; }
         }
