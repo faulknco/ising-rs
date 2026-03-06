@@ -7,6 +7,10 @@ edition = "2021"
 name = "sweep"
 path = "src/bin/sweep.rs"
 
+[[bin]]
+name = "kz"
+path = "src/bin/kz.rs"
+
 [lib]
 name = "ising"
 path = "src/lib.rs"
