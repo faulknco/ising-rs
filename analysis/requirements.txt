@@ -4,3 +4,6 @@ pandas>=2.0
 scipy>=1.10
 jupyter>=1.0
 notebook>=7.0
+torch>=2.0
+torchvision>=0.15
+scikit-learn>=1.3
