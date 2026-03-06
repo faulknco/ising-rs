@@ -4,6 +4,7 @@ pub enum Geometry {
     Square2D,
     Triangular2D,
     Cubic3D,
+    Mesh,
 }
 
 /// A flat spin lattice with precomputed neighbour indices.
@@ -35,9 +36,29 @@ impl Lattice {
             Geometry::Square2D => Self::build_neighbours_2d_square(n),
             Geometry::Triangular2D => Self::build_neighbours_2d_triangular(n),
             Geometry::Cubic3D => Self::build_neighbours_3d_cubic(n),
+            Geometry::Mesh => panic!("Use Lattice::from_edges() for Mesh geometry"),
         };
 
         Self { n, spins, neighbours, geometry }
+    }
+
+    /// Load a lattice from an arbitrary undirected edge list.
+    /// n_nodes: total number of spins.
+    /// edges: list of (i, j) pairs, 0-indexed.
+    pub fn from_edges(n_nodes: usize, edges: &[(usize, usize)]) -> Self {
+        let spins = vec![1i8; n_nodes];
+        let mut neighbours = vec![Vec::new(); n_nodes];
+        for &(i, j) in edges {
+            assert!(i < n_nodes && j < n_nodes, "edge ({i},{j}) out of range for n_nodes={n_nodes}");
+            neighbours[i].push(j);
+            neighbours[j].push(i);
+        }
+        Self {
+            n: n_nodes,
+            spins,
+            neighbours,
+            geometry: Geometry::Mesh,
+        }
     }
 
     /// Randomise spins uniformly ±1

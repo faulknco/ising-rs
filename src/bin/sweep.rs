@@ -82,6 +82,7 @@ fn geometry_name(g: Geometry) -> &'static str {
         Geometry::Square2D => "Square2D",
         Geometry::Triangular2D => "Triangular2D",
         Geometry::Cubic3D => "Cubic3D",
+        Geometry::Mesh => "Mesh",
     }
 }
 
@@ -89,6 +90,7 @@ fn expected_ground(g: Geometry) -> &'static str {
     match g {
         Geometry::Square2D => "-2.0 J",
         Geometry::Triangular2D | Geometry::Cubic3D => "-3.0 J",
+        Geometry::Mesh => "N/A",
     }
 }
 
@@ -97,6 +99,7 @@ fn expected_tc(g: Geometry) -> &'static str {
         Geometry::Square2D => "2.27 J/kB (Onsager exact)",
         Geometry::Triangular2D => "3.64 J/kB",
         Geometry::Cubic3D => "4.51 J/kB",
+        Geometry::Mesh => "N/A",
     }
 }
 
