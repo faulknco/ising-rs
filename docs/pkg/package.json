@@ -1,0 +1,15 @@
+{
+  "name": "ising-rs",
+  "type": "module",
+  "version": "0.1.0",
+  "files": [
+    "ising_bg.wasm",
+    "ising.js",
+    "ising.d.ts"
+  ],
+  "main": "ising.js",
+  "types": "ising.d.ts",
+  "sideEffects": [
+    "./snippets/*"
+  ]
+}
