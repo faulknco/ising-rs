@@ -120,20 +120,32 @@ export class IsingWasm {
         wasm.isingwasm_step(this.__wbg_ptr, temperature);
     }
     /**
-     * Run a full temperature sweep and return CSV bytes.
-     * t_min, t_max, steps, warmup, samples — same as CLI.
+     * Run one Wolff cluster flip. Returns cluster size.
+     * Falls back to Metropolis for J ≤ 0 or h ≠ 0.
+     * @param {number} temperature
+     * @returns {number}
+     */
+    step_wolff(temperature) {
+        const ret = wasm.isingwasm_step_wolff(this.__wbg_ptr, temperature);
+        return ret >>> 0;
+    }
+    /**
+     * Run a full temperature sweep and return CSV.
+     * use_wolff: true = Wolff cluster algorithm (faster near Tc),
+     *            false = Metropolis (default, works for any J/h)
      * @param {number} t_min
      * @param {number} t_max
      * @param {number} steps
      * @param {number} warmup
      * @param {number} samples
+     * @param {boolean} use_wolff
      * @returns {string}
      */
-    temperature_sweep(t_min, t_max, steps, warmup, samples) {
+    temperature_sweep(t_min, t_max, steps, warmup, samples, use_wolff) {
         let deferred1_0;
         let deferred1_1;
         try {
-            const ret = wasm.isingwasm_temperature_sweep(this.__wbg_ptr, t_min, t_max, steps, warmup, samples);
+            const ret = wasm.isingwasm_temperature_sweep(this.__wbg_ptr, t_min, t_max, steps, warmup, samples, use_wolff);
             deferred1_0 = ret[0];
             deferred1_1 = ret[1];
             return getStringFromWasm0(ret[0], ret[1]);
@@ -148,6 +160,14 @@ export class IsingWasm {
      */
     warm_up(temperature, n) {
         wasm.isingwasm_warm_up(this.__wbg_ptr, temperature, n);
+    }
+    /**
+     * Run `n` Wolff cluster flips for warm-up.
+     * @param {number} temperature
+     * @param {number} n
+     */
+    warm_up_wolff(temperature, n) {
+        wasm.isingwasm_warm_up_wolff(this.__wbg_ptr, temperature, n);
     }
 }
 if (Symbol.dispose) IsingWasm.prototype[Symbol.dispose] = IsingWasm.prototype.free;

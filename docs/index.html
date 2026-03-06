@@ -218,6 +218,10 @@
     .exp-err.poor { color: #f87171; }
 
     /* ── Slice plane ── */
+    .btn-wolff { background: #1a2e1a; color: #4ade80; border: 1px solid #166534; }
+    .btn-wolff:hover { background: #166534; color: #fff; }
+    .btn-wolff.active { background: #166534; color: #fff; border-color: #4ade80; }
+
     .btn-slice { background: #2d1b4e; color: #c084fc; }
     .btn-slice:hover { background: #6d28d9; color: #fff; }
 
@@ -301,6 +305,14 @@
     </div>
 
     <div class="panel-section">
+      <div class="panel-label">Algorithm</div>
+      <button class="btn btn-wolff" id="btn-wolff">⚡ Wolff</button>
+      <div style="font-size:10px;color:#374151;line-height:1.5;margin-top:2px;">
+        Wolff flips entire clusters — faster near Tc, ~6× speedup on sweeps
+      </div>
+    </div>
+
+    <div class="panel-section">
       <div class="panel-label">Visualisation</div>
       <button class="btn btn-slice" id="btn-slice">⊟ Slice Plane</button>
       <div id="slice-controls">
@@ -324,6 +336,7 @@
         <div class="hud-row"><span class="k">|⟨M⟩|</span> <span class="v" id="hud-mag">—</span></div>
         <div class="hud-row"><span class="k">T</span>      <span class="v" id="hud-t">—</span></div>
         <div class="hud-row"><span class="k">Tc est.</span><span class="v highlight" id="hud-tc">run sweep</span></div>
+        <div class="hud-row" id="cluster-row" style="display:none"><span class="k">Cluster</span><span class="v" id="hud-cluster">—</span></div>
       </div>
     </div>
 

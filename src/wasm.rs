@@ -6,6 +6,7 @@ use crate::fitting::CriticalExponents;
 use crate::lattice::{Geometry, Lattice};
 use crate::metropolis::{sweep, warm_up};
 use crate::observables::{measure, Observables};
+use crate::wolff;
 
 /// The live simulation state exposed to JavaScript.
 ///
@@ -42,10 +43,28 @@ impl IsingWasm {
         sweep(&mut self.lattice, beta, self.j, self.h, &mut self.rng);
     }
 
+    /// Run one Wolff cluster flip. Returns cluster size.
+    /// Falls back to Metropolis for J ≤ 0 or h ≠ 0.
+    pub fn step_wolff(&mut self, temperature: f64) -> usize {
+        let beta = 1.0 / f64::max(temperature, 0.01);
+        let cluster_size = wolff::step(&mut self.lattice, beta, self.j, &mut self.rng);
+        // Handle magnetic field with a Metropolis sweep
+        if self.h.abs() > 1e-9 {
+            sweep(&mut self.lattice, beta, self.j, self.h, &mut self.rng);
+        }
+        cluster_size
+    }
+
     /// Run `n` sweeps — useful for warm-up from JS without per-frame overhead.
     pub fn warm_up(&mut self, temperature: f64, n: usize) {
         let beta = 1.0 / f64::max(temperature, 0.01);
         warm_up(&mut self.lattice, beta, self.j, self.h, n, &mut self.rng);
+    }
+
+    /// Run `n` Wolff cluster flips for warm-up.
+    pub fn warm_up_wolff(&mut self, temperature: f64, n: usize) {
+        let beta = 1.0 / f64::max(temperature, 0.01);
+        wolff::warm_up(&mut self.lattice, beta, self.j, self.h, n, &mut self.rng);
     }
 
     /// Pointer into WASM linear memory for the spin array.
@@ -75,8 +94,9 @@ impl IsingWasm {
         self.lattice.randomise(&mut self.rng);
     }
 
-    /// Run a full temperature sweep and return CSV bytes.
-    /// t_min, t_max, steps, warmup, samples — same as CLI.
+    /// Run a full temperature sweep and return CSV.
+    /// use_wolff: true = Wolff cluster algorithm (faster near Tc),
+    ///            false = Metropolis (default, works for any J/h)
     pub fn temperature_sweep(
         &mut self,
         t_min: f64,
@@ -84,14 +104,21 @@ impl IsingWasm {
         steps: usize,
         warmup: usize,
         samples: usize,
+        use_wolff: bool,
     ) -> String {
         let mut out = String::from("T,E,M,Cv,chi\n");
 
-        // Anneal from high → low, same as CLI
+        // Anneal from high → low
         for step in (0..steps).rev() {
             let t = t_min + (t_max - t_min) * step as f64 / (steps - 1) as f64;
             let beta = 1.0 / f64::max(t, 0.01);
-            warm_up(&mut self.lattice, beta, self.j, self.h, warmup, &mut self.rng);
+
+            if use_wolff && self.j > 0.0 {
+                wolff::warm_up(&mut self.lattice, beta, self.j, self.h, warmup, &mut self.rng);
+            } else {
+                warm_up(&mut self.lattice, beta, self.j, self.h, warmup, &mut self.rng);
+            }
+
             let obs = measure(&mut self.lattice, beta, self.j, self.h, samples, &mut self.rng);
             out.push_str(&format!(
                 "{:.4},{:.6},{:.6},{:.6},{:.6}\n",
@@ -100,7 +127,6 @@ impl IsingWasm {
             ));
         }
 
-        // Rows are currently T_min..T_max reversed — sort by reversing lines
         let header = "T,E,M,Cv,chi\n".to_string();
         let mut rows: Vec<&str> = out.lines().skip(1).collect();
         rows.reverse();

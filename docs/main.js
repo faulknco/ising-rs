@@ -26,6 +26,8 @@ const state = {
   running: false,
   step: 0,
   magnetisation: 0,
+  wolff: false,
+  clusterSize: 0,
 };
 
 // ─── Worker ───────────────────────────────────────────────────────────────────
@@ -42,6 +44,7 @@ worker.onmessage = (e) => {
       updateMeshes(msg.spins);
       state.step = msg.step;
       state.magnetisation = msg.magnetisation;
+      state.clusterSize = msg.clusterSize ?? 0;
       updateHUD();
       break;
     case "sweep_done":
@@ -348,9 +351,13 @@ function renderCharts() {
 // ─── HUD ─────────────────────────────────────────────────────────────────────
 
 function updateHUD() {
-  document.getElementById("hud-step").textContent = state.step.toLocaleString();
-  document.getElementById("hud-mag").textContent  = state.magnetisation.toFixed(3);
-  document.getElementById("hud-t").textContent    = state.temperature.toFixed(2);
+  document.getElementById("hud-step").textContent   = state.step.toLocaleString();
+  document.getElementById("hud-mag").textContent    = state.magnetisation.toFixed(3);
+  document.getElementById("hud-t").textContent      = state.temperature.toFixed(2);
+  const clEl = document.getElementById("hud-cluster");
+  if (clEl) clEl.textContent = state.wolff && state.clusterSize > 0
+    ? `${state.clusterSize} (${((state.clusterSize / state.n ** 3) * 100).toFixed(1)}%)`
+    : "—";
 }
 
 function setStatus(msg) {
@@ -461,6 +468,16 @@ function bindControls() {
     workerSend({ type: "reset" });
     state.step = 0;
     updateHUD();
+  });
+
+  // Algorithm toggle
+  document.getElementById("btn-wolff").addEventListener("click", () => {
+    state.wolff = !state.wolff;
+    document.getElementById("btn-wolff").textContent = state.wolff ? "⚡ Wolff ON" : "⚡ Wolff";
+    document.getElementById("btn-wolff").classList.toggle("active", state.wolff);
+    workerSend({ type: "set_algo", wolff: state.wolff });
+    const clRow = document.getElementById("cluster-row");
+    if (clRow) clRow.style.display = state.wolff ? "flex" : "none";
   });
 
   // Slice plane toggle

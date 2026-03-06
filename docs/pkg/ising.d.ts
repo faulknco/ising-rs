@@ -56,14 +56,24 @@ export class IsingWasm {
      */
     step(temperature: number): void;
     /**
-     * Run a full temperature sweep and return CSV bytes.
-     * t_min, t_max, steps, warmup, samples — same as CLI.
+     * Run one Wolff cluster flip. Returns cluster size.
+     * Falls back to Metropolis for J ≤ 0 or h ≠ 0.
      */
-    temperature_sweep(t_min: number, t_max: number, steps: number, warmup: number, samples: number): string;
+    step_wolff(temperature: number): number;
+    /**
+     * Run a full temperature sweep and return CSV.
+     * use_wolff: true = Wolff cluster algorithm (faster near Tc),
+     *            false = Metropolis (default, works for any J/h)
+     */
+    temperature_sweep(t_min: number, t_max: number, steps: number, warmup: number, samples: number, use_wolff: boolean): string;
     /**
      * Run `n` sweeps — useful for warm-up from JS without per-frame overhead.
      */
     warm_up(temperature: number, n: number): void;
+    /**
+     * Run `n` Wolff cluster flips for warm-up.
+     */
+    warm_up_wolff(temperature: number, n: number): void;
 }
 
 export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembly.Module;
@@ -81,8 +91,10 @@ export interface InitOutput {
     readonly isingwasm_size: (a: number) => number;
     readonly isingwasm_spins_ptr: (a: number) => number;
     readonly isingwasm_step: (a: number, b: number) => void;
-    readonly isingwasm_temperature_sweep: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number];
+    readonly isingwasm_step_wolff: (a: number, b: number) => number;
+    readonly isingwasm_temperature_sweep: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number];
     readonly isingwasm_warm_up: (a: number, b: number, c: number) => void;
+    readonly isingwasm_warm_up_wolff: (a: number, b: number, c: number) => void;
     readonly __wbindgen_externrefs: WebAssembly.Table;
     readonly __wbindgen_malloc: (a: number, b: number) => number;
     readonly __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;

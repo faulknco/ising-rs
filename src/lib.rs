@@ -4,3 +4,4 @@ pub mod metropolis;
 pub mod observables;
 pub mod sweep;
 pub mod wasm;
+pub mod wolff;

@@ -14,16 +14,21 @@
 use std::env;
 use ising::{
     lattice::Geometry,
-    sweep::{run, SweepConfig},
+    sweep::{run, Algorithm, SweepConfig},
 };
 
 fn main() {
     let args: Vec<String> = env::args().collect();
     let config = parse_args(&args);
 
+    let algo_name = match config.algorithm {
+        Algorithm::Metropolis => "Metropolis",
+        Algorithm::Wolff      => "Wolff",
+    };
     eprintln!(
-        "Running {} sweep: N={}, J={}, h={}, T=[{:.1}..{:.1}], warmup={}, samples={}",
+        "Running {} sweep [{}]: N={}, J={}, h={}, T=[{:.1}..{:.1}], warmup={}, samples={}",
         geometry_name(config.geometry),
+        algo_name,
         config.n,
         config.j,
         config.h,
@@ -118,6 +123,7 @@ fn parse_args(args: &[String]) -> SweepConfig {
             "--tmin" => { cfg.t_min = args[i + 1].parse().unwrap(); i += 2; }
             "--tmax" => { cfg.t_max = args[i + 1].parse().unwrap(); i += 2; }
             "--steps" => { cfg.t_steps = args[i + 1].parse().unwrap(); i += 2; }
+            "--wolff" => { cfg.algorithm = Algorithm::Wolff; i += 1; }
             _ => { i += 1; }
         }
     }

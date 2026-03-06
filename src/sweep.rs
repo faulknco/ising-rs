@@ -2,8 +2,15 @@ use rand::SeedableRng;
 use rand_xoshiro::Xoshiro256PlusPlus;
 
 use crate::lattice::{Geometry, Lattice};
-use crate::metropolis::warm_up;
+use crate::metropolis::warm_up as metropolis_warm_up;
+use crate::wolff::warm_up as wolff_warm_up;
 use crate::observables::{measure, Observables};
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Algorithm {
+    Metropolis,
+    Wolff,
+}
 
 /// Configuration for a temperature sweep.
 pub struct SweepConfig {
@@ -17,6 +24,7 @@ pub struct SweepConfig {
     pub warmup_sweeps: usize,
     pub sample_sweeps: usize,
     pub seed: u64,
+    pub algorithm: Algorithm,
 }
 
 impl Default for SweepConfig {
@@ -32,6 +40,7 @@ impl Default for SweepConfig {
             warmup_sweeps: 2000,
             sample_sweeps: 500,
             seed: 42,
+            algorithm: Algorithm::Metropolis,
         }
     }
 }
@@ -59,7 +68,12 @@ pub fn run(config: &SweepConfig) -> Vec<Observables> {
         let beta = 1.0 / t;
 
         // Warm up at this temperature, carrying state from previous T
-        warm_up(&mut lattice, beta, config.j, config.h, config.warmup_sweeps, &mut rng);
+        match config.algorithm {
+            Algorithm::Metropolis =>
+                metropolis_warm_up(&mut lattice, beta, config.j, config.h, config.warmup_sweeps, &mut rng),
+            Algorithm::Wolff =>
+                wolff_warm_up(&mut lattice, beta, config.j, config.h, config.warmup_sweeps, &mut rng),
+        };
 
         // Measure
         let obs = measure(&mut lattice, beta, config.j, config.h, config.sample_sweeps, &mut rng);

@@ -23,6 +23,8 @@ let running = false;
 let stepCount = 0;
 let temperature = 2.0;
 let frameTimer = null;
+let useWolff = false;    // toggled by "set_algo" message
+let clusterSize = 0;     // last Wolff cluster size, for HUD
 
 async function initWasm() {
   await init();
@@ -31,17 +33,21 @@ async function initWasm() {
 
 function tick() {
   if (!sim || !running) return;
-  sim.step(temperature);
+
+  if (useWolff) {
+    clusterSize = sim.step_wolff(temperature);
+  } else {
+    sim.step(temperature);
+    clusterSize = 0;
+  }
   stepCount++;
 
-  // get_spins_copy() returns a JS Array from Rust Vec<i8>
-  // Convert to Int8Array and transfer (zero extra copy on transfer)
   const raw = sim.get_spins_copy();
   const spins = new Int8Array(raw);
   const mag = sim.magnetisation();
 
   self.postMessage(
-    { type: "frame", spins, magnetisation: mag, step: stepCount },
+    { type: "frame", spins, magnetisation: mag, step: stepCount, clusterSize },
     [spins.buffer]
   );
 }
@@ -76,6 +82,11 @@ self.onmessage = async (e) => {
       break;
     }
 
+    case "set_algo": {
+      useWolff = msg.wolff ?? false;
+      break;
+    }
+
     case "reset": {
       if (sim) { sim.randomise(); stepCount = 0; }
       break;
@@ -102,12 +113,16 @@ self.onmessage = async (e) => {
       if (!sim) break;
 
       sim.randomise();
+      // Wolff needs ~10x fewer steps for same decorrelation quality
+      const warmup  = useWolff ? 50  : (msg.warmup  ?? 500);
+      const samples = useWolff ? 20  : (msg.samples ?? 200);
       const csv = sim.temperature_sweep(
         msg.tMin ?? 0.5,
         msg.tMax ?? 5.0,
         msg.steps ?? 46,
-        msg.warmup ?? 500,
-        msg.samples ?? 200,
+        warmup,
+        samples,
+        useWolff,
       );
       // Fit critical exponents from the sweep data (window = 0.8 J/kB)
       const exponentsJson = sim.fit_exponents(csv, 0.8);
