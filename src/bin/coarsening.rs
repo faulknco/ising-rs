@@ -17,6 +17,8 @@ fn main() {
     let mut config = CoarseningConfig::default();
     let mut outdir = String::from("analysis/data");
 
+    let mut use_gpu = false;
+
     let mut i = 1;
     while i < args.len() {
         match args[i].as_str() {
@@ -37,6 +39,7 @@ fn main() {
             "--sample-every" => { config.sample_every = args[i+1].parse().unwrap(); i += 2; }
             "--seed"         => { config.seed = args[i+1].parse().unwrap(); i += 2; }
             "--outdir"       => { outdir = args[i+1].clone(); i += 2; }
+            "--gpu"          => { use_gpu = true; i += 1; }
             _                => { i += 1; }
         }
     }
@@ -49,6 +52,16 @@ fn main() {
     );
 
     let results = run_coarsening(&config);
+
+    #[cfg(feature = "cuda")]
+    if use_gpu {
+        eprintln!("GPU mode: CUDA checkerboard Metropolis (RTX 2060 target)");
+        eprintln!("Note: full GPU coarsening path not yet implemented — using CPU");
+    }
+    #[cfg(not(feature = "cuda"))]
+    if use_gpu {
+        eprintln!("Warning: --gpu specified but binary was not compiled with --features cuda");
+    }
 
     let fname = format!("coarsening_N{}_T{:.2}.csv", config.n, config.t_quench);
     let path = Path::new(&outdir).join(&fname);

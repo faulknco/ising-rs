@@ -19,6 +19,8 @@ fn main() {
     let mut config = FssConfig::default();
     let mut outdir = String::from("analysis/data");
 
+    let mut use_gpu = false;
+
     let mut i = 1;
     while i < args.len() {
         match args[i].as_str() {
@@ -45,6 +47,7 @@ fn main() {
             "--seed"    => { config.seed = args[i+1].parse().unwrap(); i += 2; }
             "--wolff"   => { config.algorithm = Algorithm::Wolff; i += 1; }
             "--outdir"  => { outdir = args[i+1].clone(); i += 2; }
+            "--gpu"     => { use_gpu = true; i += 1; }
             _           => { i += 1; }
         }
     }
@@ -52,6 +55,16 @@ fn main() {
     fs::create_dir_all(&outdir).expect("failed to create outdir");
 
     let results = run_fss(&config);
+
+    #[cfg(feature = "cuda")]
+    if use_gpu {
+        eprintln!("GPU mode: CUDA checkerboard Metropolis (RTX 2060 target)");
+        eprintln!("Note: full GPU FSS path not yet implemented — using CPU");
+    }
+    #[cfg(not(feature = "cuda"))]
+    if use_gpu {
+        eprintln!("Warning: --gpu specified but binary was not compiled with --features cuda");
+    }
 
     for (n, obs_list) in &results {
         let path = Path::new(&outdir).join(format!("fss_N{n}.csv"));
