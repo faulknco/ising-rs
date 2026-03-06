@@ -1,0 +1,4 @@
+/target
+# wasm-pack build artefacts are committed so GitHub Pages can serve them
+# but we exclude the Node-style package.json from pkg
+www/pkg/.gitignore

@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ising Model — 3D Visualiser</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: "Courier New", monospace;
+      background: #07070f;
+      color: #e5e7eb;
+      height: 100dvh;
+      display: grid;
+      grid-template-rows: auto 1fr;
+      overflow: hidden;
+    }
+
+    header {
+      padding: 10px 16px;
+      border-bottom: 1px solid #1f2937;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      background: #0d0d1a;
+    }
+
+    header h1 { font-size: 13px; color: #60a5fa; letter-spacing: 0.05em; }
+
+    #status {
+      font-size: 11px;
+      color: #6b7280;
+      margin-left: auto;
+    }
+
+    .main {
+      display: grid;
+      grid-template-columns: 220px 1fr 260px;
+      overflow: hidden;
+    }
+
+    /* ── Controls panel ── */
+    .panel {
+      background: #0d0d1a;
+      border-right: 1px solid #1f2937;
+      padding: 12px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .panel-section { display: flex; flex-direction: column; gap: 8px; }
+    .panel-label {
+      font-size: 10px;
+      color: #4b5563;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      border-bottom: 1px solid #1f2937;
+      padding-bottom: 4px;
+    }
+
+    .ctrl-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .ctrl-row label {
+      font-size: 11px;
+      color: #9ca3af;
+      width: 36px;
+      flex-shrink: 0;
+    }
+
+    .ctrl-row input[type=range] {
+      flex: 1;
+      accent-color: #3b82f6;
+    }
+
+    .ctrl-row .val {
+      font-size: 11px;
+      color: #fff;
+      width: 32px;
+      text-align: right;
+    }
+
+    .btn {
+      width: 100%;
+      padding: 7px;
+      border: none;
+      border-radius: 5px;
+      font-family: inherit;
+      font-size: 11px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+
+    .btn-run   { background: #166534; color: #fff; }
+    .btn-run:hover { background: #15803d; }
+    .btn-run.paused { background: #7f1d1d; }
+    .btn-run.paused:hover { background: #991b1b; }
+    .btn-reset { background: #1f2937; color: #9ca3af; }
+    .btn-reset:hover { background: #374151; }
+    .btn-sweep { background: #1e3a5f; color: #93c5fd; }
+    .btn-sweep:hover { background: #1d4ed8; color: #fff; }
+    .btn:disabled { opacity: 0.4; cursor: default; }
+
+    /* ── HUD ── */
+    .hud { display: flex; flex-direction: column; gap: 4px; }
+    .hud-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 11px;
+    }
+    .hud-row .k { color: #6b7280; }
+    .hud-row .v { color: #fff; }
+    .hud-row .v.highlight { color: #fbbf24; }
+
+    /* ── Viewport ── */
+    #viewport {
+      position: relative;
+      overflow: hidden;
+    }
+
+    #canvas { display: block; width: 100%; height: 100%; }
+
+    /* ── Charts panel ── */
+    .charts-panel {
+      background: #0d0d1a;
+      border-left: 1px solid #1f2937;
+      padding: 10px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .chart-box {
+      background: #111827;
+      border: 1px solid #1f2937;
+      border-radius: 6px;
+      padding: 6px;
+      min-height: 155px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .chart-box > div { width: 100%; }
+
+    .placeholder {
+      font-size: 10px;
+      color: #374151;
+      text-align: center;
+      padding: 8px;
+    }
+
+    .legend {
+      font-size: 10px;
+      color: #4b5563;
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      padding: 2px 4px;
+    }
+
+    .legend span { display: flex; align-items: center; gap: 4px; }
+    .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>Ising Model — 3D Metropolis Monte Carlo</h1>
+  <div id="status" style="font-size:11px;color:#6b7280;">Initialising WASM…</div>
+</header>
+
+<div class="main">
+
+  <!-- Controls -->
+  <div class="panel">
+
+    <div class="panel-section">
+      <div class="panel-label">Parameters</div>
+
+      <div class="ctrl-row">
+        <label>N</label>
+        <input type="range" id="ctrl-n" min="5" max="25" step="1" value="15" />
+        <span class="val" id="val-n">15</span>
+      </div>
+
+      <div class="ctrl-row">
+        <label>T</label>
+        <input type="range" id="ctrl-t" min="0.1" max="6" step="0.05" value="2.0" />
+        <span class="val" id="val-t">2.00</span>
+      </div>
+
+      <div class="ctrl-row">
+        <label>J</label>
+        <input type="range" id="ctrl-j" min="-2" max="2" step="0.1" value="1.0" />
+        <span class="val" id="val-j">1.0</span>
+      </div>
+
+      <div class="ctrl-row">
+        <label>h</label>
+        <input type="range" id="ctrl-h" min="-2" max="2" step="0.1" value="0.0" />
+        <span class="val" id="val-h">0.0</span>
+      </div>
+    </div>
+
+    <div class="panel-section">
+      <div class="panel-label">Simulation</div>
+      <button class="btn btn-run"   id="btn-run">▶ Run</button>
+      <button class="btn btn-reset" id="btn-reset">↺ Reset</button>
+      <button class="btn btn-sweep" id="btn-sweep">⊞ Temp Sweep</button>
+    </div>
+
+    <div class="panel-section">
+      <div class="panel-label">Live Stats</div>
+      <div class="hud">
+        <div class="hud-row"><span class="k">Steps</span>  <span class="v" id="hud-step">0</span></div>
+        <div class="hud-row"><span class="k">|⟨M⟩|</span> <span class="v" id="hud-mag">—</span></div>
+        <div class="hud-row"><span class="k">T</span>      <span class="v" id="hud-t">—</span></div>
+        <div class="hud-row"><span class="k">Tc est.</span><span class="v highlight" id="hud-tc">run sweep</span></div>
+      </div>
+    </div>
+
+    <div class="panel-section">
+      <div class="panel-label">Legend</div>
+      <div class="legend">
+        <span><span class="dot" style="background:#3b82f6"></span>spin +1</span>
+        <span><span class="dot" style="background:#ef4444"></span>spin −1</span>
+      </div>
+      <div style="font-size:10px;color:#374151;margin-top:4px;line-height:1.5;">
+        N³ cubic lattice<br>
+        Periodic boundary<br>
+        Metropolis algorithm<br>
+        WASM + Web Worker
+      </div>
+    </div>
+
+  </div>
+
+  <!-- 3D Viewport -->
+  <div id="viewport">
+    <canvas id="canvas"></canvas>
+  </div>
+
+  <!-- Charts -->
+  <div class="charts-panel">
+    <div style="font-size:10px;color:#4b5563;padding:2px 4px 6px;">
+      Temperature sweep — T: 0.5 → 5.0 J/k<sub>B</sub>
+    </div>
+    <div class="chart-box"><div id="chart-e"><p class="placeholder">Run sweep to see ⟨E⟩</p></div></div>
+    <div class="chart-box"><div id="chart-m"><p class="placeholder">Run sweep to see |⟨M⟩|</p></div></div>
+    <div class="chart-box"><div id="chart-cv"><p class="placeholder">Run sweep to see Cv</p></div></div>
+    <div class="chart-box"><div id="chart-chi"><p class="placeholder">Run sweep to see χ</p></div></div>
+  </div>
+
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.167.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.167.0/examples/jsm/"
+  }
+}
+</script>
+<script type="module" src="./main.js"></script>
+</body>
+</html>
