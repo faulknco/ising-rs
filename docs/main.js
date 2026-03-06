@@ -46,6 +46,7 @@ worker.onmessage = (e) => {
       break;
     case "sweep_done":
       parseSweepCSV(msg.csv);
+      if (msg.exponentsJson) displayExponents(msg.exponentsJson);
       setStatus("Sweep complete ✓");
       document.getElementById("btn-sweep").disabled = false;
       document.getElementById("btn-run").disabled = false;
@@ -188,6 +189,55 @@ function announceTc() {
     if (dm > maxDm) { maxDm = dm; tc = sweepRows[i].T; }
   }
   document.getElementById("hud-tc").textContent = tc.toFixed(2);
+}
+
+function displayExponents(json) {
+  if (!json) return;
+  let e;
+  try { e = JSON.parse(json); } catch { return; }
+
+  const rows = [
+    { symbol: "Tc",  measured: e.tc.toFixed(3),    theory: "4.5115",  err: null },
+    { symbol: "β",   measured: e.beta.toFixed(4),  theory: e.theory_beta.toFixed(4),  err: e.beta_err },
+    { symbol: "α",   measured: e.alpha.toFixed(4), theory: e.theory_alpha.toFixed(4), err: e.alpha_err },
+    { symbol: "γ",   measured: e.gamma.toFixed(4), theory: e.theory_gamma.toFixed(4), err: e.gamma_err },
+  ];
+
+  const container = document.getElementById("exponents-table");
+  container.replaceChildren();
+
+  for (const row of rows) {
+    const div = document.createElement("div");
+    div.className = "exp-row";
+
+    const sym = document.createElement("span");
+    sym.className = "exp-sym";
+    sym.textContent = row.symbol;
+
+    const meas = document.createElement("span");
+    meas.className = "exp-val";
+    meas.textContent = row.measured;
+
+    const th = document.createElement("span");
+    th.className = "exp-theory";
+    th.textContent = row.theory;
+
+    div.appendChild(sym);
+    div.appendChild(meas);
+    div.appendChild(th);
+
+    if (row.err !== null) {
+      const err = document.createElement("span");
+      const pct = (row.err * 100).toFixed(1);
+      err.className = `exp-err ${row.err < 0.1 ? "good" : row.err < 0.2 ? "ok" : "poor"}`;
+      err.textContent = `${pct}%`;
+      div.appendChild(err);
+    }
+
+    container.appendChild(div);
+  }
+
+  document.getElementById("exponents-section").style.display = "block";
 }
 
 // Build SVG purely from numbers — no user content is interpolated

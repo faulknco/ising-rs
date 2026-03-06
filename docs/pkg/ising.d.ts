@@ -11,6 +11,13 @@ export class IsingWasm {
     free(): void;
     [Symbol.dispose](): void;
     /**
+     * Parse sweep CSV and fit critical exponents. Returns JSON string:
+     * { tc, beta, alpha, gamma, beta_err, alpha_err, gamma_err,
+     *   theory_beta, theory_alpha, theory_gamma }
+     * Returns empty string if fitting fails (too few points, etc).
+     */
+    fit_exponents(csv: string, window: number): string;
+    /**
      * Copy of spin array as Int8Array — safe to transfer to main thread.
      */
     get_spins_copy(): Int8Array;
@@ -64,6 +71,7 @@ export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembl
 export interface InitOutput {
     readonly memory: WebAssembly.Memory;
     readonly __wbg_isingwasm_free: (a: number, b: number) => void;
+    readonly isingwasm_fit_exponents: (a: number, b: number, c: number, d: number) => [number, number];
     readonly isingwasm_get_spins_copy: (a: number) => [number, number];
     readonly isingwasm_magnetisation: (a: number) => number;
     readonly isingwasm_n: (a: number) => number;
@@ -76,6 +84,8 @@ export interface InitOutput {
     readonly isingwasm_temperature_sweep: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number];
     readonly isingwasm_warm_up: (a: number, b: number, c: number) => void;
     readonly __wbindgen_externrefs: WebAssembly.Table;
+    readonly __wbindgen_malloc: (a: number, b: number) => number;
+    readonly __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;
     readonly __wbindgen_free: (a: number, b: number, c: number) => void;
     readonly __wbindgen_start: () => void;
 }

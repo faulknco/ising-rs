@@ -1,3 +1,4 @@
+pub mod fitting;
 pub mod lattice;
 pub mod metropolis;
 pub mod observables;

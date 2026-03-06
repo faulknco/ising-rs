@@ -170,6 +170,53 @@
     .legend span { display: flex; align-items: center; gap: 4px; }
     .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
 
+    /* ── Critical exponents ── */
+    #exponents-section {
+      display: none;
+      background: #0d1117;
+      border: 1px solid #1f2937;
+      border-radius: 6px;
+      padding: 8px;
+    }
+
+    .exp-header {
+      font-size: 10px;
+      color: #4b5563;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 6px;
+      border-bottom: 1px solid #1f2937;
+      padding-bottom: 4px;
+    }
+
+    .exp-col-labels {
+      display: grid;
+      grid-template-columns: 24px 1fr 1fr 1fr;
+      gap: 2px;
+      font-size: 9px;
+      color: #374151;
+      margin-bottom: 4px;
+      padding: 0 2px;
+    }
+
+    .exp-row {
+      display: grid;
+      grid-template-columns: 24px 1fr 1fr 1fr;
+      gap: 2px;
+      padding: 3px 2px;
+      border-radius: 3px;
+    }
+
+    .exp-row:hover { background: #111827; }
+
+    .exp-sym    { font-size: 11px; color: #e9d5ff; font-weight: 700; }
+    .exp-val    { font-size: 11px; color: #fff; text-align: right; }
+    .exp-theory { font-size: 11px; color: #4b5563; text-align: right; }
+    .exp-err    { font-size: 10px; text-align: right; font-weight: 600; }
+    .exp-err.good { color: #34d399; }
+    .exp-err.ok   { color: #fbbf24; }
+    .exp-err.poor { color: #f87171; }
+
     /* ── Slice plane ── */
     .btn-slice { background: #2d1b4e; color: #c084fc; }
     .btn-slice:hover { background: #6d28d9; color: #fff; }
@@ -310,6 +357,18 @@
     <div class="chart-box"><div id="chart-m"><p class="placeholder">Run sweep to see |⟨M⟩|</p></div></div>
     <div class="chart-box"><div id="chart-cv"><p class="placeholder">Run sweep to see Cv</p></div></div>
     <div class="chart-box"><div id="chart-chi"><p class="placeholder">Run sweep to see χ</p></div></div>
+
+    <!-- Critical exponents — shown after sweep -->
+    <div id="exponents-section">
+      <div class="exp-header">Critical Exponents (3D Ising)</div>
+      <div class="exp-col-labels">
+        <span></span>
+        <span style="text-align:right">measured</span>
+        <span style="text-align:right">theory</span>
+        <span style="text-align:right">error</span>
+      </div>
+      <div id="exponents-table"></div>
+    </div>
   </div>
 
 </div>

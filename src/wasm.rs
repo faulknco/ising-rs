@@ -2,9 +2,10 @@ use wasm_bindgen::prelude::*;
 use rand::SeedableRng;
 use rand_xoshiro::Xoshiro256PlusPlus;
 
+use crate::fitting::CriticalExponents;
 use crate::lattice::{Geometry, Lattice};
 use crate::metropolis::{sweep, warm_up};
-use crate::observables::measure;
+use crate::observables::{measure, Observables};
 
 /// The live simulation state exposed to JavaScript.
 ///
@@ -116,4 +117,45 @@ impl IsingWasm {
     pub fn get_spins_copy(&self) -> Vec<i8> {
         self.lattice.spins.clone()
     }
+
+    /// Parse sweep CSV and fit critical exponents. Returns JSON string:
+    /// { tc, beta, alpha, gamma, beta_err, alpha_err, gamma_err,
+    ///   theory_beta, theory_alpha, theory_gamma }
+    /// Returns empty string if fitting fails (too few points, etc).
+    pub fn fit_exponents(&self, csv: &str, window: f64) -> String {
+        let data = parse_csv(csv);
+        match CriticalExponents::fit(&data, window) {
+            None => String::new(),
+            Some(e) => format!(
+                r#"{{"tc":{tc:.3},"beta":{beta:.4},"alpha":{alpha:.4},"gamma":{gamma:.4},"beta_err":{be:.4},"alpha_err":{ae:.4},"gamma_err":{ge:.4},"theory_beta":0.3265,"theory_alpha":0.1096,"theory_gamma":1.2372}}"#,
+                tc    = e.tc,
+                beta  = e.beta,
+                alpha = e.alpha,
+                gamma = e.gamma,
+                be    = e.beta_err,
+                ae    = e.alpha_err,
+                ge    = e.gamma_err,
+            ),
+        }
+    }
+}
+
+/// Parse the CSV produced by temperature_sweep() into Observables.
+fn parse_csv(csv: &str) -> Vec<Observables> {
+    csv.lines()
+        .skip(1) // header
+        .filter_map(|line| {
+            let cols: Vec<f64> = line.split(',')
+                .filter_map(|s| s.trim().parse().ok())
+                .collect();
+            if cols.len() < 5 { return None; }
+            Some(Observables {
+                temperature:   cols[0],
+                energy:        cols[1],
+                magnetisation: cols[2],
+                heat_capacity: cols[3],
+                susceptibility: cols[4],
+            })
+        })
+        .collect()
 }

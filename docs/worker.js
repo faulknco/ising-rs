@@ -109,7 +109,9 @@ self.onmessage = async (e) => {
         msg.warmup ?? 500,
         msg.samples ?? 200,
       );
-      self.postMessage({ type: "sweep_done", csv });
+      // Fit critical exponents from the sweep data (window = 0.8 J/kB)
+      const exponentsJson = sim.fit_exponents(csv, 0.8);
+      self.postMessage({ type: "sweep_done", csv, exponentsJson });
       break;
     }
   }
