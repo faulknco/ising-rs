@@ -61,6 +61,7 @@ const canvas = document.getElementById("canvas");
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 renderer.setPixelRatio(window.devicePixelRatio);
 renderer.setClearColor(0x070710);
+renderer.localClippingEnabled = true;
 
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 1000);
@@ -79,8 +80,35 @@ scene.add(backLight);
 // ─── Instanced Meshes ─────────────────────────────────────────────────────────
 
 const GEO      = new THREE.SphereGeometry(0.42, 10, 8);
-const MAT_UP   = new THREE.MeshPhongMaterial({ color: 0x3b82f6, shininess: 80 });
-const MAT_DOWN = new THREE.MeshPhongMaterial({ color: 0xef4444, shininess: 80 });
+const MAT_UP   = new THREE.MeshPhongMaterial({ color: 0x3b82f6, shininess: 80, clippingPlanes: [], clipIntersection: false });
+const MAT_DOWN = new THREE.MeshPhongMaterial({ color: 0xef4444, shininess: 80, clippingPlanes: [], clipIntersection: false });
+
+// ─── Slice Plane ──────────────────────────────────────────────────────────────
+// One clipping plane, normal points in the chosen axis direction.
+// Anything on the negative side of the plane is clipped (hidden).
+
+const slicePlane = new THREE.Plane(new THREE.Vector3(1, 0, 0), 0);
+let sliceEnabled = false;
+let sliceAxis = "x"; // "x" | "y" | "z"
+
+function updateSlicePlane() {
+  if (!sliceEnabled) {
+    MAT_UP.clippingPlanes   = [];
+    MAT_DOWN.clippingPlanes = [];
+    return;
+  }
+  const pos = parseFloat(document.getElementById("ctrl-slice").value);
+  document.getElementById("val-slice").textContent = pos.toFixed(1);
+  const normal = sliceAxis === "x"
+    ? new THREE.Vector3(1, 0, 0)
+    : sliceAxis === "y"
+      ? new THREE.Vector3(0, 1, 0)
+      : new THREE.Vector3(0, 0, 1);
+  slicePlane.normal.copy(normal);
+  slicePlane.constant = -pos; // plane equation: normal·x + constant = 0
+  MAT_UP.clippingPlanes   = [slicePlane];
+  MAT_DOWN.clippingPlanes = [slicePlane];
+}
 
 let meshUp = null;
 let meshDown = null;
@@ -311,6 +339,16 @@ function initSim() {
 
   buildPositions(state.n);
   initMeshes(state.n);
+
+  // Update slice slider range to match lattice extents
+  const half = (state.n - 1) / 2;
+  const sliceEl = document.getElementById("ctrl-slice");
+  sliceEl.min = -half;
+  sliceEl.max = half;
+  sliceEl.value = 0;
+  document.getElementById("val-slice").textContent = "0.0";
+  updateSlicePlane();
+
   sweepRows = [];
   renderCharts();
 
@@ -374,6 +412,28 @@ function bindControls() {
     state.step = 0;
     updateHUD();
   });
+
+  // Slice plane toggle
+  document.getElementById("btn-slice").addEventListener("click", () => {
+    sliceEnabled = !sliceEnabled;
+    document.getElementById("btn-slice").textContent = sliceEnabled ? "✕ Hide Slice" : "⊟ Slice Plane";
+    document.getElementById("slice-controls").style.display = sliceEnabled ? "flex" : "none";
+    updateSlicePlane();
+  });
+
+  // Slice position slider
+  document.getElementById("ctrl-slice").addEventListener("input", updateSlicePlane);
+
+  // Axis buttons
+  for (const axis of ["x", "y", "z"]) {
+    document.getElementById(`axis-${axis}`).addEventListener("click", () => {
+      sliceAxis = axis;
+      // Update active state
+      for (const a of ["x", "y", "z"])
+        document.getElementById(`axis-${a}`).classList.toggle("active", a === axis);
+      updateSlicePlane();
+    });
+  }
 
   document.getElementById("btn-sweep").addEventListener("click", () => {
     if (state.running) {
