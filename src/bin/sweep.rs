@@ -12,6 +12,8 @@
 ///   Cubic3D:      ground state E ≈ -3.0, Tc ≈ 4.51
 
 use std::env;
+use std::fs;
+use std::path::Path;
 use ising::{
     lattice::Geometry,
     sweep::{run, Algorithm, SweepConfig},
@@ -19,7 +21,7 @@ use ising::{
 
 fn main() {
     let args: Vec<String> = env::args().collect();
-    let config = parse_args(&args);
+    let (config, outdir, save_snapshots) = parse_args(&args);
 
     let algo_name = match config.algorithm {
         Algorithm::Metropolis => "Metropolis",
@@ -58,6 +60,46 @@ fn main() {
     let ground_e = results.first().map(|o| o.energy).unwrap_or(0.0);
     eprintln!("Ground state E/spin ≈ {:.4}  (expected: {})", ground_e, expected_ground(config.geometry));
     eprintln!("Estimated Tc        ≈ {:.2}  (expected: {})", tc, expected_tc(config.geometry));
+
+    if save_snapshots {
+        use ising::lattice::Lattice;
+        use ising::metropolis::warm_up;
+        use rand::SeedableRng;
+        use rand_xoshiro::Xoshiro256PlusPlus;
+
+        let snap_fname = format!("snapshots_N{}.csv", config.n);
+        let snap_path = Path::new(&outdir).join(&snap_fname);
+        let n2 = config.n * config.n;
+
+        let mut snap_csv = String::new();
+        let header: Vec<String> = (0..n2).map(|idx| format!("s{idx}")).collect();
+        snap_csv.push_str(&header.join(","));
+        snap_csv.push_str(",temperature\n");
+
+        let t_values: Vec<f64> = (0..config.t_steps).map(|k| {
+            config.t_min + (config.t_max - config.t_min) * k as f64 / (config.t_steps - 1) as f64
+        }).collect();
+
+        for &t in &t_values {
+            let beta = 1.0 / t;
+            let mut rng = Xoshiro256PlusPlus::seed_from_u64(config.seed.wrapping_add((t * 1000.0) as u64));
+            let mut lattice = Lattice::new(config.n, config.geometry);
+            lattice.randomise(&mut rng);
+            warm_up(&mut lattice, beta, config.j, 0.0, config.warmup_sweeps, &mut rng);
+
+            // Take 10 snapshots per temperature, spaced 100 sweeps apart
+            for _ in 0..10 {
+                warm_up(&mut lattice, beta, config.j, 0.0, 100, &mut rng);
+                // Take z=0 slice (first N*N spins in cubic lattice layout)
+                let slice: Vec<String> = lattice.spins[..n2].iter().map(|&s| s.to_string()).collect();
+                snap_csv.push_str(&slice.join(","));
+                snap_csv.push_str(&format!(",{t:.4}\n"));
+            }
+        }
+
+        fs::write(&snap_path, &snap_csv).expect("failed to write snapshots");
+        eprintln!("Wrote snapshots to {}", snap_path.display());
+    }
 }
 
 /// Find Tc as the temperature of maximum |dM/dT|
@@ -103,9 +145,11 @@ fn expected_tc(g: Geometry) -> &'static str {
     }
 }
 
-/// Minimal arg parser: --n, --geometry, --j, --h, --warmup, --samples, --seed
-fn parse_args(args: &[String]) -> SweepConfig {
+/// Minimal arg parser: --n, --geometry, --j, --h, --warmup, --samples, --seed, --outdir, --save-snapshots
+fn parse_args(args: &[String]) -> (SweepConfig, String, bool) {
     let mut cfg = SweepConfig::default();
+    let mut outdir = String::from(".");
+    let mut save_snapshots = false;
     let mut i = 1;
     while i < args.len() {
         match args[i].as_str() {
@@ -127,8 +171,10 @@ fn parse_args(args: &[String]) -> SweepConfig {
             "--tmax" => { cfg.t_max = args[i + 1].parse().unwrap(); i += 2; }
             "--steps" => { cfg.t_steps = args[i + 1].parse().unwrap(); i += 2; }
             "--wolff" => { cfg.algorithm = Algorithm::Wolff; i += 1; }
+            "--outdir" => { outdir = args[i + 1].clone(); i += 2; }
+            "--save-snapshots" => { save_snapshots = true; i += 1; }
             _ => { i += 1; }
         }
     }
-    cfg
+    (cfg, outdir, save_snapshots)
 }
