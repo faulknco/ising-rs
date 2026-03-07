@@ -23,8 +23,6 @@ fn finalize(
     sum_m: f64,
     sum_m2: f64,
     sum_m4: f64,
-    sum_m_signed: f64,
-    sum_m_signed2: f64,
 ) -> Observables {
     let s = samples as f64;
     let avg_e = sum_e / s;
@@ -32,12 +30,13 @@ fn finalize(
     let avg_m = sum_m / s;
     let avg_m2 = sum_m2 / s;
     let avg_m4 = sum_m4 / s;
-    let avg_m_signed = sum_m_signed / s;
-    let avg_m_signed2 = sum_m_signed2 / s;
 
     let t = 1.0 / beta;
     let cv = beta * beta * (avg_e2 - avg_e * avg_e) * n2;
-    let chi = beta * (avg_m_signed2 - avg_m_signed * avg_m_signed) * n2;
+    // Connected susceptibility: chi = beta * N * (<|m|^2> - <|m|>^2)
+    // Uses absolute magnetisation so it works correctly with Wolff algorithm,
+    // which tunnels between +M/-M sectors making <m_signed> ~ 0.
+    let chi = beta * (avg_m2 - avg_m * avg_m) * n2;
 
     Observables {
         temperature: t,
@@ -64,26 +63,20 @@ fn measure_with(
 ) -> Observables {
     let n2 = lattice.size() as f64;
     let (mut sum_e, mut sum_e2, mut sum_m, mut sum_m2, mut sum_m4) = (0.0, 0.0, 0.0, 0.0, 0.0);
-    let (mut sum_ms, mut sum_ms2) = (0.0, 0.0);
 
     for _ in 0..samples {
         step_fn(lattice);
         let (e, m) = energy_magnetisation(lattice, j, h);
         let e_per = e / n2;
         let m_per = (m / n2).abs();
-        let m_signed = m / n2;
         sum_e += e_per;
         sum_e2 += e_per * e_per;
         sum_m += m_per;
         sum_m2 += m_per * m_per;
         sum_m4 += m_per.powi(4);
-        sum_ms += m_signed;
-        sum_ms2 += m_signed * m_signed;
     }
 
-    finalize(
-        beta, n2, samples, sum_e, sum_e2, sum_m, sum_m2, sum_m4, sum_ms, sum_ms2,
-    )
+    finalize(beta, n2, samples, sum_e, sum_e2, sum_m, sum_m2, sum_m4)
 }
 
 /// Compute observables by averaging over `samples` Metropolis sweeps.
