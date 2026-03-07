@@ -4,7 +4,7 @@ use rand_xoshiro::Xoshiro256PlusPlus;
 use crate::lattice::{Geometry, Lattice};
 use crate::metropolis::warm_up as metropolis_warm_up;
 use crate::wolff::warm_up as wolff_warm_up;
-use crate::observables::{measure, Observables};
+use crate::observables::{measure, measure_wolff, measure_wolff_raw, Observables, RawSamples};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Algorithm {
@@ -75,12 +75,41 @@ pub fn run(config: &SweepConfig) -> Vec<Observables> {
                 wolff_warm_up(&mut lattice, beta, config.j, config.h, config.warmup_sweeps, &mut rng),
         };
 
-        // Measure
-        let obs = measure(&mut lattice, beta, config.j, config.h, config.sample_sweeps, &mut rng);
+        // Measure (using same algorithm as warmup for decorrelation)
+        let obs = match config.algorithm {
+            Algorithm::Wolff =>
+                measure_wolff(&mut lattice, beta, config.j, config.h, config.sample_sweeps, &mut rng),
+            Algorithm::Metropolis =>
+                measure(&mut lattice, beta, config.j, config.h, config.sample_sweeps, &mut rng),
+        };
         results.push(obs);
     }
 
     // Reverse so results are ordered T_min → T_max
+    results.reverse();
+    results
+}
+
+/// Run a temperature sweep collecting raw (E, M) time series at each T.
+/// Used for histogram reweighting. Only supports Wolff algorithm.
+pub fn run_raw(config: &SweepConfig) -> Vec<RawSamples> {
+    let mut rng = Xoshiro256PlusPlus::seed_from_u64(config.seed);
+    let mut lattice = Lattice::new(config.n, config.geometry);
+    lattice.randomise(&mut rng);
+
+    let mut results = Vec::with_capacity(config.t_steps);
+
+    for step in (0..config.t_steps).rev() {
+        let t = config.t_min
+            + (config.t_max - config.t_min) * step as f64 / (config.t_steps - 1) as f64;
+        let beta = 1.0 / t;
+
+        wolff_warm_up(&mut lattice, beta, config.j, config.h, config.warmup_sweeps, &mut rng);
+
+        let raw = measure_wolff_raw(&mut lattice, beta, config.j, config.h, config.sample_sweeps, &mut rng);
+        results.push(raw);
+    }
+
     results.reverse();
     results
 }

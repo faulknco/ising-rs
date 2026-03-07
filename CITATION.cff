@@ -1,0 +1,20 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+type: software
+title: "ising-rs: GPU-accelerated Monte Carlo simulation of the Ising model"
+authors:
+  - family-names: Faulkner
+    given-names: Connor
+    email: connorjfaulkner@gmail.com
+repository-code: "https://github.com/faulknco/ising-rs"
+license: MIT
+version: 0.1.0
+date-released: 2026-03-07
+keywords:
+  - ising-model
+  - monte-carlo
+  - statistical-mechanics
+  - phase-transitions
+  - finite-size-scaling
+  - wolff-algorithm
+  - rust

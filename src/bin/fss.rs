@@ -3,6 +3,7 @@
 /// Usage:
 ///   cargo run --release --bin fss
 ///   cargo run --release --bin fss -- --sizes 8,12,16,20 --wolff --outdir analysis/data
+///   cargo run --release --features cuda --bin fss -- --sizes 8,12,16,20 --gpu --outdir analysis/data
 ///
 /// Output: one CSV per size at <outdir>/fss_N<n>.csv
 /// Columns: T,E,M,M2,M4,Cv,chi
@@ -12,7 +13,7 @@ use std::fs;
 use std::path::Path;
 use ising::fss::{FssConfig, run_fss};
 use ising::lattice::Geometry;
-use ising::sweep::Algorithm;
+use ising::sweep::{Algorithm, SweepConfig, run_raw};
 
 fn get_arg(args: &[String], i: usize, flag: &str) -> String {
     if i + 1 >= args.len() {
@@ -28,6 +29,7 @@ fn main() {
     let mut outdir = String::from("analysis/data");
 
     let mut use_gpu = false;
+    let mut raw_mode = false;
 
     let mut i = 1;
     while i < args.len() {
@@ -56,23 +58,56 @@ fn main() {
             "--wolff"   => { config.algorithm = Algorithm::Wolff; i += 1; }
             "--outdir"  => { outdir = get_arg(&args, i, "--outdir"); i += 2; }
             "--gpu"     => { use_gpu = true; i += 1; }
+            "--raw"     => { raw_mode = true; i += 1; }
             _           => { i += 1; }
         }
     }
 
     fs::create_dir_all(&outdir).expect("failed to create outdir");
 
-    let results = run_fss(&config);
+    // Raw time-series mode for histogram reweighting
+    if raw_mode {
+        for &n in &config.sizes {
+            eprintln!("FSS raw: N={n}");
+            let sweep_cfg = SweepConfig {
+                n,
+                geometry: config.geometry,
+                j: config.j,
+                h: config.h,
+                t_min: config.t_min,
+                t_max: config.t_max,
+                t_steps: config.t_steps,
+                warmup_sweeps: config.warmup_sweeps,
+                sample_sweeps: config.sample_sweeps,
+                seed: config.seed.wrapping_add(n as u64),
+                algorithm: Algorithm::Wolff,
+            };
+            let raw_data = run_raw(&sweep_cfg);
+            let path = Path::new(&outdir).join(format!("fss_raw_N{n}.csv"));
+            let mut csv = String::from("T,sample,e,m_abs,m_signed\n");
+            for raw in &raw_data {
+                for (i, ((e, ma), ms)) in raw.e_per_spin.iter()
+                    .zip(raw.m_abs.iter())
+                    .zip(raw.m_signed.iter())
+                    .enumerate()
+                {
+                    csv.push_str(&format!(
+                        "{:.6},{},{:.8},{:.8},{:.8}\n",
+                        raw.temperature, i, e, ma, ms
+                    ));
+                }
+            }
+            fs::write(&path, &csv).expect("failed to write raw CSV");
+            eprintln!("Wrote {}", path.display());
+        }
+        return;
+    }
 
-    #[cfg(feature = "cuda")]
-    if use_gpu {
-        eprintln!("GPU mode: CUDA checkerboard Metropolis (RTX 2060 target)");
-        eprintln!("Note: full GPU FSS path not yet implemented — using CPU");
-    }
-    #[cfg(not(feature = "cuda"))]
-    if use_gpu {
-        eprintln!("Warning: --gpu specified but binary was not compiled with --features cuda");
-    }
+    let results = if use_gpu {
+        run_fss_with_gpu(&config)
+    } else {
+        run_fss(&config)
+    };
 
     for (n, obs_list) in &results {
         let path = Path::new(&outdir).join(format!("fss_N{n}.csv"));
@@ -86,5 +121,19 @@ fn main() {
         }
         fs::write(&path, &csv).expect("failed to write CSV");
         eprintln!("Wrote {}", path.display());
+    }
+}
+
+fn run_fss_with_gpu(config: &FssConfig) -> Vec<(usize, Vec<ising::observables::Observables>)> {
+    #[cfg(feature = "cuda")]
+    {
+        eprintln!("GPU mode: CUDA checkerboard Metropolis");
+        ising::cuda::fss_gpu::run_fss_gpu(config)
+    }
+    #[cfg(not(feature = "cuda"))]
+    {
+        eprintln!("Warning: --gpu specified but binary was not compiled with --features cuda");
+        eprintln!("Falling back to CPU");
+        ising::fss::run_fss(config)
     }
 }

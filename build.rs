@@ -20,6 +20,7 @@ fn main() {
         .args([
             "-ptx",
             "-O3",
+            "--allow-unsupported-compiler",
             "--generate-code", "arch=compute_75,code=sm_75",
             "-I", &format!("{}/include", cuda_path),
             kernel_src.to_str().unwrap(),

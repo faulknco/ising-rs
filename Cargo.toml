@@ -2,6 +2,12 @@
 name = "ising-rs"
 version = "0.1.0"
 edition = "2021"
+authors = ["Connor Faulkner <connorjfaulkner@gmail.com>"]
+description = "Monte Carlo simulation of the Ising model with Wolff cluster algorithm, GPU acceleration, and finite-size scaling analysis"
+license = "MIT"
+repository = "https://github.com/faulknco/ising-rs"
+keywords = ["ising", "monte-carlo", "physics", "phase-transition", "wolff"]
+categories = ["science", "simulation"]
 
 [[bin]]
 name = "sweep"
@@ -29,6 +35,7 @@ anyhow = "1"
 [dependencies.cudarc]
 version = "0.12"
 optional = true
+features = ["cuda-12060"]
 
 [features]
 cuda = ["dep:cudarc"]
