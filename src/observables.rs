@@ -4,19 +4,28 @@ use crate::lattice::Lattice;
 #[derive(Debug, Clone)]
 pub struct Observables {
     pub temperature: f64,
-    pub energy: f64,        // ⟨E⟩ per spin
-    pub magnetisation: f64, // |⟨M⟩| per spin
-    pub heat_capacity: f64, // Cv
-    pub susceptibility: f64,// χ
-    pub m2: f64,            // ⟨M²⟩ per spin² — needed for Binder cumulant
-    pub m4: f64,            // ⟨M⁴⟩ per spin⁴ — needed for Binder cumulant
+    pub energy: f64,         // ⟨E⟩ per spin
+    pub magnetisation: f64,  // |⟨M⟩| per spin
+    pub heat_capacity: f64,  // Cv
+    pub susceptibility: f64, // χ
+    pub m2: f64,             // ⟨M²⟩ per spin² — needed for Binder cumulant
+    pub m4: f64,             // ⟨M⁴⟩ per spin⁴ — needed for Binder cumulant
 }
 
 /// Accumulate E, M statistics and build Observables.
 #[allow(clippy::too_many_arguments)]
-fn finalize(beta: f64, n2: f64, samples: usize,
-            sum_e: f64, sum_e2: f64, sum_m: f64, sum_m2: f64, sum_m4: f64,
-            sum_m_signed: f64, sum_m_signed2: f64) -> Observables {
+fn finalize(
+    beta: f64,
+    n2: f64,
+    samples: usize,
+    sum_e: f64,
+    sum_e2: f64,
+    sum_m: f64,
+    sum_m2: f64,
+    sum_m4: f64,
+    sum_m_signed: f64,
+    sum_m_signed2: f64,
+) -> Observables {
     let s = samples as f64;
     let avg_e = sum_e / s;
     let avg_e2 = sum_e2 / s;
@@ -62,12 +71,18 @@ pub fn measure(
         let e_per = e / n2;
         let m_per = (m / n2).abs();
         let m_signed = m / n2;
-        sum_e += e_per; sum_e2 += e_per * e_per;
-        sum_m += m_per; sum_m2 += m_per * m_per; sum_m4 += m_per.powi(4);
-        sum_ms += m_signed; sum_ms2 += m_signed * m_signed;
+        sum_e += e_per;
+        sum_e2 += e_per * e_per;
+        sum_m += m_per;
+        sum_m2 += m_per * m_per;
+        sum_m4 += m_per.powi(4);
+        sum_ms += m_signed;
+        sum_ms2 += m_signed * m_signed;
     }
 
-    finalize(beta, n2, samples, sum_e, sum_e2, sum_m, sum_m2, sum_m4, sum_ms, sum_ms2)
+    finalize(
+        beta, n2, samples, sum_e, sum_e2, sum_m, sum_m2, sum_m4, sum_ms, sum_ms2,
+    )
 }
 
 /// Compute observables using Wolff cluster steps between measurements.
@@ -79,8 +94,8 @@ pub fn measure_wolff(
     samples: usize,
     rng: &mut impl rand::Rng,
 ) -> Observables {
-    use crate::wolff::step as wolff_step;
     use crate::metropolis::sweep as metro_sweep;
+    use crate::wolff::step as wolff_step;
 
     let n2 = lattice.size() as f64;
     let (mut sum_e, mut sum_e2, mut sum_m, mut sum_m2, mut sum_m4) = (0.0, 0.0, 0.0, 0.0, 0.0);
@@ -95,21 +110,27 @@ pub fn measure_wolff(
         let e_per = e / n2;
         let m_per = (m / n2).abs();
         let m_signed = m / n2;
-        sum_e += e_per; sum_e2 += e_per * e_per;
-        sum_m += m_per; sum_m2 += m_per * m_per; sum_m4 += m_per.powi(4);
-        sum_ms += m_signed; sum_ms2 += m_signed * m_signed;
+        sum_e += e_per;
+        sum_e2 += e_per * e_per;
+        sum_m += m_per;
+        sum_m2 += m_per * m_per;
+        sum_m4 += m_per.powi(4);
+        sum_ms += m_signed;
+        sum_ms2 += m_signed * m_signed;
     }
 
-    finalize(beta, n2, samples, sum_e, sum_e2, sum_m, sum_m2, sum_m4, sum_ms, sum_ms2)
+    finalize(
+        beta, n2, samples, sum_e, sum_e2, sum_m, sum_m2, sum_m4, sum_ms, sum_ms2,
+    )
 }
 
 /// Raw per-sample data for histogram reweighting.
 #[derive(Debug, Clone)]
 pub struct RawSamples {
     pub temperature: f64,
-    pub e_per_spin: Vec<f64>,   // energy per spin each sample
-    pub m_abs: Vec<f64>,        // |m| per spin each sample
-    pub m_signed: Vec<f64>,     // m per spin each sample (signed)
+    pub e_per_spin: Vec<f64>, // energy per spin each sample
+    pub m_abs: Vec<f64>,      // |m| per spin each sample
+    pub m_signed: Vec<f64>,   // m per spin each sample (signed)
 }
 
 /// Collect raw (E, M) time series using Wolff steps — for histogram reweighting.
@@ -121,8 +142,8 @@ pub fn measure_wolff_raw(
     samples: usize,
     rng: &mut impl rand::Rng,
 ) -> RawSamples {
-    use crate::wolff::step as wolff_step;
     use crate::metropolis::sweep as metro_sweep;
+    use crate::wolff::step as wolff_step;
 
     let n2 = lattice.size() as f64;
     let mut e_per_spin = Vec::with_capacity(samples);
@@ -173,7 +194,7 @@ pub fn energy_magnetisation(lattice: &Lattice, j: f64, h: f64) -> (f64, f64) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::lattice::{Lattice, Geometry};
+    use crate::lattice::{Geometry, Lattice};
 
     #[test]
     fn ground_state_energy_3d() {
@@ -182,10 +203,14 @@ mod tests {
         let n = lat.size() as f64;
         let (e, m) = energy_magnetisation(&lat, 1.0, 0.0);
         let e_per_spin = e / n;
-        assert!((e_per_spin - (-3.0)).abs() < 1e-10,
-            "3D ground state energy should be -3J per spin, got {e_per_spin}");
-        assert!((m - n).abs() < 1e-10,
-            "all-up magnetisation should be N, got {m}");
+        assert!(
+            (e_per_spin - (-3.0)).abs() < 1e-10,
+            "3D ground state energy should be -3J per spin, got {e_per_spin}"
+        );
+        assert!(
+            (m - n).abs() < 1e-10,
+            "all-up magnetisation should be N, got {m}"
+        );
     }
 
     #[test]
@@ -195,8 +220,10 @@ mod tests {
         let n = lat.size() as f64;
         let (e, _) = energy_magnetisation(&lat, 1.0, 0.0);
         let e_per_spin = e / n;
-        assert!((e_per_spin - (-2.0)).abs() < 1e-10,
-            "2D ground state energy should be -2J per spin, got {e_per_spin}");
+        assert!(
+            (e_per_spin - (-2.0)).abs() < 1e-10,
+            "2D ground state energy should be -2J per spin, got {e_per_spin}"
+        );
     }
 
     #[test]
@@ -206,8 +233,10 @@ mod tests {
         let n = lat.size() as f64;
         let (e_no_h, _) = energy_magnetisation(&lat, 1.0, 0.0);
         let (e_with_h, _) = energy_magnetisation(&lat, 1.0, 1.0);
-        assert!((e_with_h - e_no_h - (-n)).abs() < 1e-10,
-            "field energy should add -h*N for all-up spins");
+        assert!(
+            (e_with_h - e_no_h - (-n)).abs() < 1e-10,
+            "field energy should add -h*N for all-up spins"
+        );
     }
 
     #[test]
@@ -217,8 +246,10 @@ mod tests {
         let n = lat.size() as f64;
         let (e, _) = energy_magnetisation(&lat, -1.0, 0.0);
         let e_per_spin = e / n;
-        assert!((e_per_spin - 3.0).abs() < 1e-10,
-            "antiferromagnet all-up should have +3J per spin, got {e_per_spin}");
+        assert!(
+            (e_per_spin - 3.0).abs() < 1e-10,
+            "antiferromagnet all-up should have +3J per spin, got {e_per_spin}"
+        );
     }
 
     #[test]
@@ -229,10 +260,16 @@ mod tests {
         let mut lat = Lattice::new(4, Geometry::Cubic3D);
         let beta = 100.0; // T = 0.01
         let obs = measure(&mut lat, beta, 1.0, 0.0, 100, &mut rng);
-        assert!((obs.energy - (-3.0)).abs() < 0.01,
-            "at T≈0, energy should be ~-3J, got {}", obs.energy);
-        assert!((obs.magnetisation - 1.0).abs() < 0.01,
-            "at T≈0, |m| should be ~1, got {}", obs.magnetisation);
+        assert!(
+            (obs.energy - (-3.0)).abs() < 0.01,
+            "at T≈0, energy should be ~-3J, got {}",
+            obs.energy
+        );
+        assert!(
+            (obs.magnetisation - 1.0).abs() < 0.01,
+            "at T≈0, |m| should be ~1, got {}",
+            obs.magnetisation
+        );
     }
 
     #[test]
@@ -242,10 +279,16 @@ mod tests {
         let mut lat = Lattice::new(4, Geometry::Cubic3D);
         let beta = 100.0;
         let obs = measure_wolff(&mut lat, beta, 1.0, 0.0, 100, &mut rng);
-        assert!((obs.energy - (-3.0)).abs() < 0.01,
-            "Wolff at T≈0: energy should be ~-3J, got {}", obs.energy);
-        assert!((obs.magnetisation - 1.0).abs() < 0.01,
-            "Wolff at T≈0: |m| should be ~1, got {}", obs.magnetisation);
+        assert!(
+            (obs.energy - (-3.0)).abs() < 0.01,
+            "Wolff at T≈0: energy should be ~-3J, got {}",
+            obs.energy
+        );
+        assert!(
+            (obs.magnetisation - 1.0).abs() < 0.01,
+            "Wolff at T≈0: |m| should be ~1, got {}",
+            obs.magnetisation
+        );
     }
 
     #[test]
@@ -257,8 +300,11 @@ mod tests {
         lat.randomise(&mut rng);
         let beta = 0.01; // T = 100
         let obs = measure(&mut lat, beta, 1.0, 0.0, 500, &mut rng);
-        assert!(obs.magnetisation < 0.2,
-            "at T→∞, |m| should be small, got {}", obs.magnetisation);
+        assert!(
+            obs.magnetisation < 0.2,
+            "at T→∞, |m| should be small, got {}",
+            obs.magnetisation
+        );
     }
 
     #[test]
@@ -270,8 +316,10 @@ mod tests {
         let beta = 100.0;
         let obs = measure_wolff(&mut lat, beta, 1.0, 0.0, 200, &mut rng);
         let u = 1.0 - obs.m4 / (3.0 * obs.m2 * obs.m2);
-        assert!((u - 2.0 / 3.0).abs() < 0.01,
-            "Binder cumulant at T→0 should be 2/3, got {u}");
+        assert!(
+            (u - 2.0 / 3.0).abs() < 0.01,
+            "Binder cumulant at T→0 should be 2/3, got {u}"
+        );
     }
 
     #[test]
@@ -293,6 +341,9 @@ mod tests {
         let mut lat = Lattice::new(6, Geometry::Cubic3D);
         lat.randomise(&mut rng);
         let raw = measure_wolff_raw(&mut lat, 0.2, 1.0, 0.0, 100, &mut rng);
-        assert!(raw.m_abs.iter().all(|&m| m >= 0.0), "|m| should always be non-negative");
+        assert!(
+            raw.m_abs.iter().all(|&m| m >= 0.0),
+            "|m| should always be non-negative"
+        );
     }
 }

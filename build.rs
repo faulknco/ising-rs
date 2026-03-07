@@ -8,8 +8,7 @@ fn main() {
         return;
     }
 
-    let cuda_path = env::var("CUDA_PATH")
-        .unwrap_or_else(|_| "/usr/local/cuda".to_string());
+    let cuda_path = env::var("CUDA_PATH").unwrap_or_else(|_| "/usr/local/cuda".to_string());
 
     let nvcc = PathBuf::from(&cuda_path).join("bin").join("nvcc");
     let kernel_src = PathBuf::from("src/cuda/kernels.cu");
@@ -21,10 +20,13 @@ fn main() {
             "-ptx",
             "-O3",
             "--allow-unsupported-compiler",
-            "--generate-code", "arch=compute_75,code=sm_75",
-            "-I", &format!("{}/include", cuda_path),
+            "--generate-code",
+            "arch=compute_75,code=sm_75",
+            "-I",
+            &format!("{}/include", cuda_path),
             kernel_src.to_str().unwrap(),
-            "-o", ptx_out.to_str().unwrap(),
+            "-o",
+            ptx_out.to_str().unwrap(),
         ])
         .status()
         .expect("nvcc not found — is CUDA_PATH set and CUDA Toolkit installed?");

@@ -39,17 +39,49 @@ fn main() {
     let mut i = 1;
     while i < args.len() {
         match args[i].as_str() {
-            "--graph"   => { graph_path = get_arg(&args, i, "--graph"); i += 2; }
-            "--j"       => { j = get_arg(&args, i, "--j").parse().unwrap(); i += 2; }
-            "--tmin"    => { t_min = get_arg(&args, i, "--tmin").parse().unwrap(); i += 2; }
-            "--tmax"    => { t_max = get_arg(&args, i, "--tmax").parse().unwrap(); i += 2; }
-            "--steps"   => { t_steps = get_arg(&args, i, "--steps").parse().unwrap(); i += 2; }
-            "--warmup"  => { warmup = get_arg(&args, i, "--warmup").parse().unwrap(); i += 2; }
-            "--samples" => { samples = get_arg(&args, i, "--samples").parse().unwrap(); i += 2; }
-            "--seed"    => { seed = get_arg(&args, i, "--seed").parse().unwrap(); i += 2; }
-            "--outdir"  => { outdir = get_arg(&args, i, "--outdir"); i += 2; }
-            "--prefix"  => { out_prefix = get_arg(&args, i, "--prefix"); i += 2; }
-            _           => { i += 1; }
+            "--graph" => {
+                graph_path = get_arg(&args, i, "--graph");
+                i += 2;
+            }
+            "--j" => {
+                j = get_arg(&args, i, "--j").parse().unwrap();
+                i += 2;
+            }
+            "--tmin" => {
+                t_min = get_arg(&args, i, "--tmin").parse().unwrap();
+                i += 2;
+            }
+            "--tmax" => {
+                t_max = get_arg(&args, i, "--tmax").parse().unwrap();
+                i += 2;
+            }
+            "--steps" => {
+                t_steps = get_arg(&args, i, "--steps").parse().unwrap();
+                i += 2;
+            }
+            "--warmup" => {
+                warmup = get_arg(&args, i, "--warmup").parse().unwrap();
+                i += 2;
+            }
+            "--samples" => {
+                samples = get_arg(&args, i, "--samples").parse().unwrap();
+                i += 2;
+            }
+            "--seed" => {
+                seed = get_arg(&args, i, "--seed").parse().unwrap();
+                i += 2;
+            }
+            "--outdir" => {
+                outdir = get_arg(&args, i, "--outdir");
+                i += 2;
+            }
+            "--prefix" => {
+                out_prefix = get_arg(&args, i, "--prefix");
+                i += 2;
+            }
+            _ => {
+                i += 1;
+            }
         }
     }
 
@@ -58,13 +90,19 @@ fn main() {
         std::process::exit(1);
     }
 
-    let content = fs::read_to_string(&graph_path)
-        .unwrap_or_else(|e| { eprintln!("Cannot read {graph_path}: {e}"); std::process::exit(1); });
+    let content = fs::read_to_string(&graph_path).unwrap_or_else(|e| {
+        eprintln!("Cannot read {graph_path}: {e}");
+        std::process::exit(1);
+    });
     let gdef = if graph_path.ends_with(".json") {
         GraphDef::from_json(&content)
     } else {
         GraphDef::from_edge_csv(&content)
-    }.unwrap_or_else(|e| { eprintln!("Parse error: {e}"); std::process::exit(1); });
+    }
+    .unwrap_or_else(|e| {
+        eprintln!("Parse error: {e}");
+        std::process::exit(1);
+    });
 
     let n_nodes = gdef.n_nodes;
     eprintln!("Graph: {n_nodes} nodes, {} edges", gdef.edges.len());
@@ -73,7 +111,12 @@ fn main() {
 
     fs::create_dir_all(&outdir).expect("failed to create outdir");
     let prefix = if out_prefix.is_empty() {
-        Path::new(&graph_path).file_stem().unwrap().to_str().unwrap().to_string()
+        Path::new(&graph_path)
+            .file_stem()
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .to_string()
     } else {
         out_prefix
     };

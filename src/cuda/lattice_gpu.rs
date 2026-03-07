@@ -18,11 +18,15 @@ pub struct LatticeGpu {
 impl LatticeGpu {
     pub fn new(n: usize, seed: u64) -> anyhow::Result<Self> {
         let device = CudaDevice::new(0)?;
-        device.load_ptx(PTX.into(), "ising", &[
-            "metropolis_sweep_kernel",
-            "init_rng_kernel",
-            "sum_spins_kernel",
-        ])?;
+        device.load_ptx(
+            PTX.into(),
+            "ising",
+            &[
+                "metropolis_sweep_kernel",
+                "init_rng_kernel",
+                "sum_spins_kernel",
+            ],
+        )?;
 
         let size = n * n * n;
         let n_threads = (size / 2) as u32;
@@ -36,7 +40,13 @@ impl LatticeGpu {
         // 48 bytes per curandState
         let rng_states = device.alloc_zeros::<u8>((n_threads as usize) * 48)?;
 
-        let mut gpu = Self { n, device, spins, rng_states, n_threads };
+        let mut gpu = Self {
+            n,
+            device,
+            spins,
+            rng_states,
+            n_threads,
+        };
         gpu.init_rng(seed)?;
         Ok(gpu)
     }
@@ -63,7 +73,10 @@ impl LatticeGpu {
         let grid = (self.n_threads + BLOCK_SIZE - 1) / BLOCK_SIZE;
         let n = self.n as i32;
         for parity in [0i32, 1i32] {
-            let f = self.device.get_func("ising", "metropolis_sweep_kernel").unwrap();
+            let f = self
+                .device
+                .get_func("ising", "metropolis_sweep_kernel")
+                .unwrap();
             unsafe {
                 f.launch(
                     LaunchConfig {
@@ -195,8 +208,7 @@ fn energy_magnetisation_host(spins: &[i8], n: usize, j: f64, h: f64) -> (f64, f6
                 let idx = i * n * n + jj * n + k;
                 let s = spins[idx] as f64;
                 // 6 neighbours, periodic
-                let nb_sum =
-                    spins[((i + 1) % n) * n * n + jj * n + k] as f64
+                let nb_sum = spins[((i + 1) % n) * n * n + jj * n + k] as f64
                     + spins[((i + n - 1) % n) * n * n + jj * n + k] as f64
                     + spins[i * n * n + ((jj + 1) % n) * n + k] as f64
                     + spins[i * n * n + ((jj + n - 1) % n) * n + k] as f64

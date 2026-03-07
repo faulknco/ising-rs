@@ -38,22 +38,26 @@ impl Default for FssConfig {
 /// Run a temperature sweep for each lattice size in config.sizes.
 /// Returns Vec of (n, observables_per_temperature).
 pub fn run_fss(config: &FssConfig) -> Vec<(usize, Vec<Observables>)> {
-    config.sizes.iter().map(|&n| {
-        eprintln!("FSS: N={n}");
-        let sweep_cfg = SweepConfig {
-            n,
-            geometry: config.geometry,
-            j: config.j,
-            h: config.h,
-            t_min: config.t_min,
-            t_max: config.t_max,
-            t_steps: config.t_steps,
-            warmup_sweeps: config.warmup_sweeps,
-            sample_sweeps: config.sample_sweeps,
-            seed: config.seed.wrapping_add(n as u64),
-            algorithm: config.algorithm,
-        };
-        let obs = run(&sweep_cfg);
-        (n, obs)
-    }).collect()
+    config
+        .sizes
+        .iter()
+        .map(|&n| {
+            eprintln!("FSS: N={n}");
+            let sweep_cfg = SweepConfig {
+                n,
+                geometry: config.geometry,
+                j: config.j,
+                h: config.h,
+                t_min: config.t_min,
+                t_max: config.t_max,
+                t_steps: config.t_steps,
+                warmup_sweeps: config.warmup_sweeps,
+                sample_sweeps: config.sample_sweeps,
+                seed: config.seed.wrapping_add(n as u64),
+                algorithm: config.algorithm,
+            };
+            let obs = run(&sweep_cfg);
+            (n, obs)
+        })
+        .collect()
 }

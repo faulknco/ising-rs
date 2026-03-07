@@ -1,3 +1,7 @@
+use ising::{
+    lattice::Geometry,
+    sweep::{run, Algorithm, SweepConfig},
+};
 /// CLI: run a temperature sweep and print CSV to stdout.
 ///
 /// Usage:
@@ -13,10 +17,6 @@
 use std::env;
 use std::fs;
 use std::path::Path;
-use ising::{
-    lattice::Geometry,
-    sweep::{run, Algorithm, SweepConfig},
-};
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -24,7 +24,7 @@ fn main() {
 
     let algo_name = match config.algorithm {
         Algorithm::Metropolis => "Metropolis",
-        Algorithm::Wolff      => "Wolff",
+        Algorithm::Wolff => "Wolff",
     };
     eprintln!(
         "Running {} sweep [{}]: N={}, J={}, h={}, T=[{:.1}..{:.1}], warmup={}, samples={}",
@@ -46,19 +46,23 @@ fn main() {
     for obs in &results {
         println!(
             "{:.4},{:.6},{:.6},{:.6},{:.6}",
-            obs.temperature,
-            obs.energy,
-            obs.magnetisation,
-            obs.heat_capacity,
-            obs.susceptibility,
+            obs.temperature, obs.energy, obs.magnetisation, obs.heat_capacity, obs.susceptibility,
         );
     }
 
     // Summary to stderr
     let tc = estimate_curie(&results);
     let ground_e = results.first().map(|o| o.energy).unwrap_or(0.0);
-    eprintln!("Ground state E/spin ≈ {:.4}  (expected: {})", ground_e, expected_ground(config.geometry));
-    eprintln!("Estimated Tc        ≈ {:.2}  (expected: {})", tc, expected_tc(config.geometry));
+    eprintln!(
+        "Ground state E/spin ≈ {:.4}  (expected: {})",
+        ground_e,
+        expected_ground(config.geometry)
+    );
+    eprintln!(
+        "Estimated Tc        ≈ {:.2}  (expected: {})",
+        tc,
+        expected_tc(config.geometry)
+    );
 
     if save_snapshots {
         use ising::lattice::Lattice;
@@ -75,22 +79,34 @@ fn main() {
         snap_csv.push_str(&header.join(","));
         snap_csv.push_str(",temperature\n");
 
-        let t_values: Vec<f64> = (0..config.t_steps).map(|k| {
-            config.t_min + (config.t_max - config.t_min) * k as f64 / (config.t_steps - 1) as f64
-        }).collect();
+        let t_values: Vec<f64> = (0..config.t_steps)
+            .map(|k| {
+                config.t_min
+                    + (config.t_max - config.t_min) * k as f64 / (config.t_steps - 1) as f64
+            })
+            .collect();
 
         for &t in &t_values {
             let beta = 1.0 / t;
-            let mut rng = Xoshiro256PlusPlus::seed_from_u64(config.seed.wrapping_add((t * 1000.0) as u64));
+            let mut rng =
+                Xoshiro256PlusPlus::seed_from_u64(config.seed.wrapping_add((t * 1000.0) as u64));
             let mut lattice = Lattice::new(config.n, config.geometry);
             lattice.randomise(&mut rng);
-            warm_up(&mut lattice, beta, config.j, 0.0, config.warmup_sweeps, &mut rng);
+            warm_up(
+                &mut lattice,
+                beta,
+                config.j,
+                0.0,
+                config.warmup_sweeps,
+                &mut rng,
+            );
 
             // Take 10 snapshots per temperature, spaced 100 sweeps apart
             for _ in 0..10 {
                 warm_up(&mut lattice, beta, config.j, 0.0, 100, &mut rng);
                 // Take z=0 slice (first N*N spins in cubic lattice layout)
-                let slice: Vec<String> = lattice.spins[..n2].iter().map(|&s| s.to_string()).collect();
+                let slice: Vec<String> =
+                    lattice.spins[..n2].iter().map(|&s| s.to_string()).collect();
                 snap_csv.push_str(&slice.join(","));
                 snap_csv.push_str(&format!(",{t:.4}\n"));
             }
@@ -152,7 +168,10 @@ fn parse_args(args: &[String]) -> (SweepConfig, String, bool) {
     let mut i = 1;
     while i < args.len() {
         match args[i].as_str() {
-            "--n" => { cfg.n = args[i + 1].parse().unwrap(); i += 2; }
+            "--n" => {
+                cfg.n = args[i + 1].parse().unwrap();
+                i += 2;
+            }
             "--geometry" => {
                 cfg.geometry = match args[i + 1].as_str() {
                     "triangular" => Geometry::Triangular2D,
@@ -161,18 +180,53 @@ fn parse_args(args: &[String]) -> (SweepConfig, String, bool) {
                 };
                 i += 2;
             }
-            "--j" => { cfg.j = args[i + 1].parse().unwrap(); i += 2; }
-            "--h" => { cfg.h = args[i + 1].parse().unwrap(); i += 2; }
-            "--warmup" => { cfg.warmup_sweeps = args[i + 1].parse().unwrap(); i += 2; }
-            "--samples" => { cfg.sample_sweeps = args[i + 1].parse().unwrap(); i += 2; }
-            "--seed" => { cfg.seed = args[i + 1].parse().unwrap(); i += 2; }
-            "--tmin" => { cfg.t_min = args[i + 1].parse().unwrap(); i += 2; }
-            "--tmax" => { cfg.t_max = args[i + 1].parse().unwrap(); i += 2; }
-            "--steps" => { cfg.t_steps = args[i + 1].parse().unwrap(); i += 2; }
-            "--wolff" => { cfg.algorithm = Algorithm::Wolff; i += 1; }
-            "--outdir" => { outdir = args[i + 1].clone(); i += 2; }
-            "--save-snapshots" => { save_snapshots = true; i += 1; }
-            _ => { i += 1; }
+            "--j" => {
+                cfg.j = args[i + 1].parse().unwrap();
+                i += 2;
+            }
+            "--h" => {
+                cfg.h = args[i + 1].parse().unwrap();
+                i += 2;
+            }
+            "--warmup" => {
+                cfg.warmup_sweeps = args[i + 1].parse().unwrap();
+                i += 2;
+            }
+            "--samples" => {
+                cfg.sample_sweeps = args[i + 1].parse().unwrap();
+                i += 2;
+            }
+            "--seed" => {
+                cfg.seed = args[i + 1].parse().unwrap();
+                i += 2;
+            }
+            "--tmin" => {
+                cfg.t_min = args[i + 1].parse().unwrap();
+                i += 2;
+            }
+            "--tmax" => {
+                cfg.t_max = args[i + 1].parse().unwrap();
+                i += 2;
+            }
+            "--steps" => {
+                cfg.t_steps = args[i + 1].parse().unwrap();
+                i += 2;
+            }
+            "--wolff" => {
+                cfg.algorithm = Algorithm::Wolff;
+                i += 1;
+            }
+            "--outdir" => {
+                outdir = args[i + 1].clone();
+                i += 2;
+            }
+            "--save-snapshots" => {
+                save_snapshots = true;
+                i += 1;
+            }
+            _ => {
+                i += 1;
+            }
         }
     }
     (cfg, outdir, save_snapshots)

@@ -32,7 +32,10 @@ impl GraphDef {
             edges.push((i, j));
         }
 
-        Ok(Self { n_nodes: max_node + 1, edges })
+        Ok(Self {
+            n_nodes: max_node + 1,
+            edges,
+        })
     }
 
     /// Load from JSON adjacency list.
@@ -43,18 +46,28 @@ impl GraphDef {
     pub fn from_json(content: &str) -> anyhow::Result<Self> {
         let n_nodes: usize = {
             let key = "\"n_nodes\"";
-            let pos = content.find(key).ok_or_else(|| anyhow::anyhow!("missing n_nodes"))?;
+            let pos = content
+                .find(key)
+                .ok_or_else(|| anyhow::anyhow!("missing n_nodes"))?;
             let after = &content[pos + key.len()..];
-            let colon = after.find(':').ok_or_else(|| anyhow::anyhow!("missing : after n_nodes"))?;
-            let num_str = after[colon+1..].trim_start();
-            let end = num_str.find(|c: char| !c.is_ascii_digit()).unwrap_or(num_str.len());
+            let colon = after
+                .find(':')
+                .ok_or_else(|| anyhow::anyhow!("missing : after n_nodes"))?;
+            let num_str = after[colon + 1..].trim_start();
+            let end = num_str
+                .find(|c: char| !c.is_ascii_digit())
+                .unwrap_or(num_str.len());
             num_str[..end].parse()?
         };
 
         let edges_key = "\"edges\"";
-        let pos = content.find(edges_key).ok_or_else(|| anyhow::anyhow!("missing edges"))?;
+        let pos = content
+            .find(edges_key)
+            .ok_or_else(|| anyhow::anyhow!("missing edges"))?;
         let after = &content[pos + edges_key.len()..];
-        let bracket = after.find('[').ok_or_else(|| anyhow::anyhow!("missing [ after edges"))?;
+        let bracket = after
+            .find('[')
+            .ok_or_else(|| anyhow::anyhow!("missing [ after edges"))?;
         let array_str = &after[bracket..];
         let close = Self::find_matching_bracket(array_str)?;
         let inner = &array_str[1..close];
@@ -62,17 +75,33 @@ impl GraphDef {
         let mut edges = Vec::new();
         let mut chars = inner.chars().peekable();
         loop {
-            while chars.peek().is_some_and(|&c| c != '[') { chars.next(); }
-            if chars.next().is_none() { break; }
+            while chars.peek().is_some_and(|&c| c != '[') {
+                chars.next();
+            }
+            if chars.next().is_none() {
+                break;
+            }
             let i_str: String = chars.by_ref().take_while(|c| c.is_ascii_digit()).collect();
-            if i_str.is_empty() { break; }
-            while chars.peek().is_some_and(|&c| c != ',' && !c.is_ascii_digit()) { chars.next(); }
-            if chars.peek() == Some(&',') { chars.next(); }
-            let j_str: String = chars.by_ref()
+            if i_str.is_empty() {
+                break;
+            }
+            while chars
+                .peek()
+                .is_some_and(|&c| c != ',' && !c.is_ascii_digit())
+            {
+                chars.next();
+            }
+            if chars.peek() == Some(&',') {
+                chars.next();
+            }
+            let j_str: String = chars
+                .by_ref()
                 .skip_while(|c| !c.is_ascii_digit())
                 .take_while(|c| c.is_ascii_digit())
                 .collect();
-            if j_str.is_empty() { break; }
+            if j_str.is_empty() {
+                break;
+            }
             edges.push((i_str.parse::<usize>()?, j_str.parse::<usize>()?));
         }
 
@@ -86,7 +115,9 @@ impl GraphDef {
                 '[' => depth += 1,
                 ']' => {
                     depth -= 1;
-                    if depth == 0 { return Ok(i); }
+                    if depth == 0 {
+                        return Ok(i);
+                    }
                 }
                 _ => {}
             }

@@ -1,6 +1,6 @@
-use wasm_bindgen::prelude::*;
 use rand::SeedableRng;
 use rand_xoshiro::Xoshiro256PlusPlus;
+use wasm_bindgen::prelude::*;
 
 use crate::fitting::CriticalExponents;
 use crate::lattice::{Geometry, Lattice};
@@ -114,16 +114,40 @@ impl IsingWasm {
             let beta = 1.0 / f64::max(t, 0.01);
 
             if use_wolff && self.j > 0.0 {
-                wolff::warm_up(&mut self.lattice, beta, self.j, self.h, warmup, &mut self.rng);
+                wolff::warm_up(
+                    &mut self.lattice,
+                    beta,
+                    self.j,
+                    self.h,
+                    warmup,
+                    &mut self.rng,
+                );
             } else {
-                warm_up(&mut self.lattice, beta, self.j, self.h, warmup, &mut self.rng);
+                warm_up(
+                    &mut self.lattice,
+                    beta,
+                    self.j,
+                    self.h,
+                    warmup,
+                    &mut self.rng,
+                );
             }
 
-            let obs = measure(&mut self.lattice, beta, self.j, self.h, samples, &mut self.rng);
+            let obs = measure(
+                &mut self.lattice,
+                beta,
+                self.j,
+                self.h,
+                samples,
+                &mut self.rng,
+            );
             out.push_str(&format!(
                 "{:.4},{:.6},{:.6},{:.6},{:.6}\n",
-                obs.temperature, obs.energy, obs.magnetisation,
-                obs.heat_capacity, obs.susceptibility,
+                obs.temperature,
+                obs.energy,
+                obs.magnetisation,
+                obs.heat_capacity,
+                obs.susceptibility,
             ));
         }
 
@@ -154,13 +178,13 @@ impl IsingWasm {
             None => String::new(),
             Some(e) => format!(
                 r#"{{"tc":{tc:.3},"beta":{beta:.4},"alpha":{alpha:.4},"gamma":{gamma:.4},"beta_err":{be:.4},"alpha_err":{ae:.4},"gamma_err":{ge:.4},"theory_beta":0.3265,"theory_alpha":0.1096,"theory_gamma":1.2372}}"#,
-                tc    = e.tc,
-                beta  = e.beta,
+                tc = e.tc,
+                beta = e.beta,
                 alpha = e.alpha,
                 gamma = e.gamma,
-                be    = e.beta_err,
-                ae    = e.alpha_err,
-                ge    = e.gamma_err,
+                be = e.beta_err,
+                ae = e.alpha_err,
+                ge = e.gamma_err,
             ),
         }
     }
@@ -171,13 +195,16 @@ fn parse_csv(csv: &str) -> Vec<Observables> {
     csv.lines()
         .skip(1) // header
         .filter_map(|line| {
-            let cols: Vec<f64> = line.split(',')
+            let cols: Vec<f64> = line
+                .split(',')
                 .filter_map(|s| s.trim().parse().ok())
                 .collect();
-            if cols.len() < 5 { return None; }
+            if cols.len() < 5 {
+                return None;
+            }
             Some(Observables {
-                temperature:   cols[0],
-                energy:        cols[1],
+                temperature: cols[0],
+                energy: cols[1],
                 magnetisation: cols[2],
                 heat_capacity: cols[3],
                 susceptibility: cols[4],

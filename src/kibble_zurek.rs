@@ -9,9 +9,9 @@ pub struct KzConfig {
     pub n: usize,
     pub geometry: Geometry,
     pub j: f64,
-    pub t_start: f64,   // start temperature (disordered, > Tc)
-    pub t_end: f64,     // end temperature (ordered, < Tc)
-    pub tau_q: usize,   // quench time in sweeps
+    pub t_start: f64, // start temperature (disordered, > Tc)
+    pub t_end: f64,   // end temperature (ordered, < Tc)
+    pub tau_q: usize, // quench time in sweeps
     pub seed: u64,
 }
 
@@ -72,19 +72,27 @@ pub fn run_kz_sweep(
     n_trials: usize,
     base_seed: u64,
 ) -> Vec<(usize, f64)> {
-    tau_q_values.iter().map(|&tau_q| {
-        let rho_avg: f64 = (0..n_trials).map(|trial| {
-            let config = KzConfig {
-                n,
-                geometry,
-                j,
-                t_start,
-                t_end,
-                tau_q,
-                seed: base_seed.wrapping_add(tau_q as u64).wrapping_add(trial as u64),
-            };
-            run_kz(&config).rho_final
-        }).sum::<f64>() / n_trials as f64;
-        (tau_q, rho_avg)
-    }).collect()
+    tau_q_values
+        .iter()
+        .map(|&tau_q| {
+            let rho_avg: f64 = (0..n_trials)
+                .map(|trial| {
+                    let config = KzConfig {
+                        n,
+                        geometry,
+                        j,
+                        t_start,
+                        t_end,
+                        tau_q,
+                        seed: base_seed
+                            .wrapping_add(tau_q as u64)
+                            .wrapping_add(trial as u64),
+                    };
+                    run_kz(&config).rho_final
+                })
+                .sum::<f64>()
+                / n_trials as f64;
+            (tau_q, rho_avg)
+        })
+        .collect()
 }

@@ -3,8 +3,8 @@ use rand_xoshiro::Xoshiro256PlusPlus;
 
 use crate::lattice::{Geometry, Lattice};
 use crate::metropolis::warm_up as metropolis_warm_up;
-use crate::wolff::warm_up as wolff_warm_up;
 use crate::observables::{measure, measure_wolff, measure_wolff_raw, Observables, RawSamples};
+use crate::wolff::warm_up as wolff_warm_up;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Algorithm {
@@ -69,18 +69,42 @@ pub fn run(config: &SweepConfig) -> Vec<Observables> {
 
         // Warm up at this temperature, carrying state from previous T
         match config.algorithm {
-            Algorithm::Metropolis =>
-                metropolis_warm_up(&mut lattice, beta, config.j, config.h, config.warmup_sweeps, &mut rng),
-            Algorithm::Wolff =>
-                wolff_warm_up(&mut lattice, beta, config.j, config.h, config.warmup_sweeps, &mut rng),
+            Algorithm::Metropolis => metropolis_warm_up(
+                &mut lattice,
+                beta,
+                config.j,
+                config.h,
+                config.warmup_sweeps,
+                &mut rng,
+            ),
+            Algorithm::Wolff => wolff_warm_up(
+                &mut lattice,
+                beta,
+                config.j,
+                config.h,
+                config.warmup_sweeps,
+                &mut rng,
+            ),
         };
 
         // Measure (using same algorithm as warmup for decorrelation)
         let obs = match config.algorithm {
-            Algorithm::Wolff =>
-                measure_wolff(&mut lattice, beta, config.j, config.h, config.sample_sweeps, &mut rng),
-            Algorithm::Metropolis =>
-                measure(&mut lattice, beta, config.j, config.h, config.sample_sweeps, &mut rng),
+            Algorithm::Wolff => measure_wolff(
+                &mut lattice,
+                beta,
+                config.j,
+                config.h,
+                config.sample_sweeps,
+                &mut rng,
+            ),
+            Algorithm::Metropolis => measure(
+                &mut lattice,
+                beta,
+                config.j,
+                config.h,
+                config.sample_sweeps,
+                &mut rng,
+            ),
         };
         results.push(obs);
     }
@@ -104,9 +128,23 @@ pub fn run_raw(config: &SweepConfig) -> Vec<RawSamples> {
             + (config.t_max - config.t_min) * step as f64 / (config.t_steps - 1) as f64;
         let beta = 1.0 / t;
 
-        wolff_warm_up(&mut lattice, beta, config.j, config.h, config.warmup_sweeps, &mut rng);
+        wolff_warm_up(
+            &mut lattice,
+            beta,
+            config.j,
+            config.h,
+            config.warmup_sweeps,
+            &mut rng,
+        );
 
-        let raw = measure_wolff_raw(&mut lattice, beta, config.j, config.h, config.sample_sweeps, &mut rng);
+        let raw = measure_wolff_raw(
+            &mut lattice,
+            beta,
+            config.j,
+            config.h,
+            config.sample_sweeps,
+            &mut rng,
+        );
         results.push(raw);
     }
 

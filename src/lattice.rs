@@ -39,7 +39,12 @@ impl Lattice {
             Geometry::Mesh => panic!("Use Lattice::from_edges() for Mesh geometry"),
         };
 
-        Self { n, spins, neighbours, geometry }
+        Self {
+            n,
+            spins,
+            neighbours,
+            geometry,
+        }
     }
 
     /// Load a lattice from an arbitrary undirected edge list.
@@ -49,7 +54,10 @@ impl Lattice {
         let spins = vec![1i8; n_nodes];
         let mut neighbours = vec![Vec::new(); n_nodes];
         for &(i, j) in edges {
-            assert!(i < n_nodes && j < n_nodes, "edge ({i},{j}) out of range for n_nodes={n_nodes}");
+            assert!(
+                i < n_nodes && j < n_nodes,
+                "edge ({i},{j}) out of range for n_nodes={n_nodes}"
+            );
             neighbours[i].push(j);
             neighbours[j].push(i);
         }
@@ -84,7 +92,7 @@ impl Lattice {
                     ((i + n - 1) % n) * n + j, // up
                     ((i + 1) % n) * n + j,     // down
                     i * n + (j + n - 1) % n,   // left
-                    i * n + (j + 1) % n,        // right
+                    i * n + (j + 1) % n,       // right
                 ];
             }
         }
@@ -104,12 +112,7 @@ impl Lattice {
                 let left = (j + n - 1) % n;
                 let right = (j + 1) % n;
 
-                let mut neighbours = vec![
-                    up * n + j,
-                    down * n + j,
-                    i * n + left,
-                    i * n + right,
-                ];
+                let mut neighbours = vec![up * n + j, down * n + j, i * n + left, i * n + right];
 
                 // Extra diagonal neighbours depend on row parity
                 if i % 2 == 0 {
@@ -216,7 +219,10 @@ mod tests {
     fn no_self_neighbours() {
         let lat = Lattice::new(6, Geometry::Cubic3D);
         for (idx, nb) in lat.neighbours.iter().enumerate() {
-            assert!(!nb.contains(&idx), "site {idx} should not be its own neighbour");
+            assert!(
+                !nb.contains(&idx),
+                "site {idx} should not be its own neighbour"
+            );
         }
     }
 
@@ -226,8 +232,10 @@ mod tests {
         let lat = Lattice::new(5, Geometry::Cubic3D);
         for (i, nbs) in lat.neighbours.iter().enumerate() {
             for &j in nbs {
-                assert!(lat.neighbours[j].contains(&i),
-                    "site {j} should have {i} as neighbour (symmetry)");
+                assert!(
+                    lat.neighbours[j].contains(&i),
+                    "site {j} should have {i} as neighbour (symmetry)"
+                );
             }
         }
     }
@@ -249,12 +257,18 @@ mod tests {
         lat.randomise(&mut rng);
         let has_up = lat.spins.iter().any(|&s| s == 1);
         let has_down = lat.spins.iter().any(|&s| s == -1);
-        assert!(has_up && has_down, "randomise should produce both +1 and -1");
+        assert!(
+            has_up && has_down,
+            "randomise should produce both +1 and -1"
+        );
     }
 
     #[test]
     fn all_spins_initialized_up() {
         let lat = Lattice::new(4, Geometry::Cubic3D);
-        assert!(lat.spins.iter().all(|&s| s == 1), "initial state should be all +1");
+        assert!(
+            lat.spins.iter().all(|&s| s == 1),
+            "initial state should be all +1"
+        );
     }
 }

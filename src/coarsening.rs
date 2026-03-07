@@ -52,7 +52,9 @@ pub fn domain_wall_density(lattice: &Lattice) -> f64 {
             }
         }
     }
-    if bonds == 0 { return 0.0; }
+    if bonds == 0 {
+        return 0.0;
+    }
     walls as f64 / bonds as f64
 }
 
@@ -63,7 +65,14 @@ pub fn run_coarsening(config: &CoarseningConfig) -> Vec<CoarseningPoint> {
     lattice.randomise(&mut rng);
 
     let beta_high = 1.0 / config.t_high;
-    warm_up(&mut lattice, beta_high, config.j, 0.0, config.warmup_sweeps, &mut rng);
+    warm_up(
+        &mut lattice,
+        beta_high,
+        config.j,
+        0.0,
+        config.warmup_sweeps,
+        &mut rng,
+    );
 
     let beta_quench = 1.0 / f64::max(config.t_quench, 0.01);
     let mut results = Vec::new();

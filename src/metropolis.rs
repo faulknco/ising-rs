@@ -1,5 +1,5 @@
-use rand::Rng;
 use crate::lattice::Lattice;
+use rand::Rng;
 
 /// One full Metropolis sweep: visits every spin once in random order.
 ///
@@ -36,7 +36,7 @@ pub fn warm_up(lattice: &mut Lattice, beta: f64, j: f64, h: f64, steps: usize, r
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::lattice::{Lattice, Geometry};
+    use crate::lattice::{Geometry, Lattice};
     use crate::observables::energy_magnetisation;
     use rand::SeedableRng;
 
@@ -48,8 +48,10 @@ mod tests {
         for _ in 0..50 {
             sweep(&mut lat, 0.5, 1.0, 0.0, &mut rng);
         }
-        assert!(lat.spins.iter().all(|&s| s == 1 || s == -1),
-            "all spins should remain ±1 after sweeps");
+        assert!(
+            lat.spins.iter().all(|&s| s == 1 || s == -1),
+            "all spins should remain ±1 after sweeps"
+        );
     }
 
     #[test]
@@ -76,8 +78,11 @@ mod tests {
         }
         let (_, m) = energy_magnetisation(&lat, 1.0, 0.0);
         let m_per = m / lat.size() as f64;
-        assert!((m_per.abs() - 1.0).abs() < 0.01,
-            "at T≈0, ground state should be preserved, |m|={}", m_per.abs());
+        assert!(
+            (m_per.abs() - 1.0).abs() < 0.01,
+            "at T≈0, ground state should be preserved, |m|={}",
+            m_per.abs()
+        );
     }
 
     #[test]
@@ -91,7 +96,6 @@ mod tests {
         }
         let (_, m) = energy_magnetisation(&lat, 1.0, 0.0);
         let m_per = (m / lat.size() as f64).abs();
-        assert!(m_per < 0.3,
-            "at T→∞, |m| should be small, got {m_per}");
+        assert!(m_per < 0.3, "at T→∞, |m| should be small, got {m_per}");
     }
 }

@@ -1,11 +1,10 @@
-use crate::cuda::lattice_gpu::LatticeGpu;
 use crate::coarsening::{CoarseningConfig, CoarseningPoint};
+use crate::cuda::lattice_gpu::LatticeGpu;
 
 /// Run a quench coarsening experiment on the GPU.
 /// Same logic as the CPU `run_coarsening`, but uses LatticeGpu.
 pub fn run_coarsening_gpu(config: &CoarseningConfig) -> Vec<CoarseningPoint> {
-    let mut gpu = LatticeGpu::new(config.n, config.seed)
-        .expect("failed to create GPU lattice");
+    let mut gpu = LatticeGpu::new(config.n, config.seed).expect("failed to create GPU lattice");
 
     // Warm up at high T (disorder)
     let beta_high = (1.0 / config.t_high) as f32;
@@ -21,7 +20,8 @@ pub fn run_coarsening_gpu(config: &CoarseningConfig) -> Vec<CoarseningPoint> {
             .expect("GPU step failed");
 
         if step % config.sample_every == 0 {
-            let rho = gpu.domain_wall_density()
+            let rho = gpu
+                .domain_wall_density()
                 .expect("GPU domain_wall_density failed");
             results.push(CoarseningPoint { step, rho });
         }

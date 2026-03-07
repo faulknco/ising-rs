@@ -1,3 +1,5 @@
+use crate::lattice::Lattice;
+use crate::metropolis::sweep as metropolis_sweep;
 /// Wolff single-cluster algorithm.
 ///
 /// Metropolis suffers critical slowing down near Tc: the autocorrelation
@@ -20,12 +22,12 @@
 /// Note: Wolff is only exact for h = 0. With h ≠ 0 we run a
 /// Metropolis sweep afterward to handle the field term.
 use rand::Rng;
-use crate::lattice::Lattice;
-use crate::metropolis::sweep as metropolis_sweep;
 
 /// One Wolff cluster flip. Returns the cluster size (useful for diagnostics).
 pub fn step(lattice: &mut Lattice, beta: f64, j: f64, rng: &mut impl Rng) -> usize {
-    if j <= 0.0 { return 0; } // Wolff only works for ferromagnetic J
+    if j <= 0.0 {
+        return 0;
+    } // Wolff only works for ferromagnetic J
 
     let p_add = 1.0 - (-2.0 * beta * j).exp();
     let size = lattice.size();
@@ -43,10 +45,7 @@ pub fn step(lattice: &mut Lattice, beta: f64, j: f64, rng: &mut impl Rng) -> usi
 
     while let Some(idx) = stack.pop() {
         for &nb in &lattice.neighbours[idx] {
-            if !cluster[nb]
-                && lattice.spins[nb] == target_spin
-                && rng.gen::<f64>() < p_add
-            {
+            if !cluster[nb] && lattice.spins[nb] == target_spin && rng.gen::<f64>() < p_add {
                 cluster[nb] = true;
                 stack.push(nb);
             }
@@ -68,14 +67,7 @@ pub fn step(lattice: &mut Lattice, beta: f64, j: f64, rng: &mut impl Rng) -> usi
 /// Run `n` Wolff cluster flips.
 /// If h ≠ 0, follows each Wolff step with a Metropolis sweep to handle
 /// the field term correctly.
-pub fn warm_up(
-    lattice: &mut Lattice,
-    beta: f64,
-    j: f64,
-    h: f64,
-    n: usize,
-    rng: &mut impl Rng,
-) {
+pub fn warm_up(lattice: &mut Lattice, beta: f64, j: f64, h: f64, n: usize, rng: &mut impl Rng) {
     for _ in 0..n {
         step(lattice, beta, j, rng);
         if h.abs() > 1e-9 {
@@ -87,7 +79,7 @@ pub fn warm_up(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::lattice::{Lattice, Geometry};
+    use crate::lattice::{Geometry, Lattice};
     use rand::SeedableRng;
 
     #[test]
@@ -107,8 +99,10 @@ mod tests {
             step(&mut lat, 0.5, 1.0, &mut rng);
         }
         assert_eq!(lat.size(), n);
-        assert!(lat.spins.iter().all(|&s| s == 1 || s == -1),
-            "all spins should be ±1");
+        assert!(
+            lat.spins.iter().all(|&s| s == 1 || s == -1),
+            "all spins should be ±1"
+        );
     }
 
     #[test]
@@ -126,8 +120,11 @@ mod tests {
         let mut lat = Lattice::new(6, Geometry::Cubic3D);
         // All spins are +1, low T → p_add close to 1 → should flip nearly all
         let count = step(&mut lat, 10.0, 1.0, &mut rng);
-        assert!(count > lat.size() / 2,
-            "at low T, cluster should be > N/2, got {count}/{}", lat.size());
+        assert!(
+            count > lat.size() / 2,
+            "at low T, cluster should be > N/2, got {count}/{}",
+            lat.size()
+        );
     }
 
     #[test]
@@ -141,8 +138,10 @@ mod tests {
             total += step(&mut lat, 0.01, 1.0, &mut rng);
         }
         let avg = total as f64 / trials as f64;
-        assert!(avg < 10.0,
-            "at high T, average cluster size should be small, got {avg}");
+        assert!(
+            avg < 10.0,
+            "at high T, average cluster size should be small, got {avg}"
+        );
     }
 
     #[test]

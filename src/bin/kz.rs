@@ -34,45 +34,115 @@ fn main() {
     let mut n_trials: usize = 5;
     let mut seed: u64 = 42;
     let mut outdir = String::from("analysis/data");
+    let mut use_gpu = false;
 
     let mut i = 1;
     while i < args.len() {
         match args[i].as_str() {
-            "--n"         => { n = get_arg(&args, i, "--n").parse().unwrap(); i += 2; }
-            "--geometry"  => {
+            "--n" => {
+                n = get_arg(&args, i, "--n").parse().unwrap();
+                i += 2;
+            }
+            "--geometry" => {
                 geometry = match get_arg(&args, i, "--geometry").as_str() {
-                    "cubic"      => Geometry::Cubic3D,
+                    "cubic" => Geometry::Cubic3D,
                     "triangular" => Geometry::Triangular2D,
-                    _            => Geometry::Square2D,
+                    _ => Geometry::Square2D,
                 };
                 i += 2;
             }
-            "--j"         => { j = get_arg(&args, i, "--j").parse().unwrap(); i += 2; }
-            "--t-start"   => { t_start = get_arg(&args, i, "--t-start").parse().unwrap(); i += 2; }
-            "--t-end"     => { t_end = get_arg(&args, i, "--t-end").parse().unwrap(); i += 2; }
-            "--tau-min"   => { tau_min = get_arg(&args, i, "--tau-min").parse().unwrap(); i += 2; }
-            "--tau-max"   => { tau_max = get_arg(&args, i, "--tau-max").parse().unwrap(); i += 2; }
-            "--tau-steps" => { tau_steps = get_arg(&args, i, "--tau-steps").parse().unwrap(); i += 2; }
-            "--trials"    => { n_trials = get_arg(&args, i, "--trials").parse().unwrap(); i += 2; }
-            "--seed"      => { seed = get_arg(&args, i, "--seed").parse().unwrap(); i += 2; }
-            "--outdir"    => { outdir = get_arg(&args, i, "--outdir"); i += 2; }
-            _             => { i += 1; }
+            "--j" => {
+                j = get_arg(&args, i, "--j").parse().unwrap();
+                i += 2;
+            }
+            "--t-start" => {
+                t_start = get_arg(&args, i, "--t-start").parse().unwrap();
+                i += 2;
+            }
+            "--t-end" => {
+                t_end = get_arg(&args, i, "--t-end").parse().unwrap();
+                i += 2;
+            }
+            "--tau-min" => {
+                tau_min = get_arg(&args, i, "--tau-min").parse().unwrap();
+                i += 2;
+            }
+            "--tau-max" => {
+                tau_max = get_arg(&args, i, "--tau-max").parse().unwrap();
+                i += 2;
+            }
+            "--tau-steps" => {
+                tau_steps = get_arg(&args, i, "--tau-steps").parse().unwrap();
+                i += 2;
+            }
+            "--trials" => {
+                n_trials = get_arg(&args, i, "--trials").parse().unwrap();
+                i += 2;
+            }
+            "--seed" => {
+                seed = get_arg(&args, i, "--seed").parse().unwrap();
+                i += 2;
+            }
+            "--outdir" => {
+                outdir = get_arg(&args, i, "--outdir");
+                i += 2;
+            }
+            "--gpu" => {
+                use_gpu = true;
+                i += 1;
+            }
+            _ => {
+                i += 1;
+            }
         }
     }
 
     // Build log-spaced tau_q values
-    let tau_q_values: Vec<usize> = (0..tau_steps).map(|k| {
-        let log_min = (tau_min as f64).ln();
-        let log_max = (tau_max as f64).ln();
-        let log_t = log_min + (log_max - log_min) * k as f64 / (tau_steps - 1) as f64;
-        log_t.exp().round() as usize
-    }).collect();
+    let tau_q_values: Vec<usize> = (0..tau_steps)
+        .map(|k| {
+            let log_min = (tau_min as f64).ln();
+            let log_max = (tau_max as f64).ln();
+            let log_t = log_min + (log_max - log_min) * k as f64 / (tau_steps - 1) as f64;
+            log_t.exp().round() as usize
+        })
+        .collect();
 
+    let backend = if use_gpu { "GPU" } else { "CPU" };
     eprintln!(
-        "KZ sweep: N={n}, tau_q={tau_min}..{tau_max} ({tau_steps} steps, log-spaced), {n_trials} trials each"
+        "KZ sweep [{backend}]: N={n}, tau_q={tau_min}..{tau_max} ({tau_steps} steps, log-spaced), {n_trials} trials each"
     );
 
-    let results = run_kz_sweep(n, geometry, j, t_start, t_end, &tau_q_values, n_trials, seed);
+    let results = if use_gpu {
+        #[cfg(feature = "cuda")]
+        {
+            ising::cuda::kz_gpu::run_kz_sweep_gpu(
+                n,
+                j,
+                t_start,
+                t_end,
+                &tau_q_values,
+                n_trials,
+                200,
+                seed,
+            )
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            eprintln!("Error: --gpu requires the 'cuda' feature");
+            std::process::exit(1);
+        }
+    } else {
+        run_kz_sweep(
+            n,
+            geometry,
+            j,
+            t_start,
+            t_end,
+            &tau_q_values,
+            n_trials,
+            seed,
+        )
+    };
 
     fs::create_dir_all(&outdir).expect("failed to create outdir");
     let fname = format!("kz_N{n}.csv");
