@@ -1,60 +1,140 @@
-# Ising Model — 3D Metropolis Monte Carlo
+# ising-rs
 
-Interactive 3D visualisation of the Ising model, built with Rust + WebAssembly + Three.js.
+GPU-accelerated Monte Carlo simulation of the Ising model on arbitrary graph topologies, implemented in Rust with CUDA.
 
-**[Live Demo →](https://faulknco.github.io/ising-rs)**
+[![CI](https://github.com/faulknco/ising-rs/actions/workflows/ci.yml/badge.svg)](https://github.com/faulknco/ising-rs/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-## What it is
+**[Live WebAssembly Demo →](https://faulknco.github.io/ising-rs)**
 
-A computational physics simulation of the [Ising model](https://en.wikipedia.org/wiki/Ising_model) — a discrete model of ferromagnetism where each lattice site holds a spin σ ∈ {−1, +1}. The energy of a configuration is:
+## Overview
 
-```
-H = −J Σ_{⟨i,j⟩} σᵢσⱼ − h Σᵢ σᵢ
-```
+A computational physics toolkit for studying the Ising model via Monte Carlo simulation. Supports standard cubic, BCC, FCC, diluted, and complex network lattices through a graph-agnostic architecture. Includes a full finite-size scaling (FSS) analysis pipeline with Ferrenberg-Swendsen histogram reweighting and jackknife error estimation.
 
-The simulation uses the **Metropolis algorithm** (Monte Carlo) to sample spin configurations at thermal equilibrium. As temperature drops below the Curie temperature Tc, the lattice spontaneously orders into a ferromagnetic state — all spins aligned.
+### Key results (3D cubic lattice)
+
+| Quantity | Measured | Theory | Error |
+|---|---|---|---|
+| T_c (Binder crossing) | 4.512(4) | 4.5115 | 0.01% |
+| gamma/nu (chi peak scaling) | 1.933(30) | 1.964 | 1.6% |
+| beta/nu (M at T_c) | 0.492(26) | 0.518 | 5.0% |
+| nu (chi collapse) | 0.667(37) | 0.630 | 5.9% |
+| 2beta/nu + gamma/nu | 2.918 | 3.0 | 2.7% |
 
 ## Features
 
-- **3D cubic lattice** rendered as instanced spheres (Three.js)
-- **Real-time simulation** running in a Web Worker via WebAssembly
-- **Temperature sweep** — plots ⟨E⟩, |⟨M⟩|, Cv, χ vs T with Tc estimation
-- **Interactive controls** — T, J, h, lattice size N
-- Verified against known results: ground state E = −3J, Tc ≈ 4.51 J/k_B
+- **Wolff cluster algorithm** — eliminates critical slowing down (z_W ~ 0.3 vs z ~ 2 for Metropolis)
+- **Metropolis algorithm** — single-spin updates with GPU-accelerated checkerboard decomposition
+- **Histogram reweighting** — Ferrenberg-Swendsen patchwork scheme for fine temperature interpolation near T_c
+- **Arbitrary graph topologies** — cubic, BCC, FCC, bond-diluted, and custom edge-list graphs
+- **Finite-size scaling** — automated T_c extraction, exponent fitting, and scaling collapse
+- **Kibble-Zurek mechanism** — defect density scaling from nonequilibrium quench simulations
+- **Exchange coupling fitting** — connect simulation to experimental Curie temperatures (BCC Fe, FCC Ni)
+- **WebAssembly demo** — interactive 3D visualisation in the browser (Three.js)
+- **38 unit tests** — covering lattice geometry, observables, Wolff/Metropolis algorithms, and graph parsing
 
-## Physics Results
-
-| Observable | Result | Theory |
-|---|---|---|
-| Ground state energy (3D cubic) | −3.000 J | −3J |
-| Curie temperature (3D cubic) | 4.40 J/k_B | 4.51 J/k_B |
-| Curie temperature (2D square) | 2.30 J/k_B | 2.269 J/k_B (Onsager exact) |
-| Curie temperature (2D triangular) | 3.70 J/k_B | 3.641 J/k_B |
-
-## Stack
-
-- **Rust** — physics engine (Metropolis algorithm, lattice, observables)
-- **wasm-bindgen + wasm-pack** — compiles Rust to WebAssembly
-- **Web Worker** — physics runs off the main thread, no UI blocking
-- **Three.js** — instanced 3D sphere rendering
-- **Vanilla JS** — no framework
-
-## Build
+## Quick start
 
 ```bash
-# Install Rust
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+# Build
+cargo build --release
 
-# Install wasm-pack
+# Run a temperature sweep (prints CSV to stdout)
+cargo run --release --bin sweep -- --n 16 --geometry cubic
+
+# Finite-size scaling with Wolff algorithm (writes CSV files)
+cargo run --release --bin fss -- --wolff --sizes 8,12,16,20,24 \
+    --tmin 3.5 --tmax 5.5 --steps 41 --warmup 2000 --samples 2000 \
+    --outdir analysis/data
+
+# High-stats run for histogram reweighting near T_c
+cargo run --release --bin fss -- --wolff --raw --sizes 16,20,24,32,40,48 \
+    --tmin 4.30 --tmax 4.70 --steps 41 --warmup 5000 --samples 10000 \
+    --outdir analysis/data/hires
+
+# Run tests
+cargo test
+
+# Clippy
+cargo clippy -- -D warnings
+```
+
+### GPU acceleration (optional)
+
+Requires CUDA 12.x and the `cuda` feature:
+
+```bash
+cargo run --release --features cuda --bin fss -- --gpu --sizes 8,12,16,20,24
+```
+
+### WebAssembly demo
+
+```bash
 cargo install wasm-pack
-
-# Build WASM
 wasm-pack build --target web --out-dir www/pkg
-
-# Serve
 cd www && python3 -m http.server 8080
 ```
 
-## Background
+## Project structure
 
-Originally a college assignment from JS TP (Theoretical Physics) at Trinity College Dublin, 2018 — implemented in Python. This version reimplements the same physics in Rust compiled to WASM for real-time interactive 3D visualisation in the browser.
+```
+src/
+  lib.rs              # Library root
+  lattice.rs          # Lattice construction (2D/3D, PBC, arbitrary graphs)
+  metropolis.rs       # Metropolis single-spin updates
+  wolff.rs            # Wolff cluster algorithm
+  observables.rs      # Energy, magnetisation, Cv, chi, Binder cumulant
+  graph.rs            # Graph loading (CSV edge lists, JSON adjacency)
+  fitting.rs          # Critical exponent fitting (OLS on log-log data)
+  kibble_zurek.rs     # KZ quench experiments
+  sweep.rs            # Temperature sweep driver
+  fss.rs              # Finite-size scaling driver
+  cuda/               # GPU kernels (optional)
+  bin/
+    sweep.rs          # CLI: single temperature sweep
+    fss.rs            # CLI: FSS across multiple lattice sizes
+    kz.rs             # CLI: Kibble-Zurek experiments
+    mesh_sweep.rs     # CLI: sweep on arbitrary graph files
+
+analysis/
+  fss.ipynb           # FSS notebook: observables, Binder, reweighting, collapse
+  pub_style.py        # Publication-quality matplotlib style
+
+paper/
+  draft.tex           # Paper: methods, validation, results
+  references.bib      # Bibliography
+```
+
+## Analysis pipeline
+
+The FSS analysis uses a two-tier data strategy:
+
+1. **Full-range sweep** (T = 3.5-5.5, 2000 samples) — overview of all observables
+2. **High-stats narrow range** (T = 4.30-4.70, 10000 samples) — histogram reweighting and exponent extraction
+
+The Jupyter notebook `analysis/fss.ipynb` processes raw per-sample data through:
+- Jackknife error estimation (20 blocks) on all observables
+- Binder cumulant crossing for T_c
+- Ferrenberg-Swendsen histogram reweighting on a 200-point fine temperature grid
+- Peak scaling (chi_max, M(T_c), dU/dT) for gamma/nu, beta/nu, 1/nu
+- Scaling collapse with adjacent-point cost optimisation
+
+## Citing
+
+If you use this software, please cite:
+
+```bibtex
+@software{faulkner2026ising,
+  author = {Faulkner, Connor},
+  title = {ising-rs: GPU-accelerated Monte Carlo simulation of the Ising model},
+  year = {2026},
+  url = {https://github.com/faulknco/ising-rs},
+  license = {MIT}
+}
+```
+
+See also [CITATION.cff](CITATION.cff).
+
+## License
+
+[MIT](LICENSE)
