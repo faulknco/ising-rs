@@ -34,7 +34,7 @@ wasm-bindgen = "0.2"
 anyhow = "1"
 
 [dependencies.cudarc]
-version = "0.12"
+version = "0.19"
 optional = true
 features = ["cuda-12060"]
 
