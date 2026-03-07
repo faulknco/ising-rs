@@ -1,5 +1,4 @@
 use ising::fss::{run_fss, FssConfig};
-use ising::lattice::Geometry;
 use ising::sweep::{run_raw, Algorithm, SweepConfig};
 /// CLI: run finite-size scaling sweeps for multiple lattice sizes.
 ///
@@ -10,17 +9,10 @@ use ising::sweep::{run_raw, Algorithm, SweepConfig};
 ///
 /// Output: one CSV per size at <outdir>/fss_N<n>.csv
 /// Columns: T,E,M,M2,M4,Cv,chi
+use ising::cli::{get_arg, parse_arg, parse_geometry};
 use std::env;
 use std::fs;
 use std::path::Path;
-
-fn get_arg(args: &[String], i: usize, flag: &str) -> String {
-    if i + 1 >= args.len() {
-        eprintln!("Error: {} requires a value", flag);
-        std::process::exit(1);
-    }
-    args[i + 1].clone()
-}
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -41,39 +33,35 @@ fn main() {
                 i += 2;
             }
             "--geometry" => {
-                config.geometry = match get_arg(&args, i, "--geometry").as_str() {
-                    "cubic" => Geometry::Cubic3D,
-                    "triangular" => Geometry::Triangular2D,
-                    _ => Geometry::Square2D,
-                };
+                config.geometry = parse_geometry(&args, i);
                 i += 2;
             }
             "--j" => {
-                config.j = get_arg(&args, i, "--j").parse().unwrap();
+                config.j = parse_arg(&args, i, "--j");
                 i += 2;
             }
             "--warmup" => {
-                config.warmup_sweeps = get_arg(&args, i, "--warmup").parse().unwrap();
+                config.warmup_sweeps = parse_arg(&args, i, "--warmup");
                 i += 2;
             }
             "--samples" => {
-                config.sample_sweeps = get_arg(&args, i, "--samples").parse().unwrap();
+                config.sample_sweeps = parse_arg(&args, i, "--samples");
                 i += 2;
             }
             "--tmin" => {
-                config.t_min = get_arg(&args, i, "--tmin").parse().unwrap();
+                config.t_min = parse_arg(&args, i, "--tmin");
                 i += 2;
             }
             "--tmax" => {
-                config.t_max = get_arg(&args, i, "--tmax").parse().unwrap();
+                config.t_max = parse_arg(&args, i, "--tmax");
                 i += 2;
             }
             "--steps" => {
-                config.t_steps = get_arg(&args, i, "--steps").parse().unwrap();
+                config.t_steps = parse_arg(&args, i, "--steps");
                 i += 2;
             }
             "--seed" => {
-                config.seed = get_arg(&args, i, "--seed").parse().unwrap();
+                config.seed = parse_arg(&args, i, "--seed");
                 i += 2;
             }
             "--wolff" => {

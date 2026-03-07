@@ -1,6 +1,7 @@
 #[cfg(feature = "cuda")]
 pub mod cuda;
 
+pub mod cli;
 pub mod coarsening;
 pub mod fitting;
 pub mod fss;

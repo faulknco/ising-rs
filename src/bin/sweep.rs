@@ -14,6 +14,7 @@ use ising::{
 ///   Square2D:     ground state E ≈ -2.0, Tc ≈ 2.27
 ///   Triangular2D: ground state E ≈ -3.0, Tc ≈ 3.64
 ///   Cubic3D:      ground state E ≈ -3.0, Tc ≈ 4.51
+use ising::cli::{get_arg, parse_arg, parse_geometry};
 use std::env;
 use std::fs;
 use std::path::Path;
@@ -169,47 +170,43 @@ fn parse_args(args: &[String]) -> (SweepConfig, String, bool) {
     while i < args.len() {
         match args[i].as_str() {
             "--n" => {
-                cfg.n = args[i + 1].parse().unwrap();
+                cfg.n = parse_arg(args, i, "--n");
                 i += 2;
             }
             "--geometry" => {
-                cfg.geometry = match args[i + 1].as_str() {
-                    "triangular" => Geometry::Triangular2D,
-                    "cubic" => Geometry::Cubic3D,
-                    _ => Geometry::Square2D,
-                };
+                cfg.geometry = parse_geometry(args, i);
                 i += 2;
             }
             "--j" => {
-                cfg.j = args[i + 1].parse().unwrap();
+                cfg.j = parse_arg(args, i, "--j");
                 i += 2;
             }
             "--h" => {
-                cfg.h = args[i + 1].parse().unwrap();
+                cfg.h = parse_arg(args, i, "--h");
                 i += 2;
             }
             "--warmup" => {
-                cfg.warmup_sweeps = args[i + 1].parse().unwrap();
+                cfg.warmup_sweeps = parse_arg(args, i, "--warmup");
                 i += 2;
             }
             "--samples" => {
-                cfg.sample_sweeps = args[i + 1].parse().unwrap();
+                cfg.sample_sweeps = parse_arg(args, i, "--samples");
                 i += 2;
             }
             "--seed" => {
-                cfg.seed = args[i + 1].parse().unwrap();
+                cfg.seed = parse_arg(args, i, "--seed");
                 i += 2;
             }
             "--tmin" => {
-                cfg.t_min = args[i + 1].parse().unwrap();
+                cfg.t_min = parse_arg(args, i, "--tmin");
                 i += 2;
             }
             "--tmax" => {
-                cfg.t_max = args[i + 1].parse().unwrap();
+                cfg.t_max = parse_arg(args, i, "--tmax");
                 i += 2;
             }
             "--steps" => {
-                cfg.t_steps = args[i + 1].parse().unwrap();
+                cfg.t_steps = parse_arg(args, i, "--steps");
                 i += 2;
             }
             "--wolff" => {
@@ -217,7 +214,7 @@ fn parse_args(args: &[String]) -> (SweepConfig, String, bool) {
                 i += 1;
             }
             "--outdir" => {
-                outdir = args[i + 1].clone();
+                outdir = get_arg(args, i, "--outdir");
                 i += 2;
             }
             "--save-snapshots" => {

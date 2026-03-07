@@ -8,19 +8,12 @@ use std::env;
 use std::fs;
 use std::path::Path;
 
+use ising::cli::{get_arg, parse_arg};
 use ising::graph::GraphDef;
 use ising::metropolis::warm_up;
 use ising::observables::measure;
 use rand::SeedableRng;
 use rand_xoshiro::Xoshiro256PlusPlus;
-
-fn get_arg(args: &[String], i: usize, flag: &str) -> String {
-    if i + 1 >= args.len() {
-        eprintln!("Error: {} requires a value", flag);
-        std::process::exit(1);
-    }
-    args[i + 1].clone()
-}
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -44,31 +37,31 @@ fn main() {
                 i += 2;
             }
             "--j" => {
-                j = get_arg(&args, i, "--j").parse().unwrap();
+                j = parse_arg(&args, i, "--j");
                 i += 2;
             }
             "--tmin" => {
-                t_min = get_arg(&args, i, "--tmin").parse().unwrap();
+                t_min = parse_arg(&args, i, "--tmin");
                 i += 2;
             }
             "--tmax" => {
-                t_max = get_arg(&args, i, "--tmax").parse().unwrap();
+                t_max = parse_arg(&args, i, "--tmax");
                 i += 2;
             }
             "--steps" => {
-                t_steps = get_arg(&args, i, "--steps").parse().unwrap();
+                t_steps = parse_arg(&args, i, "--steps");
                 i += 2;
             }
             "--warmup" => {
-                warmup = get_arg(&args, i, "--warmup").parse().unwrap();
+                warmup = parse_arg(&args, i, "--warmup");
                 i += 2;
             }
             "--samples" => {
-                samples = get_arg(&args, i, "--samples").parse().unwrap();
+                samples = parse_arg(&args, i, "--samples");
                 i += 2;
             }
             "--seed" => {
-                seed = get_arg(&args, i, "--seed").parse().unwrap();
+                seed = parse_arg(&args, i, "--seed");
                 i += 2;
             }
             "--outdir" => {

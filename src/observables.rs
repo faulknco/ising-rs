@@ -50,23 +50,24 @@ fn finalize(
     }
 }
 
-/// Compute observables by averaging over `samples` Metropolis sweeps.
-pub fn measure(
+/// Accumulate E, M samples and return Observables.
+///
+/// `step_fn` is called once per sample to advance the lattice state.
+/// It captures the rng by closure so downstream functions keep their `impl Rng` bounds.
+fn measure_with(
     lattice: &mut Lattice,
-    beta: f64,
     j: f64,
     h: f64,
+    beta: f64,
     samples: usize,
-    rng: &mut impl rand::Rng,
+    mut step_fn: impl FnMut(&mut Lattice),
 ) -> Observables {
-    use crate::metropolis::sweep;
-
     let n2 = lattice.size() as f64;
     let (mut sum_e, mut sum_e2, mut sum_m, mut sum_m2, mut sum_m4) = (0.0, 0.0, 0.0, 0.0, 0.0);
     let (mut sum_ms, mut sum_ms2) = (0.0, 0.0);
 
     for _ in 0..samples {
-        sweep(lattice, beta, j, h, rng);
+        step_fn(lattice);
         let (e, m) = energy_magnetisation(lattice, j, h);
         let e_per = e / n2;
         let m_per = (m / n2).abs();
@@ -85,6 +86,21 @@ pub fn measure(
     )
 }
 
+/// Compute observables by averaging over `samples` Metropolis sweeps.
+pub fn measure(
+    lattice: &mut Lattice,
+    beta: f64,
+    j: f64,
+    h: f64,
+    samples: usize,
+    rng: &mut impl rand::Rng,
+) -> Observables {
+    use crate::metropolis::sweep;
+    measure_with(lattice, j, h, beta, samples, |lat| {
+        sweep(lat, beta, j, h, rng);
+    })
+}
+
 /// Compute observables using Wolff cluster steps between measurements.
 pub fn measure_wolff(
     lattice: &mut Lattice,
@@ -96,32 +112,12 @@ pub fn measure_wolff(
 ) -> Observables {
     use crate::metropolis::sweep as metro_sweep;
     use crate::wolff::step as wolff_step;
-
-    let n2 = lattice.size() as f64;
-    let (mut sum_e, mut sum_e2, mut sum_m, mut sum_m2, mut sum_m4) = (0.0, 0.0, 0.0, 0.0, 0.0);
-    let (mut sum_ms, mut sum_ms2) = (0.0, 0.0);
-
-    for _ in 0..samples {
-        wolff_step(lattice, beta, j, rng);
+    measure_with(lattice, j, h, beta, samples, |lat| {
+        wolff_step(lat, beta, j, rng);
         if h.abs() > 1e-9 {
-            metro_sweep(lattice, beta, j, h, rng);
+            metro_sweep(lat, beta, j, h, rng);
         }
-        let (e, m) = energy_magnetisation(lattice, j, h);
-        let e_per = e / n2;
-        let m_per = (m / n2).abs();
-        let m_signed = m / n2;
-        sum_e += e_per;
-        sum_e2 += e_per * e_per;
-        sum_m += m_per;
-        sum_m2 += m_per * m_per;
-        sum_m4 += m_per.powi(4);
-        sum_ms += m_signed;
-        sum_ms2 += m_signed * m_signed;
-    }
-
-    finalize(
-        beta, n2, samples, sum_e, sum_e2, sum_m, sum_m2, sum_m4, sum_ms, sum_ms2,
-    )
+    })
 }
 
 /// Raw per-sample data for histogram reweighting.

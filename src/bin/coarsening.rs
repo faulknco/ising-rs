@@ -1,5 +1,4 @@
 use ising::coarsening::{run_coarsening, CoarseningConfig};
-use ising::lattice::Geometry;
 /// CLI: run a quench experiment and output domain wall density vs time.
 ///
 /// Usage:
@@ -8,17 +7,10 @@ use ising::lattice::Geometry;
 ///   cargo run --release --features cuda --bin coarsening -- --n 30 --t-quench 2.5 --steps 200000 --gpu
 ///
 /// Output columns: t,rho
+use ising::cli::{get_arg, parse_arg, parse_geometry};
 use std::env;
 use std::fs;
 use std::path::Path;
-
-fn get_arg(args: &[String], i: usize, flag: &str) -> String {
-    if i + 1 >= args.len() {
-        eprintln!("Error: {} requires a value", flag);
-        std::process::exit(1);
-    }
-    args[i + 1].clone()
-}
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -31,43 +23,39 @@ fn main() {
     while i < args.len() {
         match args[i].as_str() {
             "--n" => {
-                config.n = get_arg(&args, i, "--n").parse().unwrap();
+                config.n = parse_arg(&args, i, "--n");
                 i += 2;
             }
             "--geometry" => {
-                config.geometry = match get_arg(&args, i, "--geometry").as_str() {
-                    "cubic" => Geometry::Cubic3D,
-                    "triangular" => Geometry::Triangular2D,
-                    _ => Geometry::Square2D,
-                };
+                config.geometry = parse_geometry(&args, i);
                 i += 2;
             }
             "--j" => {
-                config.j = get_arg(&args, i, "--j").parse().unwrap();
+                config.j = parse_arg(&args, i, "--j");
                 i += 2;
             }
             "--t-high" => {
-                config.t_high = get_arg(&args, i, "--t-high").parse().unwrap();
+                config.t_high = parse_arg(&args, i, "--t-high");
                 i += 2;
             }
             "--t-quench" => {
-                config.t_quench = get_arg(&args, i, "--t-quench").parse().unwrap();
+                config.t_quench = parse_arg(&args, i, "--t-quench");
                 i += 2;
             }
             "--warmup" => {
-                config.warmup_sweeps = get_arg(&args, i, "--warmup").parse().unwrap();
+                config.warmup_sweeps = parse_arg(&args, i, "--warmup");
                 i += 2;
             }
             "--steps" => {
-                config.total_steps = get_arg(&args, i, "--steps").parse().unwrap();
+                config.total_steps = parse_arg(&args, i, "--steps");
                 i += 2;
             }
             "--sample-every" => {
-                config.sample_every = get_arg(&args, i, "--sample-every").parse().unwrap();
+                config.sample_every = parse_arg(&args, i, "--sample-every");
                 i += 2;
             }
             "--seed" => {
-                config.seed = get_arg(&args, i, "--seed").parse().unwrap();
+                config.seed = parse_arg(&args, i, "--seed");
                 i += 2;
             }
             "--outdir" => {

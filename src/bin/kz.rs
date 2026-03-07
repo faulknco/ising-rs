@@ -9,16 +9,9 @@ use std::env;
 use std::fs;
 use std::path::Path;
 
+use ising::cli::{get_arg, parse_arg, parse_geometry};
 use ising::kibble_zurek::run_kz_sweep;
 use ising::lattice::Geometry;
-
-fn get_arg(args: &[String], i: usize, flag: &str) -> String {
-    if i + 1 >= args.len() {
-        eprintln!("Error: {} requires a value", flag);
-        std::process::exit(1);
-    }
-    args[i + 1].clone()
-}
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -40,47 +33,43 @@ fn main() {
     while i < args.len() {
         match args[i].as_str() {
             "--n" => {
-                n = get_arg(&args, i, "--n").parse().unwrap();
+                n = parse_arg(&args, i, "--n");
                 i += 2;
             }
             "--geometry" => {
-                geometry = match get_arg(&args, i, "--geometry").as_str() {
-                    "cubic" => Geometry::Cubic3D,
-                    "triangular" => Geometry::Triangular2D,
-                    _ => Geometry::Square2D,
-                };
+                geometry = parse_geometry(&args, i);
                 i += 2;
             }
             "--j" => {
-                j = get_arg(&args, i, "--j").parse().unwrap();
+                j = parse_arg(&args, i, "--j");
                 i += 2;
             }
             "--t-start" => {
-                t_start = get_arg(&args, i, "--t-start").parse().unwrap();
+                t_start = parse_arg(&args, i, "--t-start");
                 i += 2;
             }
             "--t-end" => {
-                t_end = get_arg(&args, i, "--t-end").parse().unwrap();
+                t_end = parse_arg(&args, i, "--t-end");
                 i += 2;
             }
             "--tau-min" => {
-                tau_min = get_arg(&args, i, "--tau-min").parse().unwrap();
+                tau_min = parse_arg(&args, i, "--tau-min");
                 i += 2;
             }
             "--tau-max" => {
-                tau_max = get_arg(&args, i, "--tau-max").parse().unwrap();
+                tau_max = parse_arg(&args, i, "--tau-max");
                 i += 2;
             }
             "--tau-steps" => {
-                tau_steps = get_arg(&args, i, "--tau-steps").parse().unwrap();
+                tau_steps = parse_arg(&args, i, "--tau-steps");
                 i += 2;
             }
             "--trials" => {
-                n_trials = get_arg(&args, i, "--trials").parse().unwrap();
+                n_trials = parse_arg(&args, i, "--trials");
                 i += 2;
             }
             "--seed" => {
-                seed = get_arg(&args, i, "--seed").parse().unwrap();
+                seed = parse_arg(&args, i, "--seed");
                 i += 2;
             }
             "--outdir" => {
