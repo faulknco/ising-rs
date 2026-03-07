@@ -2,6 +2,7 @@
 name = "ising-rs"
 version = "0.1.0"
 edition = "2021"
+rust-version = "1.94"
 authors = ["Connor Faulkner <connorjfaulkner@gmail.com>"]
 description = "Monte Carlo simulation of the Ising model with Wolff cluster algorithm, GPU acceleration, and finite-size scaling analysis"
 license = "MIT"
