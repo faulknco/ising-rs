@@ -1,5 +1,3 @@
-use ising::fss::{run_fss, FssConfig};
-use ising::sweep::{run_raw, Algorithm, SweepConfig};
 /// CLI: run finite-size scaling sweeps for multiple lattice sizes.
 ///
 /// Usage:
@@ -10,6 +8,8 @@ use ising::sweep::{run_raw, Algorithm, SweepConfig};
 /// Output: one CSV per size at <outdir>/fss_N<n>.csv
 /// Columns: T,E,M,M2,M4,Cv,chi
 use ising::cli::{get_arg, parse_arg, parse_geometry};
+use ising::fss::{run_fss, FssConfig};
+use ising::sweep::{run_raw, Algorithm, SweepConfig};
 use std::env;
 use std::fs;
 use std::path::Path;

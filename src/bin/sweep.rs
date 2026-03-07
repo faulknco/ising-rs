@@ -1,7 +1,3 @@
-use ising::{
-    lattice::Geometry,
-    sweep::{run, Algorithm, SweepConfig},
-};
 /// CLI: run a temperature sweep and print CSV to stdout.
 ///
 /// Usage:
@@ -15,6 +11,10 @@ use ising::{
 ///   Triangular2D: ground state E ≈ -3.0, Tc ≈ 3.64
 ///   Cubic3D:      ground state E ≈ -3.0, Tc ≈ 4.51
 use ising::cli::{get_arg, parse_arg, parse_geometry};
+use ising::{
+    lattice::Geometry,
+    sweep::{run, Algorithm, SweepConfig},
+};
 use std::env;
 use std::fs;
 use std::path::Path;

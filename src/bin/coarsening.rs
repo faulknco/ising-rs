@@ -1,4 +1,3 @@
-use ising::coarsening::{run_coarsening, CoarseningConfig};
 /// CLI: run a quench experiment and output domain wall density vs time.
 ///
 /// Usage:
@@ -8,6 +7,7 @@ use ising::coarsening::{run_coarsening, CoarseningConfig};
 ///
 /// Output columns: t,rho
 use ising::cli::{get_arg, parse_arg, parse_geometry};
+use ising::coarsening::{run_coarsening, CoarseningConfig};
 use std::env;
 use std::fs;
 use std::path::Path;
