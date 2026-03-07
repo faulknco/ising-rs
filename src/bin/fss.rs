@@ -7,15 +7,48 @@
 ///
 /// Output: one CSV per size at <outdir>/fss_N<n>.csv
 /// Columns: T,E,M,M2,M4,Cv,chi
-use ising::cli::{get_arg, parse_arg, parse_geometry};
+use ising::cli::{
+    check_help, get_arg, parse_arg, parse_geometry, validate_lattice_size, validate_samples,
+    validate_t_steps, validate_temp_range, warn_unknown_flags,
+};
 use ising::fss::{run_fss, FssConfig};
 use ising::sweep::{run_raw, Algorithm, SweepConfig};
 use std::env;
 use std::fs;
 use std::path::Path;
 
+const USAGE: &str = "\
+fss — Finite-size scaling sweeps
+
+USAGE:
+    fss [OPTIONS]
+
+OPTIONS:
+    --sizes <N,N,...>    Comma-separated lattice sizes [default: 8,12,16,20]
+    --geometry <TYPE>    square, triangular, or cubic [default: square]
+    --j <J>              Coupling constant [default: 1.0]
+    --tmin <T>           Minimum temperature [default: 1.0]
+    --tmax <T>           Maximum temperature [default: 4.0]
+    --steps <N>          Number of temperature points (>=2) [default: 31]
+    --warmup <N>         Warmup sweeps per temperature [default: 5000]
+    --samples <N>        Measurement sweeps per temperature [default: 5000]
+    --seed <N>           RNG seed [default: 42]
+    --wolff              Use Wolff cluster algorithm
+    --raw                Output raw time series (for histogram reweighting)
+    --gpu                Use GPU acceleration (requires --features cuda)
+    --outdir <DIR>       Output directory [default: analysis/data]
+    --help, -h           Show this help message";
+
+const KNOWN_FLAGS: &[&str] = &[
+    "--sizes", "--geometry", "--j", "--tmin", "--tmax", "--steps", "--warmup", "--samples", "--seed",
+    "--wolff", "--raw", "--gpu", "--outdir", "--help",
+];
+
 fn main() {
     let args: Vec<String> = env::args().collect();
+    check_help(&args, USAGE);
+    warn_unknown_flags(&args, KNOWN_FLAGS);
+
     let mut config = FssConfig::default();
     let mut outdir = String::from("analysis/data");
 
@@ -84,6 +117,18 @@ fn main() {
                 i += 1;
             }
         }
+    }
+
+    // Validation
+    validate_t_steps(config.t_steps);
+    validate_temp_range(config.t_min, config.t_max);
+    validate_samples(config.sample_sweeps, "--samples");
+    validate_samples(config.warmup_sweeps, "--warmup");
+    for &n in &config.sizes {
+        validate_lattice_size(n);
+    }
+    if raw_mode && use_gpu {
+        eprintln!("Warning: --raw mode does not support --gpu; ignoring --gpu");
     }
 
     fs::create_dir_all(&outdir).expect("failed to create outdir");
