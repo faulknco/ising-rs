@@ -18,13 +18,19 @@ use crate::observables::Observables;
 /// Fitted critical exponents with errors vs 3D Ising theory.
 #[derive(Debug, Clone)]
 pub struct CriticalExponents {
-    pub tc: f64,    // estimated Curie temperature
-    pub beta: f64,  // magnetisation exponent
-    pub alpha: f64, // heat capacity exponent
-    pub gamma: f64, // susceptibility exponent
-    /// Relative errors vs 3D Ising theory values
+    /// Estimated Curie temperature (from max |dM/dT|).
+    pub tc: f64,
+    /// Magnetisation exponent: |M| ~ (Tc - T)^β.
+    pub beta: f64,
+    /// Heat capacity exponent: Cv ~ |T - Tc|^{-α}.
+    pub alpha: f64,
+    /// Susceptibility exponent: χ ~ |T - Tc|^{-γ}.
+    pub gamma: f64,
+    /// Relative error |β_fit - β_theory| / β_theory.
     pub beta_err: f64,
+    /// Relative error |α_fit - α_theory| / α_theory.
     pub alpha_err: f64,
+    /// Relative error |γ_fit - γ_theory| / γ_theory.
     pub gamma_err: f64,
 }
 

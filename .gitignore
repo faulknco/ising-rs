@@ -23,3 +23,12 @@ paper/*.blg
 paper/*.log
 paper/*.out
 paper/*Notes.bib
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db

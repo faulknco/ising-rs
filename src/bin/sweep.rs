@@ -10,7 +10,10 @@
 ///   Square2D:     ground state E ≈ -2.0, Tc ≈ 2.27
 ///   Triangular2D: ground state E ≈ -3.0, Tc ≈ 3.64
 ///   Cubic3D:      ground state E ≈ -3.0, Tc ≈ 4.51
-use ising::cli::{get_arg, parse_arg, parse_geometry};
+use ising::cli::{
+    check_help, get_arg, parse_arg, parse_geometry, validate_lattice_size, validate_samples,
+    validate_t_steps, validate_temp_range, warn_unknown_flags,
+};
 use ising::{
     lattice::Geometry,
     sweep::{run, Algorithm, SweepConfig},
@@ -19,8 +22,38 @@ use std::env;
 use std::fs;
 use std::path::Path;
 
+const USAGE: &str = "\
+sweep — Ising model temperature sweep
+
+USAGE:
+    sweep [OPTIONS]
+
+OPTIONS:
+    --n <N>              Lattice size per dimension [default: 20]
+    --geometry <TYPE>    square, triangular, or cubic [default: square]
+    --j <J>              Coupling constant [default: 1.0]
+    --h <H>              External field [default: 0.0]
+    --tmin <T>           Minimum temperature [default: 0.5]
+    --tmax <T>           Maximum temperature [default: 5.0]
+    --steps <N>          Number of temperature points (>=2) [default: 46]
+    --warmup <N>         Warmup sweeps per temperature [default: 2000]
+    --samples <N>        Measurement sweeps per temperature [default: 500]
+    --seed <N>           RNG seed [default: 42]
+    --wolff              Use Wolff cluster algorithm instead of Metropolis
+    --outdir <DIR>       Output directory [default: .]
+    --save-snapshots     Save spin snapshots to CSV
+    --help, -h           Show this help message";
+
+const KNOWN_FLAGS: &[&str] = &[
+    "--n", "--geometry", "--j", "--h", "--tmin", "--tmax", "--steps", "--warmup", "--samples",
+    "--seed", "--wolff", "--outdir", "--save-snapshots", "--help",
+];
+
 fn main() {
     let args: Vec<String> = env::args().collect();
+    check_help(&args, USAGE);
+    warn_unknown_flags(&args, KNOWN_FLAGS);
+
     let (config, outdir, save_snapshots) = parse_args(&args);
 
     let algo_name = match config.algorithm {
@@ -161,7 +194,6 @@ fn expected_tc(g: Geometry) -> &'static str {
     }
 }
 
-/// Minimal arg parser: --n, --geometry, --j, --h, --warmup, --samples, --seed, --outdir, --save-snapshots
 fn parse_args(args: &[String]) -> (SweepConfig, String, bool) {
     let mut cfg = SweepConfig::default();
     let mut outdir = String::from(".");
@@ -226,5 +258,12 @@ fn parse_args(args: &[String]) -> (SweepConfig, String, bool) {
             }
         }
     }
+
+    validate_lattice_size(cfg.n);
+    validate_t_steps(cfg.t_steps);
+    validate_temp_range(cfg.t_min, cfg.t_max);
+    validate_samples(cfg.sample_sweeps, "--samples");
+    validate_samples(cfg.warmup_sweeps, "--warmup");
+
     (cfg, outdir, save_snapshots)
 }
