@@ -29,9 +29,10 @@ A computational physics toolkit for studying the Ising model via Monte Carlo sim
 - **Arbitrary graph topologies** — cubic, BCC, FCC, bond-diluted, and custom edge-list graphs
 - **Finite-size scaling** — automated T_c extraction, exponent fitting, and scaling collapse
 - **Kibble-Zurek mechanism** — defect density scaling from nonequilibrium quench simulations
+- **Domain coarsening** — Allen-Cahn domain wall density decay after thermal quench
 - **Exchange coupling fitting** — connect simulation to experimental Curie temperatures (BCC Fe, FCC Ni)
 - **WebAssembly demo** — interactive 3D visualisation in the browser (Three.js)
-- **38 unit tests** — covering lattice geometry, observables, Wolff/Metropolis algorithms, and graph parsing
+- **45 tests** — 38 unit tests + 7 integration tests covering all binaries
 
 ## Quick start
 
@@ -52,12 +53,24 @@ cargo run --release --bin fss -- --wolff --raw --sizes 16,20,24,32,40,48 \
     --tmin 4.30 --tmax 4.70 --steps 41 --warmup 5000 --samples 10000 \
     --outdir analysis/data/hires
 
+# Kibble-Zurek quench experiment
+cargo run --release --bin kz -- --n 20 --trials 10 \
+    --tau-min 100 --tau-max 100000 --tau-steps 20
+
+# Domain coarsening after quench
+cargo run --release --bin coarsening -- --n 30 --t-quench 2.5 --steps 200000
+
+# Temperature sweep on arbitrary graph
+cargo run --release --bin mesh_sweep -- --graph analysis/graphs/bcc_N12.json --j 1.0
+
 # Run tests
 cargo test
 
 # Clippy
 cargo clippy -- -D warnings
 ```
+
+All binaries support `--help` for full option listings.
 
 ### GPU acceleration (optional)
 
@@ -80,29 +93,45 @@ cd www && python3 -m http.server 8080
 ```
 src/
   lib.rs              # Library root
+  cli.rs              # Shared CLI argument parsing, validation, --help
   lattice.rs          # Lattice construction (2D/3D, PBC, arbitrary graphs)
   metropolis.rs       # Metropolis single-spin updates
   wolff.rs            # Wolff cluster algorithm
   observables.rs      # Energy, magnetisation, Cv, chi, Binder cumulant
   graph.rs            # Graph loading (CSV edge lists, JSON adjacency)
   fitting.rs          # Critical exponent fitting (OLS on log-log data)
+  coarsening.rs       # Domain coarsening after thermal quench
   kibble_zurek.rs     # KZ quench experiments
   sweep.rs            # Temperature sweep driver
   fss.rs              # Finite-size scaling driver
-  cuda/               # GPU kernels (optional)
+  wasm.rs             # WebAssembly bindings
+  cuda/               # GPU kernels (optional, requires --features cuda)
   bin/
     sweep.rs          # CLI: single temperature sweep
     fss.rs            # CLI: FSS across multiple lattice sizes
     kz.rs             # CLI: Kibble-Zurek experiments
+    coarsening.rs     # CLI: domain coarsening quench
     mesh_sweep.rs     # CLI: sweep on arbitrary graph files
+
+tests/
+  cli.rs              # Integration tests for all 5 binaries
 
 analysis/
   fss.ipynb           # FSS notebook: observables, Binder, reweighting, collapse
+  validation.ipynb    # Validation: Onsager, exact enumeration, autocorrelation
+  graphs/             # Pre-built crystal graphs (BCC, FCC)
   pub_style.py        # Publication-quality matplotlib style
+
+scripts/
+  run_fss_publication.sh    # Publication-quality FSS runs
+  run_kz_publication.sh     # Publication-quality KZ runs
+  run_jfit_publication.sh   # J-fitting sweep runs
+  run_all_publication.sh    # Run everything
 
 paper/
   draft.tex           # Paper: methods, validation, results
   references.bib      # Bibliography
+  figures/            # Publication figures
 ```
 
 ## Analysis pipeline
