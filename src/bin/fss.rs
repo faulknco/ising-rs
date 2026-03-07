@@ -7,7 +7,6 @@
 ///
 /// Output: one CSV per size at <outdir>/fss_N<n>.csv
 /// Columns: T,E,M,M2,M4,Cv,chi
-
 use std::env;
 use std::fs;
 use std::path::Path;

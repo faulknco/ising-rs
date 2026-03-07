@@ -61,6 +61,7 @@ pub fn run_kz(config: &KzConfig) -> KzResult {
 
 /// Run KZ experiment over a range of quench times.
 /// Returns Vec<(tau_q, rho_final)> averaged over n_trials trials.
+#[allow(clippy::too_many_arguments)]
 pub fn run_kz_sweep(
     n: usize,
     geometry: Geometry,

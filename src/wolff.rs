@@ -19,7 +19,6 @@
 ///
 /// Note: Wolff is only exact for h = 0. With h ≠ 0 we run a
 /// Metropolis sweep afterward to handle the field term.
-
 use rand::Rng;
 use crate::lattice::Lattice;
 use crate::metropolis::sweep as metropolis_sweep;
@@ -82,5 +81,76 @@ pub fn warm_up(
         if h.abs() > 1e-9 {
             metropolis_sweep(lattice, beta, j, h, rng);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::lattice::{Lattice, Geometry};
+    use rand::SeedableRng;
+
+    #[test]
+    fn wolff_flips_at_least_one() {
+        let mut rng = rand_xoshiro::Xoshiro256PlusPlus::seed_from_u64(42);
+        let mut lat = Lattice::new(8, Geometry::Cubic3D);
+        let count = step(&mut lat, 0.5, 1.0, &mut rng);
+        assert!(count >= 1, "Wolff should flip at least the seed spin");
+    }
+
+    #[test]
+    fn wolff_preserves_lattice_size() {
+        let mut rng = rand_xoshiro::Xoshiro256PlusPlus::seed_from_u64(42);
+        let mut lat = Lattice::new(6, Geometry::Cubic3D);
+        let n = lat.size();
+        for _ in 0..100 {
+            step(&mut lat, 0.5, 1.0, &mut rng);
+        }
+        assert_eq!(lat.size(), n);
+        assert!(lat.spins.iter().all(|&s| s == 1 || s == -1),
+            "all spins should be ±1");
+    }
+
+    #[test]
+    fn wolff_returns_zero_for_antiferromagnet() {
+        let mut rng = rand_xoshiro::Xoshiro256PlusPlus::seed_from_u64(42);
+        let mut lat = Lattice::new(4, Geometry::Cubic3D);
+        let count = step(&mut lat, 0.5, -1.0, &mut rng);
+        assert_eq!(count, 0, "Wolff should not flip for J <= 0");
+    }
+
+    #[test]
+    fn wolff_low_temp_large_cluster() {
+        // At low T (high beta), p_add ≈ 1, so cluster should be large
+        let mut rng = rand_xoshiro::Xoshiro256PlusPlus::seed_from_u64(42);
+        let mut lat = Lattice::new(6, Geometry::Cubic3D);
+        // All spins are +1, low T → p_add close to 1 → should flip nearly all
+        let count = step(&mut lat, 10.0, 1.0, &mut rng);
+        assert!(count > lat.size() / 2,
+            "at low T, cluster should be > N/2, got {count}/{}", lat.size());
+    }
+
+    #[test]
+    fn wolff_high_temp_small_cluster() {
+        // At very high T (small beta), p_add ≈ 0, clusters should be small
+        let mut rng = rand_xoshiro::Xoshiro256PlusPlus::seed_from_u64(42);
+        let mut lat = Lattice::new(8, Geometry::Cubic3D);
+        let mut total = 0;
+        let trials = 100;
+        for _ in 0..trials {
+            total += step(&mut lat, 0.01, 1.0, &mut rng);
+        }
+        let avg = total as f64 / trials as f64;
+        assert!(avg < 10.0,
+            "at high T, average cluster size should be small, got {avg}");
+    }
+
+    #[test]
+    fn warm_up_changes_state() {
+        let mut rng = rand_xoshiro::Xoshiro256PlusPlus::seed_from_u64(42);
+        let mut lat = Lattice::new(6, Geometry::Cubic3D);
+        let before: Vec<i8> = lat.spins.clone();
+        warm_up(&mut lat, 0.5, 1.0, 0.0, 50, &mut rng);
+        assert_ne!(lat.spins, before, "warm_up should change spin state");
     }
 }

@@ -147,3 +147,114 @@ impl Lattice {
         nb
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn cubic_3d_size() {
+        let lat = Lattice::new(4, Geometry::Cubic3D);
+        assert_eq!(lat.size(), 64);
+        assert_eq!(lat.spins.len(), 64);
+    }
+
+    #[test]
+    fn square_2d_size() {
+        let lat = Lattice::new(8, Geometry::Square2D);
+        assert_eq!(lat.size(), 64);
+    }
+
+    #[test]
+    fn cubic_3d_neighbour_count() {
+        let lat = Lattice::new(6, Geometry::Cubic3D);
+        for nb in &lat.neighbours {
+            assert_eq!(nb.len(), 6, "3D cubic should have z=6 neighbours");
+        }
+    }
+
+    #[test]
+    fn square_2d_neighbour_count() {
+        let lat = Lattice::new(8, Geometry::Square2D);
+        for nb in &lat.neighbours {
+            assert_eq!(nb.len(), 4, "2D square should have z=4 neighbours");
+        }
+    }
+
+    #[test]
+    fn triangular_2d_neighbour_count() {
+        let lat = Lattice::new(8, Geometry::Triangular2D);
+        for nb in &lat.neighbours {
+            assert_eq!(nb.len(), 6, "2D triangular should have z=6 neighbours");
+        }
+    }
+
+    #[test]
+    fn periodic_boundary_2d() {
+        // Corner spin (0,0) should wrap to (N-1,*) and (*,N-1)
+        let n = 5;
+        let lat = Lattice::new(n, Geometry::Square2D);
+        let nb0 = &lat.neighbours[0]; // site (0,0)
+        assert!(nb0.contains(&((n - 1) * n)), "should wrap up to row N-1");
+        assert!(nb0.contains(&(n - 1)), "should wrap left to col N-1");
+        assert!(nb0.contains(&n), "should have (1,0) below");
+        assert!(nb0.contains(&1), "should have (0,1) right");
+    }
+
+    #[test]
+    fn periodic_boundary_3d() {
+        let n = 4;
+        let lat = Lattice::new(n, Geometry::Cubic3D);
+        // site (0,0,0) idx=0
+        let nb = &lat.neighbours[0];
+        assert_eq!(nb.len(), 6);
+        // -x wraps to (3,0,0) = 3*16 = 48
+        assert!(nb.contains(&((n - 1) * n * n)));
+    }
+
+    #[test]
+    fn no_self_neighbours() {
+        let lat = Lattice::new(6, Geometry::Cubic3D);
+        for (idx, nb) in lat.neighbours.iter().enumerate() {
+            assert!(!nb.contains(&idx), "site {idx} should not be its own neighbour");
+        }
+    }
+
+    #[test]
+    fn neighbour_symmetry() {
+        // If j is a neighbour of i, then i must be a neighbour of j
+        let lat = Lattice::new(5, Geometry::Cubic3D);
+        for (i, nbs) in lat.neighbours.iter().enumerate() {
+            for &j in nbs {
+                assert!(lat.neighbours[j].contains(&i),
+                    "site {j} should have {i} as neighbour (symmetry)");
+            }
+        }
+    }
+
+    #[test]
+    fn from_edges_triangle() {
+        let edges = vec![(0, 1), (1, 2), (0, 2)];
+        let lat = Lattice::from_edges(3, &edges);
+        assert_eq!(lat.size(), 3);
+        assert_eq!(lat.neighbours[0].len(), 2);
+        assert!(lat.neighbours[0].contains(&1));
+        assert!(lat.neighbours[0].contains(&2));
+    }
+
+    #[test]
+    fn randomise_produces_both_spins() {
+        let mut lat = Lattice::new(10, Geometry::Square2D);
+        let mut rng = rand::thread_rng();
+        lat.randomise(&mut rng);
+        let has_up = lat.spins.iter().any(|&s| s == 1);
+        let has_down = lat.spins.iter().any(|&s| s == -1);
+        assert!(has_up && has_down, "randomise should produce both +1 and -1");
+    }
+
+    #[test]
+    fn all_spins_initialized_up() {
+        let lat = Lattice::new(4, Geometry::Cubic3D);
+        assert!(lat.spins.iter().all(|&s| s == 1), "initial state should be all +1");
+    }
+}

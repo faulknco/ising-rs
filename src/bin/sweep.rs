@@ -10,7 +10,6 @@
 ///   Square2D:     ground state E ≈ -2.0, Tc ≈ 2.27
 ///   Triangular2D: ground state E ≈ -3.0, Tc ≈ 3.64
 ///   Cubic3D:      ground state E ≈ -3.0, Tc ≈ 4.51
-
 use std::env;
 use std::fs;
 use std::path::Path;

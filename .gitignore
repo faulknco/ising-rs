@@ -1,5 +1,25 @@
 /target
+
 # wasm-pack build artefacts are committed so GitHub Pages can serve them
 # but we exclude the Node-style package.json from pkg
 www/pkg/.gitignore
+
+# Analysis data (large CSV files — regenerate with cargo run --bin fss)
 analysis/data/*.csv
+analysis/data/archive_*/
+analysis/data/hires/
+analysis/data/jfit/
+analysis/data/val_*/
+
+# Python / Jupyter artifacts
+analysis/__pycache__/
+analysis/.ipynb_checkpoints/
+analysis/*_executed.ipynb
+
+# LaTeX build artifacts
+paper/*.aux
+paper/*.bbl
+paper/*.blg
+paper/*.log
+paper/*.out
+paper/*Notes.bib

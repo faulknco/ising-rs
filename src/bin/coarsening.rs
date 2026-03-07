@@ -2,10 +2,10 @@
 ///
 /// Usage:
 ///   cargo run --release --bin coarsening
-///   cargo run --release --bin coarsening -- --n 30 --t-quench 0.5 --steps 50000
+///   cargo run --release --bin coarsening -- --n 30 --t-quench 2.5 --steps 200000
+///   cargo run --release --features cuda --bin coarsening -- --n 30 --t-quench 2.5 --steps 200000 --gpu
 ///
 /// Output columns: t,rho
-
 use std::env;
 use std::fs;
 use std::path::Path;
@@ -55,21 +55,16 @@ fn main() {
     fs::create_dir_all(&outdir).expect("failed to create outdir");
 
     eprintln!(
-        "Coarsening: N={}, geometry={:?}, T_quench={}, steps={}",
-        config.n, config.geometry, config.t_quench, config.total_steps
+        "Coarsening: N={}, geometry={:?}, T_quench={}, steps={}{}",
+        config.n, config.geometry, config.t_quench, config.total_steps,
+        if use_gpu { " [GPU]" } else { "" }
     );
 
-    let results = run_coarsening(&config);
-
-    #[cfg(feature = "cuda")]
-    if use_gpu {
-        eprintln!("GPU mode: CUDA checkerboard Metropolis (RTX 2060 target)");
-        eprintln!("Note: full GPU coarsening path not yet implemented — using CPU");
-    }
-    #[cfg(not(feature = "cuda"))]
-    if use_gpu {
-        eprintln!("Warning: --gpu specified but binary was not compiled with --features cuda");
-    }
+    let results = if use_gpu {
+        run_coarsening_with_gpu(&config)
+    } else {
+        run_coarsening(&config)
+    };
 
     let fname = format!("coarsening_N{}_T{:.2}.csv", config.n, config.t_quench);
     let path = Path::new(&outdir).join(&fname);
@@ -79,4 +74,18 @@ fn main() {
     }
     fs::write(&path, &csv).expect("failed to write CSV");
     eprintln!("Wrote {}", path.display());
+}
+
+fn run_coarsening_with_gpu(config: &CoarseningConfig) -> Vec<ising::coarsening::CoarseningPoint> {
+    #[cfg(feature = "cuda")]
+    {
+        eprintln!("GPU mode: CUDA checkerboard Metropolis");
+        ising::cuda::coarsening_gpu::run_coarsening_gpu(config)
+    }
+    #[cfg(not(feature = "cuda"))]
+    {
+        eprintln!("Warning: --gpu specified but binary was not compiled with --features cuda");
+        eprintln!("Falling back to CPU");
+        ising::coarsening::run_coarsening(config)
+    }
 }

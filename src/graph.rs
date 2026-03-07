@@ -62,11 +62,11 @@ impl GraphDef {
         let mut edges = Vec::new();
         let mut chars = inner.chars().peekable();
         loop {
-            while chars.peek().map_or(false, |&c| c != '[') { chars.next(); }
+            while chars.peek().is_some_and(|&c| c != '[') { chars.next(); }
             if chars.next().is_none() { break; }
             let i_str: String = chars.by_ref().take_while(|c| c.is_ascii_digit()).collect();
             if i_str.is_empty() { break; }
-            while chars.peek().map_or(false, |&c| c != ',' && !c.is_ascii_digit()) { chars.next(); }
+            while chars.peek().is_some_and(|&c| c != ',' && !c.is_ascii_digit()) { chars.next(); }
             if chars.peek() == Some(&',') { chars.next(); }
             let j_str: String = chars.by_ref()
                 .skip_while(|c| !c.is_ascii_digit())
@@ -97,5 +97,54 @@ impl GraphDef {
     /// Convert to Lattice for simulation.
     pub fn into_lattice(self) -> Lattice {
         Lattice::from_edges(self.n_nodes, &self.edges)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_edge_csv() {
+        let csv = "# comment\n0,1\n1,2\n0,2\n";
+        let g = GraphDef::from_edge_csv(csv).unwrap();
+        assert_eq!(g.n_nodes, 3);
+        assert_eq!(g.edges.len(), 3);
+        assert!(g.edges.contains(&(0, 1)));
+    }
+
+    #[test]
+    fn parse_edge_csv_skips_blanks() {
+        let csv = "\n0,1\n\n1,2\n\n";
+        let g = GraphDef::from_edge_csv(csv).unwrap();
+        assert_eq!(g.n_nodes, 3);
+        assert_eq!(g.edges.len(), 2);
+    }
+
+    #[test]
+    fn parse_json_graph() {
+        let json = r#"{"n_nodes": 4, "edges": [[0,1],[1,2],[2,3],[3,0]]}"#;
+        let g = GraphDef::from_json(json).unwrap();
+        assert_eq!(g.n_nodes, 4);
+        assert_eq!(g.edges.len(), 4);
+        assert!(g.edges.contains(&(2, 3)));
+    }
+
+    #[test]
+    fn json_to_lattice_coordination() {
+        // Complete graph K4: every node connected to every other
+        let json = r#"{"n_nodes": 4, "edges": [[0,1],[0,2],[0,3],[1,2],[1,3],[2,3]]}"#;
+        let g = GraphDef::from_json(json).unwrap();
+        let lat = g.into_lattice();
+        assert_eq!(lat.size(), 4);
+        for nb in &lat.neighbours {
+            assert_eq!(nb.len(), 3, "K4 should have z=3");
+        }
+    }
+
+    #[test]
+    fn csv_bad_line_errors() {
+        let csv = "0\n"; // only one node per line
+        assert!(GraphDef::from_edge_csv(csv).is_err());
     }
 }

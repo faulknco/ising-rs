@@ -13,7 +13,6 @@
 /// We fit each using ordinary least-squares on log-log data in a window
 /// [Tc - window, Tc + window], excluding points too close to Tc where
 /// finite-size effects dominate.
-
 use crate::observables::Observables;
 
 /// Fitted critical exponents with errors vs 3D Ising theory.
@@ -101,7 +100,7 @@ fn fit_alpha(data: &[Observables], tc: f64, window: f64) -> Option<f64> {
         .collect();
 
     // slope of log(Cv) vs -log|T-Tc| gives α
-    ols_slope(&pts).map(|s| s)
+    ols_slope(&pts)
 }
 
 /// Fit γ: log(χ) = -γ·log|T - Tc| + c
