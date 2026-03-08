@@ -8,6 +8,10 @@ use crate::heisenberg::HeisenbergLattice;
 /// This is deterministic and energy-conserving (microcanonical).
 /// Reduces autocorrelation time without a Boltzmann acceptance step.
 /// Reference: Peczak, Ferrenberg, Landau, PRB 1991.
+///
+/// Each spin is visited exactly once in index order (sequential sweep),
+/// as required by the standard over-relaxation algorithm, as opposed to
+/// the random-site visitation used in Metropolis sweeps.
 pub fn sweep(lat: &mut HeisenbergLattice, j: f64) {
     let size = lat.size();
     for idx in 0..size {
@@ -23,7 +27,8 @@ pub fn sweep(lat: &mut HeisenbergLattice, j: f64) {
 
         let h2 = hx*hx + hy*hy + hz*hz;
         if h2 < 1e-30 {
-            // Vanishing local field — skip (spin is free, reflection undefined)
+            // |h|² < 1e-30: local field is effectively zero (well below f64 representable
+            // spin magnitudes). Reflection is undefined for a zero field — skip this spin.
             continue;
         }
 
@@ -36,7 +41,7 @@ pub fn sweep(lat: &mut HeisenbergLattice, j: f64) {
         let ny = scale*hy - s[1];
         let nz = scale*hz - s[2];
 
-        // Renormalise to correct floating point drift
+        // Renormalise to unit length: algebraically exact but f64 drift accumulates over many sweeps.
         let norm = (nx*nx + ny*ny + nz*nz).sqrt();
         lat.spins[idx] = [nx/norm, ny/norm, nz/norm];
     }
@@ -76,5 +81,30 @@ mod tests {
         let (e_after, _) = energy_magnetisation(&lat, 1.0);
         assert!((e_after - e_before).abs() < 1e-8,
             "over-relaxation should conserve energy: before={e_before}, after={e_after}");
+    }
+
+    fn cubic3d(n: usize) -> HeisenbergLattice {
+        let nb = (0..n*n*n).map(|idx| {
+            let z = idx/(n*n); let y = (idx/n)%n; let x = idx%n;
+            vec![
+                ((x+1)%n) + y*n + z*n*n, ((x+n-1)%n) + y*n + z*n*n,
+                x + ((y+1)%n)*n + z*n*n, x + ((y+n-1)%n)*n + z*n*n,
+                x + y*n + ((z+1)%n)*n*n, x + y*n + ((z+n-1)%n)*n*n,
+            ]
+        }).collect();
+        HeisenbergLattice::new(nb)
+    }
+
+    #[test]
+    fn overrelax_conserves_energy_cubic3d() {
+        use rand::SeedableRng;
+        let mut rng = rand_xoshiro::Xoshiro256PlusPlus::seed_from_u64(99);
+        let mut lat = cubic3d(4);
+        lat.randomise(&mut rng);
+        let (e_before, _) = energy_magnetisation(&lat, 1.0);
+        sweep(&mut lat, 1.0);
+        let (e_after, _) = energy_magnetisation(&lat, 1.0);
+        assert!((e_after - e_before).abs() < 1e-8,
+            "3D over-relaxation should conserve energy: before={e_before}, after={e_after}");
     }
 }
