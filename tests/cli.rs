@@ -669,3 +669,42 @@ fn xy_jfit_smoke() {
     );
     assert!(!csv.contains("NaN"), "CSV contains NaN values");
 }
+
+// ---------------------------------------------------------------------------
+// gpu_fss binary (requires --features cuda and a GPU)
+// ---------------------------------------------------------------------------
+
+#[test]
+#[ignore] // Requires --features cuda and a GPU
+fn gpu_fss_ising_smoke() {
+    let dir = std::env::temp_dir().join("ising_test_gpu_fss");
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+
+    let status = std::process::Command::new("cargo")
+        .args([
+            "run", "--release", "--features", "cuda", "--bin", "gpu_fss", "--",
+            "--model", "ising",
+            "--sizes", "4",
+            "--tmin", "4.4", "--tmax", "4.6", "--replicas", "4",
+            "--warmup", "50", "--samples", "100",
+            "--exchange-every", "10",
+            "--outdir", dir.to_str().unwrap(),
+        ])
+        .status()
+        .expect("failed to run gpu_fss");
+    assert!(status.success());
+
+    let summary = dir.join("gpu_fss_ising_N4_summary.csv");
+    assert!(summary.exists(), "summary CSV missing");
+
+    let content = std::fs::read_to_string(&summary).unwrap();
+    let lines: Vec<&str> = content.lines().collect();
+    assert!(lines.len() >= 2, "summary CSV should have header + data");
+    assert!(lines[0].starts_with("T,E,"));
+
+    let ts = dir.join("gpu_fss_ising_N4_timeseries.csv");
+    assert!(ts.exists(), "timeseries CSV missing");
+
+    let _ = std::fs::remove_dir_all(&dir);
+}

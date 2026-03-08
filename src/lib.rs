@@ -11,6 +11,7 @@ pub mod kibble_zurek;
 pub mod lattice;
 pub mod metropolis;
 pub mod observables;
+pub mod parallel_tempering;
 pub mod sweep;
 pub mod wasm;
 pub mod wolff;
