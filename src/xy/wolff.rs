@@ -30,25 +30,26 @@ pub fn sweep(lat: &mut XyLattice, beta: f64, j: f64, rng: &mut impl Rng) {
     let mut in_cluster = vec![false; n];
     let mut stack: Vec<usize> = Vec::with_capacity(n / 4 + 8);
 
-    let proj_seed = lat.spins[seed][0] * r[0] + lat.spins[seed][1] * r[1];
-    if proj_seed > 0.0 {
-        in_cluster[seed] = true;
-        stack.push(seed);
-    }
+    // Always seed the cluster unconditionally — the flip S → S − 2(S·r)r is
+    // valid for any projection sign. Gating on proj_seed > 0 would silently
+    // skip ~50% of sweeps, halving the effective decorrelation rate.
+    in_cluster[seed] = true;
+    stack.push(seed);
 
     while let Some(idx) = stack.pop() {
         let proj_i = lat.spins[idx][0] * r[0] + lat.spins[idx][1] * r[1];
 
-        let nb_indices: Vec<usize> = lat.neighbours[idx].clone();
-        for nb in nb_indices {
+        for nb in lat.neighbours[idx].clone() {
             if in_cluster[nb] {
                 continue;
             }
             let proj_j = lat.spins[nb][0] * r[0] + lat.spins[nb][1] * r[1];
-            if proj_j <= 0.0 {
+            // Bond only if same sign (both positive or both negative hemisphere)
+            if proj_i * proj_j <= 0.0 {
                 continue;
             }
-            let p_bond = 1.0 - (-2.0 * beta * j * proj_i * proj_j).exp();
+            // Bond probability: p = 1 − exp(−2βJ · |pᵢ| · |pⱼ|)
+            let p_bond = 1.0 - (-2.0 * beta * j * proj_i.abs() * proj_j.abs()).exp();
             if rng.gen::<f64>() < p_bond {
                 in_cluster[nb] = true;
                 stack.push(nb);
@@ -145,8 +146,10 @@ mod tests {
             sweep(&mut lat, 10.0, 1.0, &mut rng);
         }
         let (e_after, _) = crate::xy::energy_magnetisation(&lat, 1.0);
+        // At low T (beta=10), energy should remain very close to ground state.
+        // e_before is negative (ordered start); e_after should not be much higher.
         assert!(
-            e_after < e_before * 0.5,
+            e_after <= e_before * 0.95,
             "energy should stay near ground state at low T: before={e_before}, after={e_after}"
         );
     }
