@@ -403,3 +403,55 @@ fn coarsening_writes_csv() {
 
     let _ = std::fs::remove_dir_all(&tmp);
 }
+
+// ---------------------------------------------------------------------------
+// heisenberg_fss binary
+// ---------------------------------------------------------------------------
+
+#[test]
+fn heisenberg_fss_smoke() {
+    let outdir = "/tmp/heis_test_fss";
+    let status = cargo_bin("heisenberg_fss")
+        .args([
+            "--sizes", "4",
+            "--tmin", "1.0", "--tmax", "2.0", "--steps", "3",
+            "--warmup", "20", "--samples", "40",
+            "--outdir", outdir,
+        ])
+        .status()
+        .expect("failed to run heisenberg_fss");
+    assert!(status.success(), "heisenberg_fss exited with non-zero status");
+
+    let csv = std::fs::read_to_string(format!("{outdir}/heisenberg_fss_N4.csv"))
+        .expect("CSV not written");
+    let rows: Vec<&str> = csv.lines().collect();
+    assert_eq!(rows.len(), 4, "expected header + 3 data rows, got {}", rows.len());
+    assert!(rows[0].contains("E_err"), "CSV header missing error columns");
+    assert!(!csv.contains("NaN"), "CSV contains NaN values");
+}
+
+// ---------------------------------------------------------------------------
+// heisenberg_jfit binary
+// ---------------------------------------------------------------------------
+
+#[test]
+fn heisenberg_jfit_smoke() {
+    let outdir = "/tmp/heis_test_jfit";
+    let status = cargo_bin("heisenberg_jfit")
+        .args([
+            "--graph", "analysis/graphs/bcc_N4.json",
+            "--tmin", "5.0", "--tmax", "8.0", "--steps", "3",
+            "--warmup", "20", "--samples", "40",
+            "--outdir", outdir,
+        ])
+        .status()
+        .expect("failed to run heisenberg_jfit");
+    assert!(status.success(), "heisenberg_jfit exited with non-zero status");
+
+    let csv = std::fs::read_to_string(format!("{outdir}/heisenberg_jfit_bcc_N4.csv"))
+        .expect("CSV not written");
+    let rows: Vec<&str> = csv.lines().collect();
+    assert_eq!(rows.len(), 4, "expected header + 3 data rows, got {}", rows.len());
+    assert!(rows[0].starts_with("T,E,"), "unexpected CSV header: {}", rows[0]);
+    assert!(!csv.contains("NaN"), "CSV contains NaN values");
+}
