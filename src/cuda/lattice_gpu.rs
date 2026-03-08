@@ -13,6 +13,9 @@ pub struct LatticeGpu {
     // curandState is ~48 bytes per thread; store as raw u8 slice
     rng_states: CudaSlice<u8>,
     n_threads: u32,
+    // Pre-allocated reduction buffers (avoid per-sample allocation)
+    reduce_partial_mag: CudaSlice<f32>,
+    reduce_partial_e: CudaSlice<f32>,
 }
 
 impl LatticeGpu {
@@ -40,12 +43,22 @@ impl LatticeGpu {
         // 48 bytes per curandState
         let rng_states = device.alloc_zeros::<u8>((n_threads as usize) * 48)?;
 
+        // Pre-allocate reduction buffers
+        let n_blocks = ((size as u32) + 256 - 1) / 256;
+        let reduce_partial_mag = device.alloc_zeros::<f32>(n_blocks as usize)?;
+        let reduce_partial_e = device.alloc_zeros::<f32>(n_blocks as usize)?;
+
+        // Load reduction kernels once
+        crate::cuda::reduce_gpu::load_reduce_kernels(&device)?;
+
         let mut gpu = Self {
             n,
             device,
             spins,
             rng_states,
             n_threads,
+            reduce_partial_mag,
+            reduce_partial_e,
         };
         gpu.init_rng(seed)?;
         Ok(gpu)
@@ -95,6 +108,69 @@ impl LatticeGpu {
     /// Copy spins from device to host.
     pub fn get_spins(&self) -> anyhow::Result<Vec<i8>> {
         Ok(self.device.dtoh_sync_copy(&self.spins)?)
+    }
+
+    /// Measure E and |M| per spin using GPU reduction with pre-allocated buffers.
+    /// No host↔device spin transfer.
+    pub fn measure_gpu(&mut self, j: f32) -> anyhow::Result<(f64, f64)> {
+        let n_sites = self.n * self.n * self.n;
+        let n3 = n_sites as f64;
+        let n_blocks = ((n_sites as u32) + BLOCK_SIZE - 1) / BLOCK_SIZE;
+        let shared = BLOCK_SIZE as u32 * 4;
+
+        // Magnetisation
+        let f_mag = self.device.get_func("reduce", "reduce_mag_ising").unwrap();
+        unsafe {
+            f_mag.launch(
+                LaunchConfig {
+                    grid_dim: (n_blocks, 1, 1),
+                    block_dim: (BLOCK_SIZE, 1, 1),
+                    shared_mem_bytes: shared,
+                },
+                (&self.spins, &mut self.reduce_partial_mag, n_sites as i32),
+            )?;
+        }
+        let mag_host = self.device.dtoh_sync_copy(&self.reduce_partial_mag)?;
+        let total_mag: f64 = mag_host.iter().map(|&x| x as f64).sum();
+
+        // Energy
+        let f_energy = self.device.get_func("reduce", "reduce_energy_ising").unwrap();
+        unsafe {
+            f_energy.launch(
+                LaunchConfig {
+                    grid_dim: (n_blocks, 1, 1),
+                    block_dim: (BLOCK_SIZE, 1, 1),
+                    shared_mem_bytes: shared,
+                },
+                (&self.spins, &mut self.reduce_partial_e, self.n as i32, j),
+            )?;
+        }
+        let energy_host = self.device.dtoh_sync_copy(&self.reduce_partial_e)?;
+        let total_energy: f64 = energy_host.iter().map(|&x| x as f64).sum();
+
+        Ok((total_energy / n3, total_mag.abs() / n3))
+    }
+
+    /// Measure total energy using GPU reduction (for replica exchange).
+    pub fn energy_gpu(&mut self, j: f32) -> anyhow::Result<f64> {
+        let n_sites = self.n * self.n * self.n;
+        let n_blocks = ((n_sites as u32) + BLOCK_SIZE - 1) / BLOCK_SIZE;
+        let shared = BLOCK_SIZE as u32 * 4;
+
+        let f_energy = self.device.get_func("reduce", "reduce_energy_ising").unwrap();
+        unsafe {
+            f_energy.launch(
+                LaunchConfig {
+                    grid_dim: (n_blocks, 1, 1),
+                    block_dim: (BLOCK_SIZE, 1, 1),
+                    shared_mem_bytes: shared,
+                },
+                (&self.spins, &mut self.reduce_partial_e, self.n as i32, j),
+            )?;
+        }
+        let energy_host = self.device.dtoh_sync_copy(&self.reduce_partial_e)?;
+        let total_energy: f64 = energy_host.iter().map(|&x| x as f64).sum();
+        Ok(total_energy)
     }
 
     /// Warm up: run `sweeps` Metropolis sweeps on GPU, discard results.
