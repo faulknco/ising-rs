@@ -12,7 +12,7 @@ pub struct HeisenbergObservables {
     pub energy: f64,         pub energy_err: f64,
     /// Mean |M|/N (scalar magnetisation per spin).
     pub magnetisation: f64,  pub magnetisation_err: f64,
-    /// Specific heat Cv = β²N(⟨E²⟩ − ⟨E⟩²) per spin.
+    /// Total heat capacity C = β²N(⟨(E/N)²⟩ − ⟨E/N⟩²), where E/N is energy per spin (extensive in N).
     pub heat_capacity: f64,  pub heat_capacity_err: f64,
     /// Magnetic susceptibility χ = βN(⟨m²⟩ − ⟨m⟩²).
     pub susceptibility: f64, pub susceptibility_err: f64,
@@ -67,7 +67,7 @@ pub fn measure(
     // Full-sample averages
     let avg_e  = mean(&e_series);
     let avg_m  = mean(&m_series);
-    let avg_e2 = mean_sq(&e_series);
+    let avg_e2 = mean_of_sq(&e_series);
     let avg_m2 = mean_of_sq(&m_series);
     let avg_m4 = mean_of_pow4(&m_series);
 
@@ -78,6 +78,9 @@ pub fn measure(
     // Jackknife error estimation with 20 blocks
     let n_blocks = 20;
     let block_size = samples / n_blocks;
+    debug_assert!(samples.is_multiple_of(n_blocks),
+        "samples ({samples}) is not divisible by n_blocks ({n_blocks}); \
+         {} samples will be silently discarded", samples % n_blocks);
 
     let (e_err, m_err, cv_err, chi_err, m2_err, m4_err) =
         jackknife_errors(&e_series, &m_series, beta, n, n_blocks, block_size);
@@ -97,13 +100,9 @@ fn mean(v: &[f64]) -> f64 {
     v.iter().sum::<f64>() / v.len() as f64
 }
 
-fn mean_sq(v: &[f64]) -> f64 {
-    v.iter().map(|x| x*x).sum::<f64>() / v.len() as f64
-}
-
 /// Mean of squares: ⟨x²⟩
 fn mean_of_sq(v: &[f64]) -> f64 {
-    mean_sq(v)
+    v.iter().map(|x| x*x).sum::<f64>() / v.len() as f64
 }
 
 /// Mean of fourth powers: ⟨x⁴⟩
@@ -144,7 +143,7 @@ fn jackknife_errors(
 
         let ae  = mean(&e_jk);
         let am  = mean(&m_jk);
-        let ae2 = mean_sq(&e_jk);
+        let ae2 = mean_of_sq(&e_jk);
         let am2 = mean_of_sq(&m_jk);
         let am4 = mean_of_pow4(&m_jk);
 
@@ -167,7 +166,8 @@ fn jackknife_errors(
 }
 
 /// Jackknife standard error from n_blocks leave-one-out estimates.
-/// Formula: sqrt((n-1)/n * Σ(jk_i - jk_mean)²)
+/// Standard error = sqrt( ((n−1)/n) · Σᵢ (jk_i − jk_mean)² )
+/// where n = n_blocks and jk_i are the leave-one-out estimates.
 fn jackknife_std(jk: &[f64]) -> f64 {
     let nb = jk.len() as f64;
     let mean = jk.iter().sum::<f64>() / nb;
