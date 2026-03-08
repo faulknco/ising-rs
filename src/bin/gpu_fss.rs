@@ -78,6 +78,11 @@ fn main() {
         .filter_map(|s| s.trim().parse().ok())
         .collect();
 
+    if measure_every == 0 {
+        eprintln!("Error: --measure-every must be at least 1");
+        std::process::exit(1);
+    }
+
     fs::create_dir_all(&outdir).expect("failed to create outdir");
 
     eprintln!("GPU FSS: model={model}, sizes={sizes:?}, T={t_min}..{t_max}, replicas={n_replicas}");

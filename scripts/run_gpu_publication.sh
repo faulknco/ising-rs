@@ -4,7 +4,8 @@
 #
 # --measure-every N: only measure observables every N sweeps.
 # This is the main speed knob — GPU sweeps without measurement are ~10x faster.
-# 100K sweeps / measure-every 5 = 20K independent samples (more than enough).
+# 100K sweeps / measure-every 5 = 20K recorded measurements per temperature.
+# Independence still depends on autocorrelation and should be checked from the output data.
 #
 # Usage:
 #   bash scripts/run_gpu_publication.sh
