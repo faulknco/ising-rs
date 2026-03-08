@@ -1,3 +1,7 @@
+use ising::graph::GraphDef;
+use ising::xy::{observables::measure, XyLattice};
+use rand::SeedableRng;
+use rand_xoshiro::Xoshiro256PlusPlus;
 /// CLI: run XY temperature sweep on a graph loaded from JSON (J-fitting).
 ///
 /// Usage:
@@ -12,10 +16,6 @@
 use std::env;
 use std::fs;
 use std::path::Path;
-use ising::xy::{XyLattice, observables::measure};
-use ising::graph::GraphDef;
-use rand::SeedableRng;
-use rand_xoshiro::Xoshiro256PlusPlus;
 
 fn get_arg(args: &[String], i: usize, flag: &str) -> String {
     if i + 1 >= args.len() {
@@ -42,28 +42,57 @@ fn main() {
     let args: Vec<String> = env::args().collect();
 
     let mut graph_path = String::new();
-    let mut outdir     = String::from("analysis/data");
-    let mut t_min      = 2.3_f64;
-    let mut t_max      = 3.5_f64;
-    let mut t_steps    = 41usize;
-    let mut warmup     = 2000usize;
-    let mut samples    = 2000usize;
-    let mut j          = 1.0_f64;
-    let mut seed       = 42u64;
+    let mut outdir = String::from("analysis/data");
+    let mut t_min = 2.3_f64;
+    let mut t_max = 3.5_f64;
+    let mut t_steps = 41usize;
+    let mut warmup = 2000usize;
+    let mut samples = 2000usize;
+    let mut j = 1.0_f64;
+    let mut seed = 42u64;
 
     let mut i = 1;
     while i < args.len() {
         match args[i].as_str() {
-            "--graph"   => { graph_path = get_arg(&args, i, "--graph"); i += 2; }
-            "--outdir"  => { outdir     = get_arg(&args, i, "--outdir"); i += 2; }
-            "--tmin"    => { t_min      = parse_flag::<f64>(&args, i, "--tmin"); i += 2; }
-            "--tmax"    => { t_max      = parse_flag::<f64>(&args, i, "--tmax"); i += 2; }
-            "--steps"   => { t_steps    = parse_flag::<usize>(&args, i, "--steps"); i += 2; }
-            "--warmup"  => { warmup     = parse_flag::<usize>(&args, i, "--warmup"); i += 2; }
-            "--samples" => { samples    = parse_flag::<usize>(&args, i, "--samples"); i += 2; }
-            "--j"       => { j          = parse_flag::<f64>(&args, i, "--j"); i += 2; }
-            "--seed"    => { seed       = parse_flag::<u64>(&args, i, "--seed"); i += 2; }
-            _           => { i += 1; }
+            "--graph" => {
+                graph_path = get_arg(&args, i, "--graph");
+                i += 2;
+            }
+            "--outdir" => {
+                outdir = get_arg(&args, i, "--outdir");
+                i += 2;
+            }
+            "--tmin" => {
+                t_min = parse_flag::<f64>(&args, i, "--tmin");
+                i += 2;
+            }
+            "--tmax" => {
+                t_max = parse_flag::<f64>(&args, i, "--tmax");
+                i += 2;
+            }
+            "--steps" => {
+                t_steps = parse_flag::<usize>(&args, i, "--steps");
+                i += 2;
+            }
+            "--warmup" => {
+                warmup = parse_flag::<usize>(&args, i, "--warmup");
+                i += 2;
+            }
+            "--samples" => {
+                samples = parse_flag::<usize>(&args, i, "--samples");
+                i += 2;
+            }
+            "--j" => {
+                j = parse_flag::<f64>(&args, i, "--j");
+                i += 2;
+            }
+            "--seed" => {
+                seed = parse_flag::<u64>(&args, i, "--seed");
+                i += 2;
+            }
+            _ => {
+                i += 1;
+            }
         }
     }
 
@@ -110,8 +139,7 @@ fn main() {
     fs::create_dir_all(&outdir).expect("failed to create outdir");
 
     let path = Path::new(&outdir).join(format!("xy_jfit_{graph_name}.csv"));
-    let mut csv =
-        String::from("T,E,E_err,M,M_err,M2,M2_err,M4,M4_err,Cv,Cv_err,chi,chi_err\n");
+    let mut csv = String::from("T,E,E_err,M,M_err,M2,M2_err,M4,M4_err,Cv,Cv_err,chi,chi_err\n");
 
     for step in 0..t_steps {
         let t = if t_steps == 1 {
@@ -124,14 +152,23 @@ fn main() {
         csv.push_str(&format!(
             "{:.4},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6}\n",
             obs.temperature,
-            obs.energy, obs.energy_err,
-            obs.magnetisation, obs.magnetisation_err,
-            obs.m2, obs.m2_err,
-            obs.m4, obs.m4_err,
-            obs.heat_capacity, obs.heat_capacity_err,
-            obs.susceptibility, obs.susceptibility_err,
+            obs.energy,
+            obs.energy_err,
+            obs.magnetisation,
+            obs.magnetisation_err,
+            obs.m2,
+            obs.m2_err,
+            obs.m4,
+            obs.m4_err,
+            obs.heat_capacity,
+            obs.heat_capacity_err,
+            obs.susceptibility,
+            obs.susceptibility_err,
         ));
-        eprintln!("  T={t:.3} M={:.4}±{:.4}", obs.magnetisation, obs.magnetisation_err);
+        eprintln!(
+            "  T={t:.3} M={:.4}±{:.4}",
+            obs.magnetisation, obs.magnetisation_err
+        );
     }
 
     fs::write(&path, &csv).expect("failed to write CSV");

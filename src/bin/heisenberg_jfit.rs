@@ -1,3 +1,7 @@
+use ising::graph::GraphDef;
+use ising::heisenberg::{observables::measure, HeisenbergLattice};
+use rand::SeedableRng;
+use rand_xoshiro::Xoshiro256PlusPlus;
 /// CLI: run Heisenberg temperature sweep on a graph loaded from JSON.
 ///
 /// Usage:
@@ -12,10 +16,6 @@
 use std::env;
 use std::fs;
 use std::path::Path;
-use ising::heisenberg::{HeisenbergLattice, observables::measure};
-use ising::graph::GraphDef;
-use rand::SeedableRng;
-use rand_xoshiro::Xoshiro256PlusPlus;
 
 fn get_arg(args: &[String], i: usize, flag: &str) -> String {
     if i + 1 >= args.len() {
@@ -56,18 +56,53 @@ fn main() {
     let mut i = 1;
     while i < args.len() {
         match args[i].as_str() {
-            "--graph"     => { graph_path = get_arg(&args, i, "--graph"); i += 2; }
-            "--outdir"    => { outdir = get_arg(&args, i, "--outdir"); i += 2; }
-            "--tmin"      => { t_min = parse_flag::<f64>(&args, i, "--tmin"); i += 2; }
-            "--tmax"      => { t_max = parse_flag::<f64>(&args, i, "--tmax"); i += 2; }
-            "--steps"     => { t_steps = parse_flag::<usize>(&args, i, "--steps"); i += 2; }
-            "--warmup"    => { warmup = parse_flag::<usize>(&args, i, "--warmup"); i += 2; }
-            "--samples"   => { samples = parse_flag::<usize>(&args, i, "--samples"); i += 2; }
-            "--overrelax" => { n_overrelax = parse_flag::<usize>(&args, i, "--overrelax"); i += 2; }
-            "--delta"     => { delta = parse_flag::<f64>(&args, i, "--delta"); i += 2; }
-            "--j"         => { j = parse_flag::<f64>(&args, i, "--j"); i += 2; }
-            "--seed"      => { seed = parse_flag::<u64>(&args, i, "--seed"); i += 2; }
-            _             => { i += 1; }
+            "--graph" => {
+                graph_path = get_arg(&args, i, "--graph");
+                i += 2;
+            }
+            "--outdir" => {
+                outdir = get_arg(&args, i, "--outdir");
+                i += 2;
+            }
+            "--tmin" => {
+                t_min = parse_flag::<f64>(&args, i, "--tmin");
+                i += 2;
+            }
+            "--tmax" => {
+                t_max = parse_flag::<f64>(&args, i, "--tmax");
+                i += 2;
+            }
+            "--steps" => {
+                t_steps = parse_flag::<usize>(&args, i, "--steps");
+                i += 2;
+            }
+            "--warmup" => {
+                warmup = parse_flag::<usize>(&args, i, "--warmup");
+                i += 2;
+            }
+            "--samples" => {
+                samples = parse_flag::<usize>(&args, i, "--samples");
+                i += 2;
+            }
+            "--overrelax" => {
+                n_overrelax = parse_flag::<usize>(&args, i, "--overrelax");
+                i += 2;
+            }
+            "--delta" => {
+                delta = parse_flag::<f64>(&args, i, "--delta");
+                i += 2;
+            }
+            "--j" => {
+                j = parse_flag::<f64>(&args, i, "--j");
+                i += 2;
+            }
+            "--seed" => {
+                seed = parse_flag::<u64>(&args, i, "--seed");
+                i += 2;
+            }
+            _ => {
+                i += 1;
+            }
         }
     }
 
@@ -91,8 +126,10 @@ fn main() {
         })
         .to_string();
 
-    eprintln!("Heisenberg jfit: graph={graph_name}, N={}, T={t_min}..{t_max}",
-        graph.n_nodes);
+    eprintln!(
+        "Heisenberg jfit: graph={graph_name}, N={}, T={t_min}..{t_max}",
+        graph.n_nodes
+    );
 
     // Build adjacency list from edge list
     let mut neighbours: Vec<Vec<usize>> = vec![vec![]; graph.n_nodes];
@@ -113,18 +150,36 @@ fn main() {
     for step in 0..t_steps {
         let t = t_min + (t_max - t_min) * step as f64 / (t_steps - 1) as f64;
         let beta = 1.0 / t;
-        let obs = measure(&mut lat, beta, j, delta, n_overrelax, warmup, samples, &mut rng);
+        let obs = measure(
+            &mut lat,
+            beta,
+            j,
+            delta,
+            n_overrelax,
+            warmup,
+            samples,
+            &mut rng,
+        );
         csv.push_str(&format!(
             "{:.4},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6}\n",
             obs.temperature,
-            obs.energy, obs.energy_err,
-            obs.magnetisation, obs.magnetisation_err,
-            obs.m2, obs.m2_err,
-            obs.m4, obs.m4_err,
-            obs.heat_capacity, obs.heat_capacity_err,
-            obs.susceptibility, obs.susceptibility_err,
+            obs.energy,
+            obs.energy_err,
+            obs.magnetisation,
+            obs.magnetisation_err,
+            obs.m2,
+            obs.m2_err,
+            obs.m4,
+            obs.m4_err,
+            obs.heat_capacity,
+            obs.heat_capacity_err,
+            obs.susceptibility,
+            obs.susceptibility_err,
         ));
-        eprintln!("  T={t:.3} M={:.4}±{:.4}", obs.magnetisation, obs.magnetisation_err);
+        eprintln!(
+            "  T={t:.3} M={:.4}±{:.4}",
+            obs.magnetisation, obs.magnetisation_err
+        );
     }
 
     fs::write(&path, &csv).expect("failed to write CSV");

@@ -174,23 +174,20 @@ fn run_ising_fss(
             }
         }
 
-        // Write summary CSV
+        // Write summary CSV with jackknife error bars
         let model_name = "ising";
         let summary_path = Path::new(outdir).join(format!("gpu_fss_{model_name}_N{n}_summary.csv"));
         let mut csv = String::from("T,E,E_err,M,M_err,M2,M2_err,M4,M4_err,Cv,Cv_err,chi,chi_err\n");
         for t_idx in 0..n_replicas {
-            let s = count[t_idx] as f64;
-            if s == 0.0 { continue; }
+            if ts_data[t_idx].is_empty() { continue; }
             let t = temperatures[t_idx];
             let beta = 1.0 / t;
-            let avg_e = sum_e[t_idx] / s;
-            let avg_e2 = sum_e2[t_idx] / s;
-            let avg_m = sum_m[t_idx] / s;
-            let avg_m2 = sum_m2[t_idx] / s;
-            let avg_m4 = sum_m4[t_idx] / s;
-            let cv = beta * beta * (avg_e2 - avg_e * avg_e) * n3;
+            let n_blocks = 20.min(ts_data[t_idx].len());
+            let obs = jackknife_observables(&ts_data[t_idx], beta, n3, n_blocks);
             csv.push_str(&format!(
-                "{t:.6},{avg_e:.6},0.0,{avg_m:.6},0.0,{avg_m2:.6},0.0,{avg_m4:.6},0.0,{cv:.6},0.0,0.0,0.0\n"
+                "{t:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6}\n",
+                obs[0], obs[1], obs[2], obs[3], obs[4], obs[5],
+                obs[6], obs[7], obs[8], obs[9], obs[10], obs[11],
             ));
         }
         fs::write(&summary_path, &csv).expect("write summary failed");
@@ -207,6 +204,87 @@ fn run_ising_fss(
         fs::write(&ts_path, &ts_csv).expect("write timeseries failed");
         eprintln!("  Wrote {}", ts_path.display());
     }
+}
+
+/// Jackknife analysis of time series data.
+/// Returns: (E, E_err, M, M_err, M2, M2_err, M4, M4_err, Cv, Cv_err, chi, chi_err)
+fn jackknife_observables(ts: &[(f64, f64)], beta: f64, n3: f64, n_blocks: usize) -> [f64; 12] {
+    let n = ts.len();
+    if n < n_blocks || n_blocks < 2 {
+        return [0.0; 12];
+    }
+    let block_size = n / n_blocks;
+    let n_used = block_size * n_blocks;
+
+    // Full-sample averages
+    let (sum_e, sum_e2, sum_m, sum_m2, sum_m4) = ts[..n_used].iter().fold(
+        (0.0, 0.0, 0.0, 0.0, 0.0),
+        |(se, se2, sm, sm2, sm4), &(e, m)| {
+            (se + e, se2 + e * e, sm + m, sm2 + m * m, sm4 + m.powi(4))
+        },
+    );
+    let s = n_used as f64;
+    let avg_e = sum_e / s;
+    let avg_e2 = sum_e2 / s;
+    let avg_m = sum_m / s;
+    let avg_m2 = sum_m2 / s;
+    let avg_m4 = sum_m4 / s;
+    let cv = beta * beta * (avg_e2 - avg_e * avg_e) * n3;
+    let chi = beta * (avg_m2 - avg_m * avg_m) * n3;
+
+    // Jackknife: leave-one-block-out
+    let mut jk_e = Vec::with_capacity(n_blocks);
+    let mut jk_m = Vec::with_capacity(n_blocks);
+    let mut jk_m2 = Vec::with_capacity(n_blocks);
+    let mut jk_m4 = Vec::with_capacity(n_blocks);
+    let mut jk_cv = Vec::with_capacity(n_blocks);
+    let mut jk_chi = Vec::with_capacity(n_blocks);
+
+    for b in 0..n_blocks {
+        let start = b * block_size;
+        let end = start + block_size;
+        let mut be = 0.0;
+        let mut be2 = 0.0;
+        let mut bm = 0.0;
+        let mut bm2 = 0.0;
+        let mut bm4 = 0.0;
+        for i in 0..n_used {
+            if i >= start && i < end { continue; }
+            let (e, m) = ts[i];
+            be += e;
+            be2 += e * e;
+            bm += m;
+            bm2 += m * m;
+            bm4 += m.powi(4);
+        }
+        let sj = (n_used - block_size) as f64;
+        let je = be / sj;
+        let je2 = be2 / sj;
+        let jm = bm / sj;
+        let jm2 = bm2 / sj;
+        let jm4 = bm4 / sj;
+        jk_e.push(je);
+        jk_m.push(jm);
+        jk_m2.push(jm2);
+        jk_m4.push(jm4);
+        jk_cv.push(beta * beta * (je2 - je * je) * n3);
+        jk_chi.push(beta * (jm2 - jm * jm) * n3);
+    }
+
+    let jk_err = |full: f64, jk: &[f64]| -> f64 {
+        let nb = jk.len() as f64;
+        let var: f64 = jk.iter().map(|&x| (x - full).powi(2)).sum::<f64>() * (nb - 1.0) / nb;
+        var.sqrt()
+    };
+
+    [
+        avg_e, jk_err(avg_e, &jk_e),
+        avg_m, jk_err(avg_m, &jk_m),
+        avg_m2, jk_err(avg_m2, &jk_m2),
+        avg_m4, jk_err(avg_m4, &jk_m4),
+        cv, jk_err(cv, &jk_cv),
+        chi, jk_err(chi, &jk_chi),
+    ]
 }
 
 fn ising_e_m_host(spins: &[i8], n: usize) -> (f64, f64) {
@@ -323,22 +401,19 @@ fn run_continuous_fss(
             }
         }
 
-        // Write summary CSV
+        // Write summary CSV with jackknife error bars
         let summary_path = Path::new(outdir).join(format!("gpu_fss_{model_name}_N{n}_summary.csv"));
         let mut csv = String::from("T,E,E_err,M,M_err,M2,M2_err,M4,M4_err,Cv,Cv_err,chi,chi_err\n");
         for t_idx in 0..n_replicas {
-            let s = count[t_idx] as f64;
-            if s == 0.0 { continue; }
+            if ts_data[t_idx].is_empty() { continue; }
             let t = temperatures[t_idx];
             let beta = 1.0 / t;
-            let avg_e = sum_e[t_idx] / s;
-            let avg_e2 = sum_e2[t_idx] / s;
-            let avg_m = sum_m[t_idx] / s;
-            let avg_m2 = sum_m2[t_idx] / s;
-            let avg_m4 = sum_m4[t_idx] / s;
-            let cv = beta * beta * (avg_e2 - avg_e * avg_e) * n3;
+            let n_blocks = 20.min(ts_data[t_idx].len());
+            let obs = jackknife_observables(&ts_data[t_idx], beta, n3, n_blocks);
             csv.push_str(&format!(
-                "{t:.6},{avg_e:.6},0.0,{avg_m:.6},0.0,{avg_m2:.6},0.0,{avg_m4:.6},0.0,{cv:.6},0.0,0.0,0.0\n"
+                "{t:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6}\n",
+                obs[0], obs[1], obs[2], obs[3], obs[4], obs[5],
+                obs[6], obs[7], obs[8], obs[9], obs[10], obs[11],
             ));
         }
         fs::write(&summary_path, &csv).expect("write summary failed");
