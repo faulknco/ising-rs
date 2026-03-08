@@ -13,3 +13,4 @@ pub mod observables;
 pub mod sweep;
 pub mod wasm;
 pub mod wolff;
+pub mod heisenberg;
