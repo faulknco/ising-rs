@@ -51,6 +51,7 @@ fn main() {
     let mut outdir = String::from("analysis/data");
     let mut delta = 0.5_f64;
     let mut n_overrelax = 5usize;
+    let mut measure_every = 1usize;
 
     let mut i = 1;
     while i < args.len() {
@@ -67,6 +68,7 @@ fn main() {
             "--outdir"         => { outdir       = get_arg(&args, i, "--outdir"); i += 2; }
             "--delta"          => { delta        = parse_flag(&args, i, "--delta"); i += 2; }
             "--overrelax"      => { n_overrelax  = parse_flag(&args, i, "--overrelax"); i += 2; }
+            "--measure-every"  => { measure_every = parse_flag(&args, i, "--measure-every"); i += 2; }
             _ => { i += 1; }
         }
     }
@@ -81,9 +83,9 @@ fn main() {
     eprintln!("GPU FSS: model={model}, sizes={sizes:?}, T={t_min}..{t_max}, replicas={n_replicas}");
 
     match model.as_str() {
-        "ising"      => run_ising_fss(&sizes, t_min, t_max, n_replicas, warmup, samples, exchange_every, seed, &outdir),
-        "xy"         => run_continuous_fss(&sizes, 2, t_min, t_max, n_replicas, warmup, samples, exchange_every, seed, &outdir, delta as f32, n_overrelax),
-        "heisenberg" => run_continuous_fss(&sizes, 3, t_min, t_max, n_replicas, warmup, samples, exchange_every, seed, &outdir, delta as f32, n_overrelax),
+        "ising"      => run_ising_fss(&sizes, t_min, t_max, n_replicas, warmup, samples, exchange_every, seed, &outdir, measure_every),
+        "xy"         => run_continuous_fss(&sizes, 2, t_min, t_max, n_replicas, warmup, samples, exchange_every, seed, &outdir, delta as f32, n_overrelax, measure_every),
+        "heisenberg" => run_continuous_fss(&sizes, 3, t_min, t_max, n_replicas, warmup, samples, exchange_every, seed, &outdir, delta as f32, n_overrelax, measure_every),
         _ => {
             eprintln!("Error: --model must be ising, xy, or heisenberg");
             std::process::exit(1);
@@ -95,6 +97,7 @@ fn main() {
 fn run_ising_fss(
     sizes: &[usize], t_min: f64, t_max: f64, n_replicas: usize,
     warmup: usize, samples: usize, exchange_every: usize, seed: u64, outdir: &str,
+    measure_every: usize,
 ) {
     use ising::cuda::lattice_gpu::LatticeGpu;
     use ising::cuda::parallel_tempering::{linspace_temperatures, replica_exchange};
@@ -131,7 +134,11 @@ fn run_ising_fss(
         let mut sum_m2   = vec![0.0_f64; n_replicas];
         let mut sum_m4   = vec![0.0_f64; n_replicas];
         let mut count    = vec![0usize; n_replicas];
-        let mut ts_data: Vec<Vec<(f64, f64)>> = vec![vec![]; n_replicas];
+        // Pre-allocate with capacity to avoid reallocation during sampling
+        let mut ts_data: Vec<Vec<(f64, f64)>> = (0..n_replicas)
+            .map(|_| Vec::with_capacity(samples / n_replicas + samples))
+            .collect();
+        let mut energies = vec![0.0_f64; n_replicas]; // reused every sweep
 
         let n3 = (n * n * n) as f64;
 
@@ -145,24 +152,30 @@ fn run_ising_fss(
             }
 
             // Measure and accumulate (GPU-resident — no spin transfer)
-            let mut energies = vec![0.0_f64; n_replicas];
-            for (r, lat) in replicas.iter_mut().enumerate() {
-                let t_idx = replica_to_temp[r];
-                let (e_per, m_per) = lat.measure_gpu(1.0).expect("GPU measure failed");
-                energies[r] = e_per * n3;
+            let do_measure = (sweep + 1) % measure_every == 0;
+            let do_exchange = (sweep + 1) % exchange_every == 0;
 
-                sum_e[t_idx]  += e_per;
-                sum_e2[t_idx] += e_per * e_per;
-                sum_m[t_idx]  += m_per;
-                sum_m2[t_idx] += m_per * m_per;
-                sum_m4[t_idx] += m_per.powi(4);
-                count[t_idx]  += 1;
+            if do_measure || do_exchange {
+                for (r, lat) in replicas.iter_mut().enumerate() {
+                    let t_idx = replica_to_temp[r];
+                    let (e_per, m_per) = lat.measure_gpu(1.0).expect("GPU measure failed");
+                    energies[r] = e_per * n3;
 
-                ts_data[t_idx].push((e_per, m_per));
+                    if do_measure {
+                        sum_e[t_idx]  += e_per;
+                        sum_e2[t_idx] += e_per * e_per;
+                        sum_m[t_idx]  += m_per;
+                        sum_m2[t_idx] += m_per * m_per;
+                        sum_m4[t_idx] += m_per.powi(4);
+                        count[t_idx]  += 1;
+
+                        ts_data[t_idx].push((e_per, m_per));
+                    }
+                }
             }
 
             // Replica exchange
-            if (sweep + 1) % exchange_every == 0 {
+            if do_exchange {
                 replica_exchange(
                     &temperatures, &energies,
                     &mut replica_to_temp, &mut temp_to_replica,
@@ -312,7 +325,7 @@ fn run_continuous_fss(
     sizes: &[usize], n_comp: usize, t_min: f64, t_max: f64,
     n_replicas: usize, warmup: usize, samples: usize,
     exchange_every: usize, seed: u64, outdir: &str,
-    delta: f32, n_overrelax: usize,
+    delta: f32, n_overrelax: usize, measure_every: usize,
 ) {
     use ising::cuda::gpu_lattice_continuous::ContinuousGpuLattice;
     use ising::cuda::parallel_tempering::{linspace_temperatures, replica_exchange};
@@ -359,33 +372,45 @@ fn run_continuous_fss(
         let mut sum_m2 = vec![0.0_f64; n_replicas];
         let mut sum_m4 = vec![0.0_f64; n_replicas];
         let mut count  = vec![0usize; n_replicas];
-        let mut ts_data: Vec<Vec<(f64, f64)>> = vec![vec![]; n_replicas];
+        let mut ts_data: Vec<Vec<(f64, f64)>> = (0..n_replicas)
+            .map(|_| Vec::with_capacity(samples / n_replicas + samples))
+            .collect();
+        let mut energies = vec![0.0_f64; n_replicas]; // reused every sweep
 
-        eprintln!("  N={n}: sampling {samples} sweeps with PT...");
+        eprintln!("  N={n}: sampling {samples} sweeps with PT (measure every {measure_every})...");
         for sweep in 0..samples {
-            let mut energies = vec![0.0_f64; n_replicas];
-
+            // Sweep all replicas
             for (r, lat) in replicas.iter_mut().enumerate() {
                 let t_idx = replica_to_temp[r];
                 let beta = (1.0 / temperatures[t_idx]) as f32;
                 lat.sweep(beta, 1.0, delta, n_overrelax).expect("sweep failed");
-
-                let (e, mx, my, mz) = lat.measure_raw().expect("measure failed");
-                let e_per = e / n3;
-                let m_abs = ((mx * mx + my * my + mz * mz).sqrt()) / n3;
-                energies[r] = e;
-
-                sum_e[t_idx]  += e_per;
-                sum_e2[t_idx] += e_per * e_per;
-                sum_m[t_idx]  += m_abs;
-                sum_m2[t_idx] += m_abs * m_abs;
-                sum_m4[t_idx] += m_abs.powi(4);
-                count[t_idx]  += 1;
-
-                ts_data[t_idx].push((e_per, m_abs));
             }
 
-            if (sweep + 1) % exchange_every == 0 {
+            let do_measure = (sweep + 1) % measure_every == 0;
+            let do_exchange = (sweep + 1) % exchange_every == 0;
+
+            if do_measure || do_exchange {
+                for (r, lat) in replicas.iter_mut().enumerate() {
+                    let t_idx = replica_to_temp[r];
+                    let (e, mx, my, mz) = lat.measure_gpu(1.0).expect("GPU measure failed");
+                    let e_per = e / n3;
+                    let m_abs = ((mx * mx + my * my + mz * mz).sqrt()) / n3;
+                    energies[r] = e;
+
+                    if do_measure {
+                        sum_e[t_idx]  += e_per;
+                        sum_e2[t_idx] += e_per * e_per;
+                        sum_m[t_idx]  += m_abs;
+                        sum_m2[t_idx] += m_abs * m_abs;
+                        sum_m4[t_idx] += m_abs.powi(4);
+                        count[t_idx]  += 1;
+
+                        ts_data[t_idx].push((e_per, m_abs));
+                    }
+                }
+            }
+
+            if do_exchange {
                 replica_exchange(
                     &temperatures, &energies,
                     &mut replica_to_temp, &mut temp_to_replica,
@@ -430,13 +455,13 @@ fn run_continuous_fss(
 }
 
 #[cfg(not(feature = "cuda"))]
-fn run_ising_fss(_: &[usize], _: f64, _: f64, _: usize, _: usize, _: usize, _: usize, _: u64, _: &str) {
+fn run_ising_fss(_: &[usize], _: f64, _: f64, _: usize, _: usize, _: usize, _: usize, _: u64, _: &str, _: usize) {
     eprintln!("Error: gpu_fss requires --features cuda");
     std::process::exit(1);
 }
 
 #[cfg(not(feature = "cuda"))]
-fn run_continuous_fss(_: &[usize], _: usize, _: f64, _: f64, _: usize, _: usize, _: usize, _: usize, _: u64, _: &str, _: f32, _: usize) {
+fn run_continuous_fss(_: &[usize], _: usize, _: f64, _: f64, _: usize, _: usize, _: usize, _: usize, _: u64, _: &str, _: f32, _: usize, _: usize) {
     eprintln!("Error: gpu_fss requires --features cuda");
     std::process::exit(1);
 }
