@@ -26,6 +26,10 @@ path = "src/bin/mesh_sweep.rs"
 name = "heisenberg_fss"
 path = "src/bin/heisenberg_fss.rs"
 
+[[bin]]
+name = "heisenberg_jfit"
+path = "src/bin/heisenberg_jfit.rs"
+
 [lib]
 name = "ising"
 path = "src/lib.rs"
