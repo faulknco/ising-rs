@@ -1,7 +1,9 @@
 use crate::heisenberg::{HeisenbergLattice, Spin3};
 use rand::Rng;
 
-/// One full Metropolis sweep over all spins in random order.
+/// N Metropolis update proposals drawn with replacement (random-site sweep).
+/// On average each spin is proposed once per sweep, but individual sites may
+/// be skipped or updated multiple times in a single call.
 ///
 /// delta: cap angle for proposed rotation (radians). Tune to ~50% acceptance.
 /// ΔE = −J [ (S'ᵢ − Sᵢ) · Σⱼ Sⱼ ]
@@ -63,9 +65,10 @@ fn propose_rotation(s: &Spin3, delta: f64, rng: &mut impl Rng) -> Spin3 {
 
     let (u, v) = perpendicular_frame(s);
 
-    let nx = sin_theta * phi.cos() * u[0] + sin_theta * phi.sin() * v[0] + cos_theta * s[0];
-    let ny = sin_theta * phi.cos() * u[1] + sin_theta * phi.sin() * v[1] + cos_theta * s[1];
-    let nz = sin_theta * phi.cos() * u[2] + sin_theta * phi.sin() * v[2] + cos_theta * s[2];
+    let (cphi, sphi) = (phi.cos(), phi.sin());
+    let nx = sin_theta * cphi * u[0] + sin_theta * sphi * v[0] + cos_theta * s[0];
+    let ny = sin_theta * cphi * u[1] + sin_theta * sphi * v[1] + cos_theta * s[1];
+    let nz = sin_theta * cphi * u[2] + sin_theta * sphi * v[2] + cos_theta * s[2];
 
     let norm = (nx*nx + ny*ny + nz*nz).sqrt();
     [nx/norm, ny/norm, nz/norm]
