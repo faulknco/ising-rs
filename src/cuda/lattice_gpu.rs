@@ -101,7 +101,8 @@ impl LatticeGpu {
                 )?;
             }
         }
-        self.device.synchronize()?;
+        // No synchronize — next kernel launch or dtoh_sync_copy will
+        // implicitly wait for these kernels on the same stream.
         Ok(())
     }
 
