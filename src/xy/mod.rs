@@ -24,6 +24,7 @@ impl XyLattice {
         }
     }
 
+    /// Number of sites in the lattice.
     pub fn size(&self) -> usize {
         self.spins.len()
     }
@@ -100,6 +101,15 @@ mod tests {
         let lat = XyLattice::new(nb);
         let (e, _) = energy_magnetisation(&lat, 1.0);
         assert!((e - (-4.0)).abs() < 1e-12, "ordered ring energy = {e}");
+    }
+
+    #[test]
+    fn energy_scales_with_j() {
+        // All spins (1,0), 4-site ring: E = -J * N_bonds = -J * 4
+        let nb = ring(4);
+        let lat = XyLattice::new(nb);
+        let (e2, _) = energy_magnetisation(&lat, 2.0);
+        assert!((e2 - (-8.0)).abs() < 1e-12, "j=2.0 ring energy = {e2}");
     }
 
     #[test]
