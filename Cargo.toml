@@ -30,6 +30,10 @@ path = "src/bin/heisenberg_fss.rs"
 name = "heisenberg_jfit"
 path = "src/bin/heisenberg_jfit.rs"
 
+[[bin]]
+name = "xy_fss"
+path = "src/bin/xy_fss.rs"
+
 [lib]
 name = "ising"
 path = "src/lib.rs"
