@@ -23,3 +23,8 @@ paper/*.blg
 paper/*.log
 paper/*.out
 paper/*Notes.bib
+
+# Figures copied by build.sh (duplicates of paper/figures/)
+paper/fss_*.png
+paper/val_*.png
+paper/kz_*.png
