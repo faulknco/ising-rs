@@ -10,6 +10,7 @@ use rand::Rng;
 pub type Spin3 = [f64; 3];
 
 /// Heisenberg lattice with vector spins and adjacency list.
+#[derive(Debug, Clone)]
 pub struct HeisenbergLattice {
     pub spins: Vec<Spin3>,
     pub neighbours: Vec<Vec<usize>>,
@@ -127,5 +128,22 @@ mod tests {
             let norm = (s[0]*s[0] + s[1]*s[1] + s[2]*s[2]).sqrt();
             assert!((norm - 1.0).abs() < 1e-12);
         }
+    }
+
+    #[test]
+    fn random_unit_vector_is_uniform() {
+        // For uniform distribution on S², E[z] = 0 and Var[z] = 1/3.
+        // Over 10_000 samples, mean z should be within 0.05 of 0.
+        let mut rng = rand_xoshiro::Xoshiro256PlusPlus::seed_from_u64(123);
+        let n = 10_000;
+        let mean_z: f64 = (0..n).map(|_| random_unit_vector(&mut rng)[2]).sum::<f64>() / n as f64;
+        assert!(mean_z.abs() < 0.05,
+            "mean z should be near 0 for uniform S², got {mean_z}");
+        let var_z: f64 = (0..n).map(|_| {
+            let z = random_unit_vector(&mut rng)[2];
+            z * z
+        }).sum::<f64>() / n as f64;
+        assert!((var_z - 1.0/3.0).abs() < 0.05,
+            "Var[z] should be ≈1/3 for uniform S², got {var_z}");
     }
 }
