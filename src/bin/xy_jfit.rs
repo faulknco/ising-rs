@@ -72,6 +72,11 @@ fn main() {
         std::process::exit(1);
     }
 
+    if t_steps == 0 {
+        eprintln!("Error: --steps must be >= 1");
+        std::process::exit(1);
+    }
+
     let content = fs::read_to_string(&graph_path).unwrap_or_else(|e| {
         eprintln!("Error: failed to read graph file {graph_path}: {e}");
         std::process::exit(1);
@@ -109,7 +114,11 @@ fn main() {
         String::from("T,E,E_err,M,M_err,M2,M2_err,M4,M4_err,Cv,Cv_err,chi,chi_err\n");
 
     for step in 0..t_steps {
-        let t = t_min + (t_max - t_min) * step as f64 / (t_steps - 1) as f64;
+        let t = if t_steps == 1 {
+            t_min
+        } else {
+            t_min + (t_max - t_min) * step as f64 / (t_steps - 1) as f64
+        };
         let beta = 1.0 / t;
         let obs = measure(&mut lat, beta, j, warmup, samples, &mut rng);
         csv.push_str(&format!(
