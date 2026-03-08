@@ -1,139 +1,277 @@
 # ising-rs
 
-GPU-accelerated Monte Carlo simulation of the Ising model on arbitrary graph topologies, implemented in Rust with CUDA.
+Rust Monte Carlo toolkit for classical spin-model research, with a validated Ising baseline, graph-based crystal workflows, and optional CUDA acceleration for cubic-lattice Metropolis runs.
 
 [![CI](https://github.com/faulknco/ising-rs/actions/workflows/ci.yml/badge.svg)](https://github.com/faulknco/ising-rs/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-**[Live WebAssembly Demo →](https://faulknco.github.io/ising-rs)**
+**[Live WebAssembly Demo ->](https://faulknco.github.io/ising-rs)**
 
-## Overview
+## Scope
 
-A computational physics toolkit for studying the Ising model via Monte Carlo simulation. Supports standard cubic, BCC, FCC, diluted, and complex network lattices through a graph-agnostic architecture. Includes a full finite-size scaling (FSS) analysis pipeline with Ferrenberg-Swendsen histogram reweighting and jackknife error estimation.
+`ising-rs` is being cleaned up into a reproducible research engine. The immediate goal is to make the classical physics workflows trustworthy and repeatable before extending the codebase toward new models.
 
-### Key results (3D cubic lattice)
+The current codebase includes:
 
-| Quantity | Measured | Theory | Error |
-|---|---|---|---|
-| T_c (Binder crossing) | 4.512(4) | 4.5115 | 0.01% |
-| gamma/nu (chi peak scaling) | 1.933(30) | 1.964 | 1.6% |
-| beta/nu (M at T_c) | 0.492(26) | 0.518 | 5.0% |
-| nu (chi collapse) | 0.667(37) | 0.630 | 5.9% |
-| 2beta/nu + gamma/nu | 2.918 | 3.0 | 2.7% |
+- CPU Ising Monte Carlo on regular lattices and loaded graph topologies
+- Wolff and Metropolis dynamics on the CPU
+- Cubic-lattice CUDA Metropolis kernels
+- analysis notebooks and helper scripts for FSS, validation, exchange fitting, dilution, coarsening, Kibble-Zurek, and Heisenberg studies
 
-## Features
+## Capability Matrix
 
-- **Wolff cluster algorithm** — eliminates critical slowing down (z_W ~ 0.3 vs z ~ 2 for Metropolis)
-- **Metropolis algorithm** — single-spin updates with GPU-accelerated checkerboard decomposition
-- **Histogram reweighting** — Ferrenberg-Swendsen patchwork scheme for fine temperature interpolation near T_c
-- **Arbitrary graph topologies** — cubic, BCC, FCC, bond-diluted, and custom edge-list graphs
-- **Finite-size scaling** — automated T_c extraction, exponent fitting, and scaling collapse
-- **Kibble-Zurek mechanism** — defect density scaling from nonequilibrium quench simulations
-- **Exchange coupling fitting** — connect simulation to experimental Curie temperatures (BCC Fe, FCC Ni)
-- **WebAssembly demo** — interactive 3D visualisation in the browser (Three.js)
-- **38 unit tests** — covering lattice geometry, observables, Wolff/Metropolis algorithms, and graph parsing
+### Validated baseline
 
-## Quick start
+- 2D and 3D classical Ising model on CPU
+- cubic-lattice finite-size scaling using Wolff dynamics
+- graph loading for BCC, FCC, diluted, and custom edge-list inputs
+- core observables: energy, magnetisation, Binder cumulant, heat capacity, susceptibility
+- CLI and library test coverage via `cargo test`
+
+### Available but not yet fully packaged as reproducible research outputs
+
+- BCC/FCC exchange-fitting workflows
+- dilution studies with multi-realization averaging and propagated `T_c(p)` errors
+- coarsening workflows
+- Kibble-Zurek workflows with explicit ramp/freeze controls and uncertainty-aware sweep output
+- Heisenberg model workflows
+
+### Current backend limits
+
+- CUDA support is currently for 3D cubic-lattice checkerboard Metropolis only
+- arbitrary graph workflows are CPU-first; not every analysis path is graph-native
+- publication-quality results are being migrated from notebooks into scripted workflows
+
+## Repository Goals
+
+The repo is moving toward three explicit guarantees:
+
+1. Engine correctness: algorithms and observables match the documented methods.
+2. Research reproducibility: published numbers and figures can be regenerated from versioned code and inputs.
+3. Physics credibility: validated benchmark physics is separated from exploratory workflows.
+
+See [reproducibility.md](/Users/faulknco/Projects/ising-rs/docs/reproducibility.md) and [physics-validation.md](/Users/faulknco/Projects/ising-rs/docs/physics-validation.md).
+
+## Quick Start
 
 ```bash
 # Build
 cargo build --release
 
-# Run a temperature sweep (prints CSV to stdout)
-cargo run --release --bin sweep -- --n 16 --geometry cubic
-
-# Finite-size scaling with Wolff algorithm (writes CSV files)
-cargo run --release --bin fss -- --wolff --sizes 8,12,16,20,24 \
-    --tmin 3.5 --tmax 5.5 --steps 41 --warmup 2000 --samples 2000 \
-    --outdir analysis/data
-
-# High-stats run for histogram reweighting near T_c
-cargo run --release --bin fss -- --wolff --raw --sizes 16,20,24,32,40,48 \
-    --tmin 4.30 --tmax 4.70 --steps 41 --warmup 5000 --samples 10000 \
-    --outdir analysis/data/hires
-
 # Run tests
 cargo test
 
-# Clippy
+# Lint
 cargo clippy -- -D warnings
+
+# Cubic Ising sweep on CPU
+cargo run --release --bin sweep -- --n 16 --geometry cubic
+
+# Cubic finite-size scaling on CPU with Wolff dynamics
+cargo run --release --bin fss -- --wolff \
+  --sizes 8,12,16,20,24 \
+  --tmin 3.5 --tmax 5.5 --steps 41 \
+  --warmup 2000 --samples 2000 \
+  --outdir analysis/data
+
+# Raw Wolff time series for histogram reweighting
+cargo run --release --bin fss -- --wolff --raw \
+  --sizes 16,20,24,32,40,48 \
+  --tmin 4.30 --tmax 4.70 --steps 41 \
+  --warmup 5000 --samples 10000 \
+  --outdir analysis/data/hires
+
+# Sweep an arbitrary graph loaded from JSON
+cargo run --release --bin mesh_sweep -- \
+  --graph analysis/graphs/bcc_N8.json \
+  --tmin 5.0 --tmax 8.0 --steps 21
+
+# Rebuild the validation summary (quick mode)
+python analysis/scripts/reproduce_validation.py --quick
 ```
 
-### GPU acceleration (optional)
+### Optional CUDA path
 
-Requires CUDA 12.x and the `cuda` feature:
+Requires CUDA 12.x and the `cuda` feature.
 
 ```bash
 cargo run --release --features cuda --bin fss -- --gpu --sizes 8,12,16,20,24
 ```
 
-### WebAssembly demo
+This path is intended for cubic-lattice Metropolis runs. It is not a generic arbitrary-graph GPU backend.
 
-```bash
-cargo install wasm-pack
-wasm-pack build --target web --out-dir www/pkg
-cd www && python3 -m http.server 8080
-```
+## Research Layout
 
-## Project structure
-
-```
+```text
 src/
-  lib.rs              # Library root
-  lattice.rs          # Lattice construction (2D/3D, PBC, arbitrary graphs)
-  metropolis.rs       # Metropolis single-spin updates
-  wolff.rs            # Wolff cluster algorithm
-  observables.rs      # Energy, magnetisation, Cv, chi, Binder cumulant
-  graph.rs            # Graph loading (CSV edge lists, JSON adjacency)
-  fitting.rs          # Critical exponent fitting (OLS on log-log data)
-  kibble_zurek.rs     # KZ quench experiments
-  sweep.rs            # Temperature sweep driver
-  fss.rs              # Finite-size scaling driver
-  cuda/               # GPU kernels (optional)
-  bin/
-    sweep.rs          # CLI: single temperature sweep
-    fss.rs            # CLI: FSS across multiple lattice sizes
-    kz.rs             # CLI: Kibble-Zurek experiments
-    mesh_sweep.rs     # CLI: sweep on arbitrary graph files
+  lattice.rs          # regular-lattice construction
+  graph.rs            # graph loading from CSV/JSON
+  metropolis.rs       # CPU Metropolis updates
+  wolff.rs            # CPU Wolff cluster updates
+  observables.rs      # scalar observables
+  fitting.rs          # simple fitting helpers
+  fss.rs              # CPU FSS driver
+  kibble_zurek.rs     # shared KZ protocol, CPU driver, and error helpers
+  heisenberg/         # Heisenberg workflows
+  cuda/               # cubic-lattice CUDA backend
+  bin/                # CLI entrypoints
 
 analysis/
-  fss.ipynb           # FSS notebook: observables, Binder, reweighting, collapse
-  pub_style.py        # Publication-quality matplotlib style
+  graphs/             # versioned graph inputs
+  specs/              # run/manifest schemas
+  scripts/            # scripted analysis workflows
+  data/               # generated data products
+
+docs/
+  reproducibility.md  # workflow and data provenance rules
+  physics-validation.md
 
 paper/
-  draft.tex           # Paper: methods, validation, results
-  references.bib      # Bibliography
+  draft.tex           # working manuscript
+
+results/
+  published/          # versioned result packs
 ```
 
-## Analysis pipeline
+## Reproducibility Direction
 
-The FSS analysis uses a two-tier data strategy:
+The repo is transitioning away from "notebook-only" publication workflows.
 
-1. **Full-range sweep** (T = 3.5-5.5, 2000 samples) — overview of all observables
-2. **High-stats narrow range** (T = 4.30-4.70, 10000 samples) — histogram reweighting and exponent extraction
+The target state is:
 
-The Jupyter notebook `analysis/fss.ipynb` processes raw per-sample data through:
-- Jackknife error estimation (20 blocks) on all observables
-- Binder cumulant crossing for T_c
-- Ferrenberg-Swendsen histogram reweighting on a 200-point fine temperature grid
-- Peak scaling (chi_max, M(T_c), dU/dT) for gamma/nu, beta/nu, 1/nu
-- Scaling collapse with adjacent-point cost optimisation
+- raw simulation outputs with run manifests
+- scripted derivation of tables and figures
+- versioned result packs under `results/published/`
+- a benchmark validation page with theory targets and current status
 
-## Citing
+The manifest schema scaffold lives at [run-manifest.schema.json](/Users/faulknco/Projects/ising-rs/analysis/specs/run-manifest.schema.json).
 
-If you use this software, please cite:
+The current scripted validation entrypoint is:
+
+```bash
+python analysis/scripts/reproduce_validation.py --quick
+```
+
+That workflow now writes:
+
+- derived comparison tables in `analysis/data/derived/validation/`
+- generated figures in `analysis/figures/generated/validation/`
+- a run manifest in `analysis/data/manifests/validation/`
+
+To freeze the current validation outputs into a versioned published pack:
+
+```bash
+python analysis/scripts/promote_validation_result_pack.py \
+  --pack-name classical_validation_quick_v1
+```
+
+The Kibble-Zurek CLI writes `tau_q,rho,rho_err,n_trials` and uses the same explicit protocol on
+both backends: warm up at `t_start`, ramp to `t_end`, optionally snap-freeze, then measure.
+
+The dilution workflow is now scripted as well:
+
+```bash
+python analysis/scripts/reproduce_dilution.py --quick
+```
+
+It generates disorder realizations, runs the corresponding mesh sweeps, and writes
+disorder-averaged observables plus `T_c(p)` summaries into `analysis/data/derived/dilution/`.
+Use `--max-workers` to parallelize independent realizations on CPU without changing the seeded
+Monte Carlo trajectories for each job.
+
+For larger publishing runs, the repo also provides a USB-friendly multi-size campaign runner:
+
+```bash
+python analysis/scripts/reproduce_dilution_campaign.py \
+  --output-root /path/to/publishing_data
+```
+
+It writes one folder per size, plus campaign-level CSV ledgers so partial results are preserved if
+the run is interrupted.
+
+Once at least one size has finished, you can derive Binder cumulants and pairwise crossing
+temperatures from the campaign outputs:
+
+```bash
+python analysis/scripts/reproduce_dilution_fss.py \
+  --campaign-root /path/to/publishing_data/dilution_publish_v1
+```
+
+`reproduce_dilution_campaign.py` now refreshes this Binder/FSS analysis automatically after each
+completed size, so the campaign folder accumulates both raw per-job CSVs and higher-level finite-size
+summaries as the run progresses.
+
+When a campaign is ready to freeze into a stable artifact, promote it into `results/published/`:
+
+```bash
+python analysis/scripts/promote_dilution_result_pack.py \
+  --campaign-root /path/to/publishing_data/dilution_publish_v1 \
+  --pack-name dilution_publish_v1
+```
+
+The promoted pack includes campaign summaries, per-size derived outputs, figures, manifests, a pack
+README, and SHA-256 checksums.
+
+To automate the last two steps while a USB campaign is still running:
+
+```bash
+python analysis/scripts/finalize_dilution_campaign.py \
+  --campaign-root /path/to/publishing_data/dilution_publish_v1 \
+  --pack-name dilution_publish_v1
+```
+
+That watcher reruns the Binder/FSS analysis when new size summaries appear and promotes the final
+campaign into `results/published/` once every planned size has completed.
+
+The Kibble-Zurek analysis is also scriptable:
+
+```bash
+python analysis/scripts/reproduce_kz.py \
+  --input-dir analysis/data \
+  --output-dir analysis/data/derived/kz \
+  --figures-dir analysis/figures/generated/kz
+```
+
+If you are using a virtualenv, activate it first. On Windows, `py -3` is the usual equivalent of
+`python`.
+
+The historical `kz_N20.csv` and `kz_N30.csv` files are still too weak to pass the default screening
+thresholds, so the scripted KZ path is currently best treated as a reproducible analysis scaffold
+rather than a validated final result.
+
+## Current Caveat
+
+Some historical CSV files and manuscript claims predate the reproducibility cleanup. Until the scripted result packs are rebuilt, treat the repo as:
+
+- trustworthy for code exploration and benchmark development
+- promising for classical research
+- not yet fully packaged for end-to-end paper regeneration
+
+## Contributing
+
+Before submitting changes:
+
+```bash
+cargo fmt
+cargo clippy -- -D warnings
+cargo test
+```
+
+See [CONTRIBUTING.md](/Users/faulknco/Projects/ising-rs/CONTRIBUTING.md).
+
+## Citation
+
+If you use the software, cite:
 
 ```bibtex
 @software{faulkner2026ising,
   author = {Faulkner, Connor},
-  title = {ising-rs: GPU-accelerated Monte Carlo simulation of the Ising model},
+  title = {ising-rs},
   year = {2026},
   url = {https://github.com/faulknco/ising-rs},
   license = {MIT}
 }
 ```
-
-See also [CITATION.cff](CITATION.cff).
 
 ## License
 
