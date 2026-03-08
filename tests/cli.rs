@@ -455,3 +455,67 @@ fn heisenberg_jfit_smoke() {
     assert!(rows[0].starts_with("T,E,"), "unexpected CSV header: {}", rows[0]);
     assert!(!csv.contains("NaN"), "CSV contains NaN values");
 }
+
+// ---------------------------------------------------------------------------
+// xy_fss binary
+// ---------------------------------------------------------------------------
+
+#[test]
+fn xy_fss_smoke() {
+    let outdir = "/tmp/xy_test_fss";
+    let status = cargo_bin("xy_fss")
+        .args([
+            "--sizes", "4",
+            "--tmin", "1.0", "--tmax", "2.0", "--steps", "5",
+            "--warmup", "50", "--samples", "100",
+            "--seed", "1",
+            "--outdir", outdir,
+        ])
+        .status()
+        .expect("failed to run xy_fss");
+    assert!(status.success(), "xy_fss exited with non-zero status");
+
+    let csv = std::fs::read_to_string(format!("{outdir}/xy_fss_N4.csv"))
+        .expect("CSV not written");
+    let rows: Vec<&str> = csv.lines().collect();
+    assert_eq!(rows.len(), 6, "expected header + 5 data rows, got {}", rows.len());
+    assert_eq!(
+        rows[0],
+        "T,E,E_err,M,M_err,M2,M2_err,M4,M4_err,Cv,Cv_err,chi,chi_err",
+        "unexpected CSV header: {}",
+        rows[0]
+    );
+    assert!(!csv.contains("NaN"), "CSV contains NaN values");
+}
+
+// ---------------------------------------------------------------------------
+// xy_jfit binary
+// ---------------------------------------------------------------------------
+
+#[test]
+fn xy_jfit_smoke() {
+    let outdir = "/tmp/xy_test_jfit";
+    let status = cargo_bin("xy_jfit")
+        .args([
+            "--graph", "analysis/graphs/bcc_N4.json",
+            "--tmin", "2.3", "--tmax", "3.5", "--steps", "5",
+            "--warmup", "50", "--samples", "100",
+            "--seed", "1",
+            "--outdir", outdir,
+        ])
+        .status()
+        .expect("failed to run xy_jfit");
+    assert!(status.success(), "xy_jfit exited with non-zero status");
+
+    let csv = std::fs::read_to_string(format!("{outdir}/xy_jfit_bcc_N4.csv"))
+        .expect("CSV not written");
+    let rows: Vec<&str> = csv.lines().collect();
+    assert_eq!(rows.len(), 6, "expected header + 5 data rows, got {}", rows.len());
+    assert_eq!(
+        rows[0],
+        "T,E,E_err,M,M_err,M2,M2_err,M4,M4_err,Cv,Cv_err,chi,chi_err",
+        "unexpected CSV header: {}",
+        rows[0]
+    );
+    assert!(!csv.contains("NaN"), "CSV contains NaN values");
+}
