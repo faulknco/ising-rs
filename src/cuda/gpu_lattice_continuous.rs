@@ -155,15 +155,10 @@ impl ContinuousGpuLattice {
         Ok(())
     }
 
-    /// Compute (E, mx, my, mz) using GPU reduction for mag, host for energy.
+    /// Compute (E, mx, my, mz) using GPU reduction for both energy and mag.
+    /// No host↔device spin transfer.
     pub fn measure_raw(&self) -> anyhow::Result<(f64, f64, f64, f64)> {
-        let n_sites = self.n * self.n * self.n;
-        let (mx, my, mz) =
-            reduce_gpu::reduce_continuous_mag(&self.device, &self.spins, n_sites, self.n_comp)?;
-        // Energy: compute on host (reduction kernel for continuous energy is complex)
-        let host_spins = self.device.dtoh_sync_copy(&self.spins)?;
-        let e = energy_continuous_host(&host_spins, self.n, self.n_comp, 1.0);
-        Ok((e, mx, my, mz))
+        reduce_gpu::measure_continuous_gpu(&self.device, &self.spins, self.n, self.n_comp, 1.0)
     }
 
     pub fn device(&self) -> &Arc<CudaDevice> {

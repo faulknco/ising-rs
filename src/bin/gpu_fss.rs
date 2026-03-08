@@ -144,15 +144,12 @@ fn run_ising_fss(
                 lat.step(beta as f32, 1.0, 0.0).expect("GPU step failed");
             }
 
-            // Measure and accumulate
+            // Measure and accumulate (GPU-resident — no spin transfer)
             let mut energies = vec![0.0_f64; n_replicas];
-            for (r, lat) in replicas.iter().enumerate() {
+            for (r, lat) in replicas.iter_mut().enumerate() {
                 let t_idx = replica_to_temp[r];
-                let spins = lat.get_spins().expect("get_spins failed");
-                let (e, m) = ising_e_m_host(&spins, n);
-                let e_per = e / n3;
-                let m_per = (m / n3).abs();
-                energies[r] = e;
+                let (e_per, m_per) = lat.measure_gpu(1.0).expect("GPU measure failed");
+                energies[r] = e_per * n3;
 
                 sum_e[t_idx]  += e_per;
                 sum_e2[t_idx] += e_per * e_per;
