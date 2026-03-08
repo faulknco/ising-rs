@@ -7,13 +7,7 @@ use rand::Rng;
 ///
 /// delta: cap angle for proposed rotation (radians). Tune to ~50% acceptance.
 /// ΔE = −J [ (S'ᵢ − Sᵢ) · Σⱼ Sⱼ ]
-pub fn sweep(
-    lat: &mut HeisenbergLattice,
-    beta: f64,
-    j: f64,
-    delta: f64,
-    rng: &mut impl Rng,
-) {
+pub fn sweep(lat: &mut HeisenbergLattice, beta: f64, j: f64, delta: f64, rng: &mut impl Rng) {
     let size = lat.size();
     for _ in 0..size {
         let idx = rng.gen_range(0..size);
@@ -29,11 +23,11 @@ pub fn sweep(
         }
 
         let s = lat.spins[idx];
-        let e_old = -j * (s[0]*hx + s[1]*hy + s[2]*hz);
+        let e_old = -j * (s[0] * hx + s[1] * hy + s[2] * hz);
 
         // Propose new spin: rotate by random angle <= delta from current
         let s_new = propose_rotation(&s, delta, rng);
-        let e_new = -j * (s_new[0]*hx + s_new[1]*hy + s_new[2]*hz);
+        let e_new = -j * (s_new[0] * hx + s_new[1] * hy + s_new[2] * hz);
 
         let delta_e = e_new - e_old;
         if delta_e < 0.0 || rng.gen::<f64>() < (-beta * delta_e).exp() {
@@ -70,25 +64,29 @@ fn propose_rotation(s: &Spin3, delta: f64, rng: &mut impl Rng) -> Spin3 {
     let ny = sin_theta * cphi * u[1] + sin_theta * sphi * v[1] + cos_theta * s[1];
     let nz = sin_theta * cphi * u[2] + sin_theta * sphi * v[2] + cos_theta * s[2];
 
-    let norm = (nx*nx + ny*ny + nz*nz).sqrt();
-    [nx/norm, ny/norm, nz/norm]
+    let norm = (nx * nx + ny * ny + nz * nz).sqrt();
+    [nx / norm, ny / norm, nz / norm]
 }
 
 /// Build an orthonormal frame {u, v} perpendicular to s.
 fn perpendicular_frame(s: &Spin3) -> (Spin3, Spin3) {
-    let t: Spin3 = if s[0].abs() < 0.9 { [1.0, 0.0, 0.0] } else { [0.0, 1.0, 0.0] };
+    let t: Spin3 = if s[0].abs() < 0.9 {
+        [1.0, 0.0, 0.0]
+    } else {
+        [0.0, 1.0, 0.0]
+    };
 
-    let ts = t[0]*s[0] + t[1]*s[1] + t[2]*s[2];
-    let ux = t[0] - ts*s[0];
-    let uy = t[1] - ts*s[1];
-    let uz = t[2] - ts*s[2];
-    let un = (ux*ux + uy*uy + uz*uz).sqrt();
-    let u = [ux/un, uy/un, uz/un];
+    let ts = t[0] * s[0] + t[1] * s[1] + t[2] * s[2];
+    let ux = t[0] - ts * s[0];
+    let uy = t[1] - ts * s[1];
+    let uz = t[2] - ts * s[2];
+    let un = (ux * ux + uy * uy + uz * uz).sqrt();
+    let u = [ux / un, uy / un, uz / un];
 
     let v = [
-        s[1]*u[2] - s[2]*u[1],
-        s[2]*u[0] - s[0]*u[2],
-        s[0]*u[1] - s[1]*u[0],
+        s[1] * u[2] - s[2] * u[1],
+        s[2] * u[0] - s[0] * u[2],
+        s[0] * u[1] - s[1] * u[0],
     ];
     (u, v)
 }
@@ -96,23 +94,30 @@ fn perpendicular_frame(s: &Spin3) -> (Spin3, Spin3) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::heisenberg::{HeisenbergLattice, magnetisation_per_spin};
+    use crate::heisenberg::{magnetisation_per_spin, HeisenbergLattice};
     use rand::SeedableRng;
 
     fn ring(n: usize) -> HeisenbergLattice {
-        let nb = (0..n).map(|i| vec![(i+n-1)%n, (i+1)%n]).collect();
+        let nb = (0..n).map(|i| vec![(i + n - 1) % n, (i + 1) % n]).collect();
         HeisenbergLattice::new(nb)
     }
 
     fn cubic3d(n: usize) -> HeisenbergLattice {
-        let nb: Vec<Vec<usize>> = (0..n*n*n).map(|idx| {
-            let z = idx/(n*n); let y = (idx/n)%n; let x = idx%n;
-            vec![
-                ((x+1)%n) + y*n + z*n*n, ((x+n-1)%n) + y*n + z*n*n,
-                x + ((y+1)%n)*n + z*n*n, x + ((y+n-1)%n)*n + z*n*n,
-                x + y*n + ((z+1)%n)*n*n, x + y*n + ((z+n-1)%n)*n*n,
-            ]
-        }).collect();
+        let nb: Vec<Vec<usize>> = (0..n * n * n)
+            .map(|idx| {
+                let z = idx / (n * n);
+                let y = (idx / n) % n;
+                let x = idx % n;
+                vec![
+                    ((x + 1) % n) + y * n + z * n * n,
+                    ((x + n - 1) % n) + y * n + z * n * n,
+                    x + ((y + 1) % n) * n + z * n * n,
+                    x + ((y + n - 1) % n) * n + z * n * n,
+                    x + y * n + ((z + 1) % n) * n * n,
+                    x + y * n + ((z + n - 1) % n) * n * n,
+                ]
+            })
+            .collect();
         HeisenbergLattice::new(nb)
     }
 
@@ -125,7 +130,7 @@ mod tests {
             sweep(&mut lat, 0.5, 1.0, 0.3, &mut rng);
         }
         for s in &lat.spins {
-            let norm = (s[0]*s[0] + s[1]*s[1] + s[2]*s[2]).sqrt();
+            let norm = (s[0] * s[0] + s[1] * s[1] + s[2] * s[2]).sqrt();
             assert!((norm - 1.0).abs() < 1e-10, "spin norm = {norm}");
         }
     }

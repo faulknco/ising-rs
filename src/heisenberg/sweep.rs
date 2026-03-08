@@ -1,6 +1,6 @@
-use crate::heisenberg::HeisenbergLattice;
 use crate::heisenberg::metropolis;
 use crate::heisenberg::overrelax;
+use crate::heisenberg::HeisenbergLattice;
 use rand::Rng;
 
 /// Configuration for a Heisenberg temperature sweep.

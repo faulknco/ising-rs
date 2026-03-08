@@ -1,4 +1,7 @@
-use crate::heisenberg::{HeisenbergLattice, observables::{measure, HeisenbergObservables}};
+use crate::heisenberg::{
+    observables::{measure, HeisenbergObservables},
+    HeisenbergLattice,
+};
 use crate::lattice::{Geometry, Lattice};
 use rand::SeedableRng;
 use rand_xoshiro::Xoshiro256PlusPlus;
@@ -56,29 +59,44 @@ impl Default for HeisFssConfig {
 /// Returns `Vec<(N, Vec<HeisenbergObservables>)>` — one entry per size,
 /// with observables ordered from t_min to t_max.
 pub fn run_heisenberg_fss(config: &HeisFssConfig) -> Vec<(usize, Vec<HeisenbergObservables>)> {
-    config.sizes.iter().map(|&n| {
-        eprintln!("Heisenberg FSS: N={n}");
-        let seed = config.seed.wrapping_add(n as u64);
-        let mut rng = Xoshiro256PlusPlus::seed_from_u64(seed);
+    config
+        .sizes
+        .iter()
+        .map(|&n| {
+            eprintln!("Heisenberg FSS: N={n}");
+            let seed = config.seed.wrapping_add(n as u64);
+            let mut rng = Xoshiro256PlusPlus::seed_from_u64(seed);
 
-        // Build lattice from existing Lattice infrastructure
-        let ising_lat = Lattice::new(n, config.geometry);
-        let mut lat = HeisenbergLattice::new(ising_lat.neighbours.clone());
-        lat.randomise(&mut rng);
+            // Build lattice from existing Lattice infrastructure
+            let ising_lat = Lattice::new(n, config.geometry);
+            let mut lat = HeisenbergLattice::new(ising_lat.neighbours.clone());
+            lat.randomise(&mut rng);
 
-        let temps: Vec<f64> = (0..config.t_steps).map(|i| {
-            config.t_min + (config.t_max - config.t_min) * i as f64 / (config.t_steps - 1) as f64
-        }).collect();
+            let temps: Vec<f64> = (0..config.t_steps)
+                .map(|i| {
+                    config.t_min
+                        + (config.t_max - config.t_min) * i as f64 / (config.t_steps - 1) as f64
+                })
+                .collect();
 
-        let results: Vec<HeisenbergObservables> = temps.iter().map(|&t| {
-            let beta = 1.0 / t;
-            measure(
-                &mut lat, beta, config.j, config.delta,
-                config.n_overrelax, config.warmup_sweeps, config.sample_sweeps,
-                &mut rng,
-            )
-        }).collect();
+            let results: Vec<HeisenbergObservables> = temps
+                .iter()
+                .map(|&t| {
+                    let beta = 1.0 / t;
+                    measure(
+                        &mut lat,
+                        beta,
+                        config.j,
+                        config.delta,
+                        config.n_overrelax,
+                        config.warmup_sweeps,
+                        config.sample_sweeps,
+                        &mut rng,
+                    )
+                })
+                .collect();
 
-        (n, results)
-    }).collect()
+            (n, results)
+        })
+        .collect()
 }

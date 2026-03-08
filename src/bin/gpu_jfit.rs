@@ -16,7 +16,7 @@ use std::fs;
 use std::path::Path;
 
 use ising::graph::GraphDef;
-use ising::parallel_tempering::linspace_temperatures;
+use ising::parallel_tempering::{linspace_temperatures, replica_exchange};
 
 fn get_arg(args: &[String], i: usize, flag: &str) -> String {
     if i + 1 >= args.len() {
@@ -98,7 +98,7 @@ fn main() {
     fs::create_dir_all(&outdir).expect("failed to create outdir");
 
     eprintln!(
-        "GPU jfit: model={model}, graph={graph_name}, N={}, T={t_min}..{t_max}, replicas={n_replicas}",
+        "jfit: model={model}, graph={graph_name}, N={}, T={t_min}..{t_max}, replicas={n_replicas}, exchange_every={exchange_every}",
         graph.n_nodes
     );
 
@@ -116,42 +116,109 @@ fn main() {
 fn run_ising_jfit(
     neighbours: &[Vec<usize>], graph_name: &str,
     t_min: f64, t_max: f64, n_replicas: usize,
-    warmup: usize, samples: usize, _exchange_every: usize,
+    warmup: usize, samples: usize, exchange_every: usize,
     seed: u64, j: f64, outdir: &str,
 ) {
     use ising::lattice::{Lattice, Geometry};
-    use ising::metropolis::warm_up;
-    use ising::observables::measure;
+    use ising::metropolis::sweep;
+    use ising::observables::energy_magnetisation;
     use rand::SeedableRng;
     use rand_xoshiro::Xoshiro256PlusPlus;
 
     let temperatures = linspace_temperatures(t_min, t_max, n_replicas);
+    let n_nodes = neighbours.len();
+    let n_f64 = n_nodes as f64;
+
+    // Create R replicas
+    let mut replicas: Vec<Lattice> = (0..n_replicas)
+        .map(|r| {
+            let mut rng = Xoshiro256PlusPlus::seed_from_u64(seed.wrapping_add(r as u64 * 1000));
+            let mut lat = Lattice {
+                n: n_nodes,
+                spins: vec![1i8; n_nodes],
+                neighbours: neighbours.to_vec(),
+                geometry: Geometry::Cubic3D,
+            };
+            lat.randomise(&mut rng);
+            lat
+        })
+        .collect();
+
+    let mut replica_to_temp: Vec<usize> = (0..n_replicas).collect();
+    let mut temp_to_replica: Vec<usize> = (0..n_replicas).collect();
+    let mut rng = Xoshiro256PlusPlus::seed_from_u64(seed);
+
+    // Warmup
+    for _ in 0..warmup {
+        for r in 0..n_replicas {
+            let t_idx = replica_to_temp[r];
+            let beta = 1.0 / temperatures[t_idx];
+            sweep(&mut replicas[r], beta, j, 0.0, &mut rng);
+        }
+    }
+
+    // Accumulators per temperature index
+    let mut sum_e  = vec![0.0_f64; n_replicas];
+    let mut sum_e2 = vec![0.0_f64; n_replicas];
+    let mut sum_m  = vec![0.0_f64; n_replicas];
+    let mut sum_m2 = vec![0.0_f64; n_replicas];
+    let mut sum_m4 = vec![0.0_f64; n_replicas];
+    let mut count  = vec![0usize; n_replicas];
+    let mut n_exchanges = 0usize;
+
+    for s in 0..samples {
+        let mut energies = vec![0.0_f64; n_replicas];
+
+        for r in 0..n_replicas {
+            let t_idx = replica_to_temp[r];
+            let beta = 1.0 / temperatures[t_idx];
+            sweep(&mut replicas[r], beta, j, 0.0, &mut rng);
+
+            let (e, m) = energy_magnetisation(&replicas[r], j, 0.0);
+            let e_per = e / n_f64;
+            let m_per = (m / n_f64).abs();
+            energies[r] = e;
+
+            sum_e[t_idx]  += e_per;
+            sum_e2[t_idx] += e_per * e_per;
+            sum_m[t_idx]  += m_per;
+            sum_m2[t_idx] += m_per * m_per;
+            sum_m4[t_idx] += m_per.powi(4);
+            count[t_idx]  += 1;
+        }
+
+        if (s + 1) % exchange_every == 0 {
+            n_exchanges += replica_exchange(
+                &temperatures, &energies,
+                &mut replica_to_temp, &mut temp_to_replica,
+                &mut rng, s / exchange_every,
+            );
+        }
+    }
 
     let path = Path::new(outdir).join(format!("gpu_jfit_ising_{graph_name}.csv"));
     let mut csv = String::from("T,E,E_err,M,M_err,M2,M2_err,M4,M4_err,Cv,Cv_err,chi,chi_err\n");
 
-    for &t in &temperatures {
+    for t_idx in 0..n_replicas {
+        let s = count[t_idx] as f64;
+        if s == 0.0 { continue; }
+        let t = temperatures[t_idx];
         let beta = 1.0 / t;
-        let mut rng = Xoshiro256PlusPlus::seed_from_u64(seed.wrapping_add((t * 1000.0) as u64));
-        // Build a Lattice from the neighbour list
-        let n_nodes = neighbours.len();
-        let mut lattice = Lattice {
-            n: n_nodes,
-            spins: vec![1i8; n_nodes],
-            neighbours: neighbours.to_vec(),
-            geometry: Geometry::Cubic3D, // geometry doesn't matter for graph-based
-        };
-        lattice.randomise(&mut rng);
-        warm_up(&mut lattice, beta, j, 0.0, warmup, &mut rng);
-        let obs = measure(&mut lattice, beta, j, 0.0, samples, &mut rng);
+        let avg_e = sum_e[t_idx] / s;
+        let avg_e2 = sum_e2[t_idx] / s;
+        let avg_m = sum_m[t_idx] / s;
+        let avg_m2 = sum_m2[t_idx] / s;
+        let avg_m4 = sum_m4[t_idx] / s;
+        let cv = beta * beta * (avg_e2 - avg_e * avg_e) * n_f64;
+        let chi = beta * (avg_m2 - avg_m * avg_m) * n_f64;
         csv.push_str(&format!(
             "{:.4},{:.6},0.0,{:.6},0.0,{:.6},0.0,{:.6},0.0,{:.6},0.0,{:.6},0.0\n",
-            t, obs.energy, obs.magnetisation,
-            obs.m2, obs.m4, obs.heat_capacity, obs.susceptibility,
+            t, avg_e, avg_m, avg_m2, avg_m4, cv, chi,
         ));
-        eprintln!("  T={t:.3} M={:.4}", obs.magnetisation);
+        eprintln!("  T={t:.3} M={avg_m:.4}");
     }
 
+    eprintln!("  PT exchanges accepted: {n_exchanges}");
     fs::write(&path, &csv).expect("failed to write CSV");
     eprintln!("Wrote {}", path.display());
 }
@@ -159,36 +226,100 @@ fn run_ising_jfit(
 fn run_xy_jfit(
     neighbours: &[Vec<usize>], graph_name: &str,
     t_min: f64, t_max: f64, n_replicas: usize,
-    warmup: usize, samples: usize, _exchange_every: usize,
+    warmup: usize, samples: usize, exchange_every: usize,
     seed: u64, j: f64, outdir: &str,
 ) {
-    use ising::xy::{observables::measure, XyLattice};
-
+    use ising::xy::{XyLattice, energy_magnetisation};
+    use ising::xy::wolff::sweep;
     use rand::SeedableRng;
     use rand_xoshiro::Xoshiro256PlusPlus;
 
     let temperatures = linspace_temperatures(t_min, t_max, n_replicas);
     let mut rng = Xoshiro256PlusPlus::seed_from_u64(seed);
-    let mut lat = XyLattice::new(neighbours.to_vec());
-    lat.randomise(&mut rng);
+    let n_nodes = neighbours.len();
+    let n_f64 = n_nodes as f64;
+
+    let mut replicas: Vec<XyLattice> = (0..n_replicas)
+        .map(|_| {
+            let mut lat = XyLattice::new(neighbours.to_vec());
+            lat.randomise(&mut rng);
+            lat
+        })
+        .collect();
+
+    let mut replica_to_temp: Vec<usize> = (0..n_replicas).collect();
+    let mut temp_to_replica: Vec<usize> = (0..n_replicas).collect();
+
+    // Warmup
+    for _ in 0..warmup {
+        for r in 0..n_replicas {
+            let t_idx = replica_to_temp[r];
+            let beta = 1.0 / temperatures[t_idx];
+            sweep(&mut replicas[r], beta, j, &mut rng);
+        }
+    }
+
+    let mut sum_e  = vec![0.0_f64; n_replicas];
+    let mut sum_e2 = vec![0.0_f64; n_replicas];
+    let mut sum_m  = vec![0.0_f64; n_replicas];
+    let mut sum_m2 = vec![0.0_f64; n_replicas];
+    let mut sum_m4 = vec![0.0_f64; n_replicas];
+    let mut count  = vec![0usize; n_replicas];
+    let mut n_exchanges = 0usize;
+
+    for s in 0..samples {
+        let mut energies = vec![0.0_f64; n_replicas];
+
+        for r in 0..n_replicas {
+            let t_idx = replica_to_temp[r];
+            let beta = 1.0 / temperatures[t_idx];
+            sweep(&mut replicas[r], beta, j, &mut rng);
+
+            let (e, mag) = energy_magnetisation(&replicas[r], j);
+            let e_per = e / n_f64;
+            let m_abs = (mag[0] * mag[0] + mag[1] * mag[1]).sqrt() / n_f64;
+            energies[r] = e;
+
+            sum_e[t_idx]  += e_per;
+            sum_e2[t_idx] += e_per * e_per;
+            sum_m[t_idx]  += m_abs;
+            sum_m2[t_idx] += m_abs * m_abs;
+            sum_m4[t_idx] += m_abs.powi(4);
+            count[t_idx]  += 1;
+        }
+
+        if (s + 1) % exchange_every == 0 {
+            n_exchanges += replica_exchange(
+                &temperatures, &energies,
+                &mut replica_to_temp, &mut temp_to_replica,
+                &mut rng, s / exchange_every,
+            );
+        }
+    }
 
     let path = Path::new(outdir).join(format!("gpu_jfit_xy_{graph_name}.csv"));
     let mut csv = String::from("T,E,E_err,M,M_err,M2,M2_err,M4,M4_err,Cv,Cv_err,chi,chi_err\n");
 
-    for &t in &temperatures {
+    for t_idx in 0..n_replicas {
+        let s = count[t_idx] as f64;
+        if s == 0.0 { continue; }
+        let t = temperatures[t_idx];
         let beta = 1.0 / t;
-        let obs = measure(&mut lat, beta, j, warmup, samples, &mut rng);
+        let avg_e = sum_e[t_idx] / s;
+        let avg_e2 = sum_e2[t_idx] / s;
+        let avg_m = sum_m[t_idx] / s;
+        let avg_m2 = sum_m2[t_idx] / s;
+        let avg_m4 = sum_m4[t_idx] / s;
+        let cv = beta * beta * (avg_e2 - avg_e * avg_e) * n_f64;
+        let chi = beta * (avg_m2 - avg_m * avg_m) * n_f64;
         csv.push_str(&format!(
-            "{:.4},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6}\n",
-            obs.temperature, obs.energy, obs.energy_err,
-            obs.magnetisation, obs.magnetisation_err,
-            obs.m2, obs.m2_err, obs.m4, obs.m4_err,
-            obs.heat_capacity, obs.heat_capacity_err,
-            obs.susceptibility, obs.susceptibility_err,
+            "{:.4},{:.6},0.0,{:.6},0.0,{:.6},0.0,{:.6},0.0,{:.6},0.0,{:.6},0.0\n",
+            t, avg_e, avg_m, avg_m2, avg_m4, cv, chi,
         ));
-        eprintln!("  T={t:.3} M={:.4}±{:.4}", obs.magnetisation, obs.magnetisation_err);
+        eprintln!("  T={t:.3} M={avg_m:.4}");
     }
 
+    eprintln!("  PT exchanges accepted: {n_exchanges}");
     fs::write(&path, &csv).expect("failed to write CSV");
     eprintln!("Wrote {}", path.display());
 }
@@ -196,36 +327,100 @@ fn run_xy_jfit(
 fn run_heisenberg_jfit(
     neighbours: &[Vec<usize>], graph_name: &str,
     t_min: f64, t_max: f64, n_replicas: usize,
-    warmup: usize, samples: usize, _exchange_every: usize,
+    warmup: usize, samples: usize, exchange_every: usize,
     seed: u64, j: f64, outdir: &str,
 ) {
-    use ising::heisenberg::{observables::measure, HeisenbergLattice};
-
+    use ising::heisenberg::{HeisenbergLattice, energy_magnetisation};
+    use ising::heisenberg::metropolis::sweep as heisenberg_sweep;
     use rand::SeedableRng;
     use rand_xoshiro::Xoshiro256PlusPlus;
 
     let temperatures = linspace_temperatures(t_min, t_max, n_replicas);
     let mut rng = Xoshiro256PlusPlus::seed_from_u64(seed);
-    let mut lat = HeisenbergLattice::new(neighbours.to_vec());
-    lat.randomise(&mut rng);
+    let n_nodes = neighbours.len();
+    let n_f64 = n_nodes as f64;
+
+    let mut replicas: Vec<HeisenbergLattice> = (0..n_replicas)
+        .map(|_| {
+            let mut lat = HeisenbergLattice::new(neighbours.to_vec());
+            lat.randomise(&mut rng);
+            lat
+        })
+        .collect();
+
+    let mut replica_to_temp: Vec<usize> = (0..n_replicas).collect();
+    let mut temp_to_replica: Vec<usize> = (0..n_replicas).collect();
+
+    // Warmup
+    for _ in 0..warmup {
+        for r in 0..n_replicas {
+            let t_idx = replica_to_temp[r];
+            let beta = 1.0 / temperatures[t_idx];
+            heisenberg_sweep(&mut replicas[r], beta, j, 0.5, &mut rng);
+        }
+    }
+
+    let mut sum_e  = vec![0.0_f64; n_replicas];
+    let mut sum_e2 = vec![0.0_f64; n_replicas];
+    let mut sum_m  = vec![0.0_f64; n_replicas];
+    let mut sum_m2 = vec![0.0_f64; n_replicas];
+    let mut sum_m4 = vec![0.0_f64; n_replicas];
+    let mut count  = vec![0usize; n_replicas];
+    let mut n_exchanges = 0usize;
+
+    for s in 0..samples {
+        let mut energies = vec![0.0_f64; n_replicas];
+
+        for r in 0..n_replicas {
+            let t_idx = replica_to_temp[r];
+            let beta = 1.0 / temperatures[t_idx];
+            heisenberg_sweep(&mut replicas[r], beta, j, 0.5, &mut rng);
+
+            let (e, mag) = energy_magnetisation(&replicas[r], j);
+            let e_per = e / n_f64;
+            let m_abs = (mag[0] * mag[0] + mag[1] * mag[1] + mag[2] * mag[2]).sqrt() / n_f64;
+            energies[r] = e;
+
+            sum_e[t_idx]  += e_per;
+            sum_e2[t_idx] += e_per * e_per;
+            sum_m[t_idx]  += m_abs;
+            sum_m2[t_idx] += m_abs * m_abs;
+            sum_m4[t_idx] += m_abs.powi(4);
+            count[t_idx]  += 1;
+        }
+
+        if (s + 1) % exchange_every == 0 {
+            n_exchanges += replica_exchange(
+                &temperatures, &energies,
+                &mut replica_to_temp, &mut temp_to_replica,
+                &mut rng, s / exchange_every,
+            );
+        }
+    }
 
     let path = Path::new(outdir).join(format!("gpu_jfit_heisenberg_{graph_name}.csv"));
     let mut csv = String::from("T,E,E_err,M,M_err,M2,M2_err,M4,M4_err,Cv,Cv_err,chi,chi_err\n");
 
-    for &t in &temperatures {
+    for t_idx in 0..n_replicas {
+        let s = count[t_idx] as f64;
+        if s == 0.0 { continue; }
+        let t = temperatures[t_idx];
         let beta = 1.0 / t;
-        let obs = measure(&mut lat, beta, j, 0.5, 5, warmup, samples, &mut rng);
+        let avg_e = sum_e[t_idx] / s;
+        let avg_e2 = sum_e2[t_idx] / s;
+        let avg_m = sum_m[t_idx] / s;
+        let avg_m2 = sum_m2[t_idx] / s;
+        let avg_m4 = sum_m4[t_idx] / s;
+        let cv = beta * beta * (avg_e2 - avg_e * avg_e) * n_f64;
+        let chi = beta * (avg_m2 - avg_m * avg_m) * n_f64;
         csv.push_str(&format!(
-            "{:.4},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6}\n",
-            obs.temperature, obs.energy, obs.energy_err,
-            obs.magnetisation, obs.magnetisation_err,
-            obs.m2, obs.m2_err, obs.m4, obs.m4_err,
-            obs.heat_capacity, obs.heat_capacity_err,
-            obs.susceptibility, obs.susceptibility_err,
+            "{:.4},{:.6},0.0,{:.6},0.0,{:.6},0.0,{:.6},0.0,{:.6},0.0,{:.6},0.0\n",
+            t, avg_e, avg_m, avg_m2, avg_m4, cv, chi,
         ));
-        eprintln!("  T={t:.3} M={:.4}±{:.4}", obs.magnetisation, obs.magnetisation_err);
+        eprintln!("  T={t:.3} M={avg_m:.4}");
     }
 
+    eprintln!("  PT exchanges accepted: {n_exchanges}");
     fs::write(&path, &csv).expect("failed to write CSV");
     eprintln!("Wrote {}", path.display());
 }

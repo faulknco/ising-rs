@@ -1,5 +1,8 @@
-use crate::xy::{XyLattice, observables::{measure, XyObservables}};
 use crate::lattice::{Geometry, Lattice};
+use crate::xy::{
+    observables::{measure, XyObservables},
+    XyLattice,
+};
 use rand::SeedableRng;
 use rand_xoshiro::Xoshiro256PlusPlus;
 
@@ -49,29 +52,41 @@ impl Default for XyFssConfig {
 ///
 /// Returns `Vec<(N, Vec<XyObservables>)>` ordered from t_min to t_max.
 pub fn run_xy_fss(config: &XyFssConfig) -> Vec<(usize, Vec<XyObservables>)> {
-    config.sizes.iter().map(|&n| {
-        eprintln!("XY FSS: N={n}");
-        let seed = config.seed.wrapping_add(n as u64);
-        let mut rng = Xoshiro256PlusPlus::seed_from_u64(seed);
+    config
+        .sizes
+        .iter()
+        .map(|&n| {
+            eprintln!("XY FSS: N={n}");
+            let seed = config.seed.wrapping_add(n as u64);
+            let mut rng = Xoshiro256PlusPlus::seed_from_u64(seed);
 
-        let ising_lat = Lattice::new(n, config.geometry);
-        let mut lat = XyLattice::new(ising_lat.neighbours.clone());
-        lat.randomise(&mut rng);
+            let ising_lat = Lattice::new(n, config.geometry);
+            let mut lat = XyLattice::new(ising_lat.neighbours.clone());
+            lat.randomise(&mut rng);
 
-        let temps: Vec<f64> = (0..config.t_steps).map(|i| {
-            config.t_min
-                + (config.t_max - config.t_min) * i as f64 / (config.t_steps - 1) as f64
-        }).collect();
+            let temps: Vec<f64> = (0..config.t_steps)
+                .map(|i| {
+                    config.t_min
+                        + (config.t_max - config.t_min) * i as f64 / (config.t_steps - 1) as f64
+                })
+                .collect();
 
-        let results: Vec<XyObservables> = temps.iter().map(|&t| {
-            let beta = 1.0 / t;
-            measure(
-                &mut lat, beta, config.j,
-                config.warmup_sweeps, config.sample_sweeps,
-                &mut rng,
-            )
-        }).collect();
+            let results: Vec<XyObservables> = temps
+                .iter()
+                .map(|&t| {
+                    let beta = 1.0 / t;
+                    measure(
+                        &mut lat,
+                        beta,
+                        config.j,
+                        config.warmup_sweeps,
+                        config.sample_sweeps,
+                        &mut rng,
+                    )
+                })
+                .collect();
 
-        (n, results)
-    }).collect()
+            (n, results)
+        })
+        .collect()
 }
