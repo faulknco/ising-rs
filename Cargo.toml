@@ -22,6 +22,10 @@ path = "src/bin/kz.rs"
 name = "mesh_sweep"
 path = "src/bin/mesh_sweep.rs"
 
+[[bin]]
+name = "heisenberg_fss"
+path = "src/bin/heisenberg_fss.rs"
+
 [lib]
 name = "ising"
 path = "src/lib.rs"
