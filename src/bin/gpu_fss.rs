@@ -21,6 +21,7 @@ fn main() {
     let args: Vec<String> = env::args().collect();
 
     let mut model = String::from("ising");
+    let mut algorithm = String::from("metropolis");
     let mut sizes_str = String::from("8,16,32,64");
     let mut t_min = 4.4_f64;
     let mut t_max = 4.6_f64;
@@ -39,6 +40,10 @@ fn main() {
         match args[i].as_str() {
             "--model" => {
                 model = get_arg(&args, i, "--model");
+                i += 2;
+            }
+            "--algorithm" => {
+                algorithm = get_arg(&args, i, "--algorithm");
                 i += 2;
             }
             "--sizes" => {
@@ -110,7 +115,7 @@ fn main() {
 
     fs::create_dir_all(&outdir).expect("failed to create outdir");
 
-    eprintln!("GPU FSS: model={model}, sizes={sizes:?}, T={t_min}..{t_max}, replicas={n_replicas}");
+    eprintln!("GPU FSS: model={model}, sizes={sizes:?}, T={t_min}..{t_max}, replicas={n_replicas}, algorithm={algorithm}");
 
     match model.as_str() {
         "ising" => run_ising_fss(
@@ -124,6 +129,7 @@ fn main() {
             seed,
             &outdir,
             measure_every,
+            &algorithm,
         ),
         "xy" => run_continuous_fss(
             &sizes,
@@ -174,6 +180,75 @@ fn run_ising_fss(
     seed: u64,
     outdir: &str,
     measure_every: usize,
+    algorithm: &str,
+) {
+    match algorithm {
+        "metropolis" | "auto" => {
+            if algorithm == "auto" {
+                eprintln!(
+                    "  auto algorithm: using metropolis (auto-selection not yet implemented)"
+                );
+            }
+            run_ising_fss_metropolis(
+                sizes,
+                t_min,
+                t_max,
+                n_replicas,
+                warmup,
+                samples,
+                exchange_every,
+                seed,
+                outdir,
+                measure_every,
+            );
+        }
+        "msc" => {
+            run_ising_fss_msc(
+                sizes,
+                t_min,
+                t_max,
+                n_replicas,
+                warmup,
+                samples,
+                exchange_every,
+                seed,
+                outdir,
+                measure_every,
+            );
+        }
+        "wolff" => {
+            run_ising_fss_wolff(
+                sizes,
+                t_min,
+                t_max,
+                n_replicas,
+                warmup,
+                samples,
+                exchange_every,
+                seed,
+                outdir,
+                measure_every,
+            );
+        }
+        _ => {
+            eprintln!("Error: --algorithm must be metropolis, msc, wolff, or auto");
+            std::process::exit(1);
+        }
+    }
+}
+
+#[cfg(feature = "cuda")]
+fn run_ising_fss_metropolis(
+    sizes: &[usize],
+    t_min: f64,
+    t_max: f64,
+    n_replicas: usize,
+    warmup: usize,
+    samples: usize,
+    exchange_every: usize,
+    seed: u64,
+    outdir: &str,
+    measure_every: usize,
 ) {
     use ising::cuda::lattice_gpu::LatticeGpu;
     use ising::cuda::parallel_tempering::{linspace_temperatures, replica_exchange};
@@ -184,7 +259,7 @@ fn run_ising_fss(
     let temperatures = linspace_temperatures(t_min, t_max, n_replicas);
 
     for &n in sizes {
-        eprintln!("  N={n}: creating {n_replicas} replicas...");
+        eprintln!("  N={n}: creating {n_replicas} metropolis replicas...");
         let mut replicas: Vec<LatticeGpu> = (0..n_replicas)
             .map(|r| {
                 LatticeGpu::new(n, seed.wrapping_add(r as u64 * 1000 + n as u64))
@@ -291,6 +366,301 @@ fn run_ising_fss(
         eprintln!("  Wrote {}", ts_path.display());
 
         // Write summary CSV with jackknife error bars
+        let summary_path = Path::new(outdir).join(format!("gpu_fss_{model_name}_N{n}_summary.csv"));
+        let mut csv = String::from("T,E,E_err,M,M_err,M2,M2_err,M4,M4_err,Cv,Cv_err,chi,chi_err\n");
+        for t_idx in 0..n_replicas {
+            if ts_data[t_idx].is_empty() {
+                continue;
+            }
+            let t = temperatures[t_idx];
+            let beta = 1.0 / t;
+            let n_blocks = 20.min(ts_data[t_idx].len());
+            let obs = jackknife_observables(&ts_data[t_idx], beta, n3, n_blocks);
+            csv.push_str(&format!(
+                "{t:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6}\n",
+                obs[0],
+                obs[1],
+                obs[2],
+                obs[3],
+                obs[4],
+                obs[5],
+                obs[6],
+                obs[7],
+                obs[8],
+                obs[9],
+                obs[10],
+                obs[11],
+            ));
+        }
+        fs::write(&summary_path, &csv).expect("write summary failed");
+        eprintln!("  Wrote {}", summary_path.display());
+    }
+}
+
+#[cfg(feature = "cuda")]
+fn run_ising_fss_msc(
+    sizes: &[usize],
+    t_min: f64,
+    t_max: f64,
+    n_replicas: usize,
+    warmup: usize,
+    samples: usize,
+    exchange_every: usize,
+    seed: u64,
+    outdir: &str,
+    measure_every: usize,
+) {
+    use cudarc::driver::CudaDevice;
+    use ising::cuda::msc_lattice::MscLattice;
+    use ising::cuda::parallel_tempering::{linspace_temperatures, replica_exchange};
+    use rand::SeedableRng;
+    use rand_xoshiro::Xoshiro256PlusPlus;
+    use std::io::{BufWriter, Write as IoWrite};
+
+    let temperatures = linspace_temperatures(t_min, t_max, n_replicas);
+    let device = CudaDevice::new(0).expect("CUDA init failed");
+
+    for &n in sizes {
+        if n % 32 != 0 {
+            eprintln!("Error: --algorithm msc requires N to be a multiple of 32, got {n}");
+            std::process::exit(1);
+        }
+
+        eprintln!("  N={n}: creating {n_replicas} MSC replicas...");
+        let mut replicas: Vec<MscLattice> = (0..n_replicas)
+            .map(|r| {
+                MscLattice::new(
+                    n,
+                    seed.wrapping_add(r as u64 * 1000 + n as u64),
+                    device.clone(),
+                )
+                .expect("failed to create MSC lattice")
+            })
+            .collect();
+
+        let mut replica_to_temp: Vec<usize> = (0..n_replicas).collect();
+        let mut temp_to_replica: Vec<usize> = (0..n_replicas).collect();
+        let mut rng = Xoshiro256PlusPlus::seed_from_u64(seed.wrapping_add(n as u64));
+
+        // Warmup
+        eprintln!("  N={n}: warming up {warmup} sweeps...");
+        for w in 0..warmup {
+            for (r, lat) in replicas.iter_mut().enumerate() {
+                let t_idx = replica_to_temp[r];
+                let beta = 1.0 / temperatures[t_idx];
+                lat.step(beta as f32, 1.0).expect("MSC step failed");
+            }
+            if (w + 1) % 1000 == 0 {
+                eprintln!("    warmup {}/{warmup}", w + 1);
+            }
+        }
+
+        // Open timeseries file for streaming writes
+        let model_name = "ising";
+        let ts_path = Path::new(outdir).join(format!("gpu_fss_{model_name}_N{n}_timeseries.csv"));
+        let ts_file = fs::File::create(&ts_path).expect("create timeseries file failed");
+        let mut ts_writer = BufWriter::new(ts_file);
+        writeln!(ts_writer, "temp_idx,E,M").expect("write header failed");
+
+        // Sampling with parallel tempering
+        let mut ts_data: Vec<Vec<(f64, f64)>> = (0..n_replicas)
+            .map(|_| Vec::with_capacity(samples / measure_every + 1))
+            .collect();
+        let mut energies = vec![0.0_f64; n_replicas];
+
+        let n3 = (n * n * n) as f64;
+
+        eprintln!("  N={n}: sampling {samples} sweeps with PT exchange every {exchange_every}...");
+        for sweep in 0..samples {
+            for (r, lat) in replicas.iter_mut().enumerate() {
+                let t_idx = replica_to_temp[r];
+                let beta = 1.0 / temperatures[t_idx];
+                lat.step(beta as f32, 1.0).expect("MSC step failed");
+            }
+
+            let do_measure = (sweep + 1) % measure_every == 0;
+            let do_exchange = (sweep + 1) % exchange_every == 0;
+
+            if do_measure || do_exchange {
+                for (r, lat) in replicas.iter_mut().enumerate() {
+                    let t_idx = replica_to_temp[r];
+                    let (e_per, m_per) = lat.measure_gpu(1.0).expect("MSC measure failed");
+                    energies[r] = e_per * n3;
+
+                    if do_measure {
+                        ts_data[t_idx].push((e_per, m_per));
+                        writeln!(ts_writer, "{t_idx},{e_per:.8},{m_per:.8}")
+                            .expect("write timeseries row failed");
+                    }
+                }
+            }
+
+            if do_exchange {
+                replica_exchange(
+                    &temperatures,
+                    &energies,
+                    &mut replica_to_temp,
+                    &mut temp_to_replica,
+                    &mut rng,
+                    sweep / exchange_every,
+                );
+            }
+
+            if (sweep + 1) % 10000 == 0 {
+                eprintln!("    sweep {}/{samples}", sweep + 1);
+            }
+        }
+
+        ts_writer.flush().expect("flush timeseries failed");
+        drop(ts_writer);
+        eprintln!("  Wrote {}", ts_path.display());
+
+        let summary_path = Path::new(outdir).join(format!("gpu_fss_{model_name}_N{n}_summary.csv"));
+        let mut csv = String::from("T,E,E_err,M,M_err,M2,M2_err,M4,M4_err,Cv,Cv_err,chi,chi_err\n");
+        for t_idx in 0..n_replicas {
+            if ts_data[t_idx].is_empty() {
+                continue;
+            }
+            let t = temperatures[t_idx];
+            let beta = 1.0 / t;
+            let n_blocks = 20.min(ts_data[t_idx].len());
+            let obs = jackknife_observables(&ts_data[t_idx], beta, n3, n_blocks);
+            csv.push_str(&format!(
+                "{t:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6}\n",
+                obs[0],
+                obs[1],
+                obs[2],
+                obs[3],
+                obs[4],
+                obs[5],
+                obs[6],
+                obs[7],
+                obs[8],
+                obs[9],
+                obs[10],
+                obs[11],
+            ));
+        }
+        fs::write(&summary_path, &csv).expect("write summary failed");
+        eprintln!("  Wrote {}", summary_path.display());
+    }
+}
+
+#[cfg(feature = "cuda")]
+fn run_ising_fss_wolff(
+    sizes: &[usize],
+    t_min: f64,
+    t_max: f64,
+    n_replicas: usize,
+    warmup: usize,
+    samples: usize,
+    exchange_every: usize,
+    seed: u64,
+    outdir: &str,
+    measure_every: usize,
+) {
+    use cudarc::driver::CudaDevice;
+    use ising::cuda::parallel_tempering::{linspace_temperatures, replica_exchange};
+    use ising::cuda::wolff_gpu::WolffGpuLattice;
+    use rand::SeedableRng;
+    use rand_xoshiro::Xoshiro256PlusPlus;
+    use std::io::{BufWriter, Write as IoWrite};
+
+    let temperatures = linspace_temperatures(t_min, t_max, n_replicas);
+    let device = CudaDevice::new(0).expect("CUDA init failed");
+
+    for &n in sizes {
+        eprintln!("  N={n}: creating {n_replicas} Wolff replicas...");
+        let mut replicas: Vec<WolffGpuLattice> = (0..n_replicas)
+            .map(|r| {
+                WolffGpuLattice::new(
+                    n,
+                    seed.wrapping_add(r as u64 * 1000 + n as u64),
+                    device.clone(),
+                )
+                .expect("failed to create Wolff GPU lattice")
+            })
+            .collect();
+
+        let mut replica_to_temp: Vec<usize> = (0..n_replicas).collect();
+        let mut temp_to_replica: Vec<usize> = (0..n_replicas).collect();
+        let mut rng = Xoshiro256PlusPlus::seed_from_u64(seed.wrapping_add(n as u64));
+
+        // Warmup
+        eprintln!("  N={n}: warming up {warmup} sweeps...");
+        for w in 0..warmup {
+            for (r, lat) in replicas.iter_mut().enumerate() {
+                let t_idx = replica_to_temp[r];
+                let beta = 1.0 / temperatures[t_idx];
+                lat.step(beta as f32, 1.0, &mut rng)
+                    .expect("Wolff step failed");
+            }
+            if (w + 1) % 1000 == 0 {
+                eprintln!("    warmup {}/{warmup}", w + 1);
+            }
+        }
+
+        // Open timeseries file for streaming writes
+        let model_name = "ising";
+        let ts_path = Path::new(outdir).join(format!("gpu_fss_{model_name}_N{n}_timeseries.csv"));
+        let ts_file = fs::File::create(&ts_path).expect("create timeseries file failed");
+        let mut ts_writer = BufWriter::new(ts_file);
+        writeln!(ts_writer, "temp_idx,E,M").expect("write header failed");
+
+        // Sampling with parallel tempering
+        let mut ts_data: Vec<Vec<(f64, f64)>> = (0..n_replicas)
+            .map(|_| Vec::with_capacity(samples / measure_every + 1))
+            .collect();
+        let mut energies = vec![0.0_f64; n_replicas];
+
+        let n3 = (n * n * n) as f64;
+
+        eprintln!("  N={n}: sampling {samples} sweeps with PT exchange every {exchange_every}...");
+        for sweep in 0..samples {
+            for (r, lat) in replicas.iter_mut().enumerate() {
+                let t_idx = replica_to_temp[r];
+                let beta = 1.0 / temperatures[t_idx];
+                lat.step(beta as f32, 1.0, &mut rng)
+                    .expect("Wolff step failed");
+            }
+
+            let do_measure = (sweep + 1) % measure_every == 0;
+            let do_exchange = (sweep + 1) % exchange_every == 0;
+
+            if do_measure || do_exchange {
+                for (r, lat) in replicas.iter_mut().enumerate() {
+                    let t_idx = replica_to_temp[r];
+                    let (e_per, m_per) = lat.measure_gpu(1.0).expect("Wolff measure failed");
+                    energies[r] = e_per * n3;
+
+                    if do_measure {
+                        ts_data[t_idx].push((e_per, m_per));
+                        writeln!(ts_writer, "{t_idx},{e_per:.8},{m_per:.8}")
+                            .expect("write timeseries row failed");
+                    }
+                }
+            }
+
+            if do_exchange {
+                replica_exchange(
+                    &temperatures,
+                    &energies,
+                    &mut replica_to_temp,
+                    &mut temp_to_replica,
+                    &mut rng,
+                    sweep / exchange_every,
+                );
+            }
+
+            if (sweep + 1) % 10000 == 0 {
+                eprintln!("    sweep {}/{samples}", sweep + 1);
+            }
+        }
+
+        ts_writer.flush().expect("flush timeseries failed");
+        drop(ts_writer);
+        eprintln!("  Wrote {}", ts_path.display());
+
         let summary_path = Path::new(outdir).join(format!("gpu_fss_{model_name}_N{n}_summary.csv"));
         let mut csv = String::from("T,E,E_err,M,M_err,M2,M2_err,M4,M4_err,Cv,Cv_err,chi,chi_err\n");
         for t_idx in 0..n_replicas {
@@ -593,6 +963,7 @@ fn run_ising_fss(
     _: u64,
     _: &str,
     _: usize,
+    _: &str,
 ) {
     eprintln!("Error: gpu_fss requires --features cuda");
     std::process::exit(1);
