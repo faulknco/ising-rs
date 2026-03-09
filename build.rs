@@ -16,6 +16,7 @@ fn main() {
         "src/cuda/kernels.cu",
         "src/cuda/continuous_spin_kernel.cu",
         "src/cuda/reduce_kernel.cu",
+        "src/cuda/msc_kernel.cu",
     ];
 
     for src in &kernel_files {
