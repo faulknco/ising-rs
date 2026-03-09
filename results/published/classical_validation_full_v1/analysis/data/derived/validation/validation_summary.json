@@ -1,0 +1,155 @@
+{
+  "metrics": [
+    {
+      "details": "largest lattice file fss_N128.csv",
+      "measured": 0.0020703288321568037,
+      "name": "onsager_energy_mean_abs_error",
+      "reference": 0.01,
+      "status": "ok"
+    },
+    {
+      "details": "largest lattice file fss_N128.csv, restricted to T < Tc - 0.2",
+      "measured": 2.6465469543107183e-05,
+      "name": "onsager_magnetization_mean_abs_error",
+      "reference": 0.03,
+      "status": "ok"
+    },
+    {
+      "details": "4x4 exact enumeration comparison",
+      "measured": 0.011694626955095488,
+      "name": "exact_enum_energy_max_abs_error",
+      "reference": 0.02,
+      "status": "ok"
+    },
+    {
+      "details": "4x4 exact enumeration comparison",
+      "measured": 0.0045683260391128355,
+      "name": "exact_enum_magnetization_max_abs_error",
+      "reference": 0.01,
+      "status": "ok"
+    },
+    {
+      "details": "4x4 exact enumeration comparison",
+      "measured": 0.01328468880272271,
+      "name": "exact_enum_cv_max_abs_error",
+      "reference": 0.2,
+      "status": "ok"
+    },
+    {
+      "details": "4x4 exact enumeration comparison",
+      "measured": 0.008977629497949668,
+      "name": "exact_enum_chi_max_abs_error",
+      "reference": 0.2,
+      "status": "ok"
+    },
+    {
+      "details": "2D square fss_N64.csv, excluding critical window",
+      "measured": 0.12652969507988188,
+      "name": "fluctuation_dissipation_mean_relative_error_away_from_tc",
+      "reference": 0.2,
+      "status": "ok"
+    },
+    {
+      "details": "2D Wolff estimate after fractal-dimension correction",
+      "measured": -0.21081322328264251,
+      "name": "wolff_dynamic_exponent_estimate",
+      "reference": 0.25,
+      "status": "ok"
+    },
+    {
+      "details": "T=0.1 limit",
+      "measured": -3.0,
+      "name": "3d_fss_N16_low_temp_energy",
+      "reference": -3.0,
+      "status": "ok"
+    },
+    {
+      "details": "T=0.1 limit",
+      "measured": 1.0,
+      "name": "3d_fss_N16_low_temp_magnetisation",
+      "reference": 1.0,
+      "status": "ok"
+    },
+    {
+      "details": "T=50 limit",
+      "measured": -0.053064,
+      "name": "3d_fss_N16_high_temp_energy",
+      "reference": 0.0,
+      "status": "ok"
+    },
+    {
+      "details": "T=0.1 limit",
+      "measured": -3.0,
+      "name": "3d_fss_N8_low_temp_energy",
+      "reference": -3.0,
+      "status": "ok"
+    },
+    {
+      "details": "T=0.1 limit",
+      "measured": 1.0,
+      "name": "3d_fss_N8_low_temp_magnetisation",
+      "reference": 1.0,
+      "status": "ok"
+    },
+    {
+      "details": "T=50 limit",
+      "measured": -0.039467,
+      "name": "3d_fss_N8_high_temp_energy",
+      "reference": 0.0,
+      "status": "ok"
+    },
+    {
+      "details": "T=0.1 limit",
+      "measured": -2.0,
+      "name": "2d_fss_N16_low_temp_energy",
+      "reference": -2.0,
+      "status": "ok"
+    },
+    {
+      "details": "T=0.1 limit",
+      "measured": 1.0,
+      "name": "2d_fss_N16_low_temp_magnetisation",
+      "reference": 1.0,
+      "status": "ok"
+    },
+    {
+      "details": "T=50 limit",
+      "measured": -0.027537,
+      "name": "2d_fss_N16_high_temp_energy",
+      "reference": 0.0,
+      "status": "ok"
+    },
+    {
+      "details": "T=0.1 limit",
+      "measured": -2.0,
+      "name": "2d_fss_N32_low_temp_energy",
+      "reference": -2.0,
+      "status": "ok"
+    },
+    {
+      "details": "T=0.1 limit",
+      "measured": 1.0,
+      "name": "2d_fss_N32_low_temp_magnetisation",
+      "reference": 1.0,
+      "status": "ok"
+    },
+    {
+      "details": "T=50 limit",
+      "measured": -0.055501,
+      "name": "2d_fss_N32_high_temp_energy",
+      "reference": 0.0,
+      "status": "ok"
+    }
+  ],
+  "mode": "full",
+  "n_bad": 0,
+  "n_metrics": 20,
+  "n_ok": 20,
+  "n_warn": 0,
+  "overall_status": "ok",
+  "sections": {
+    "intercept": -0.6860156038933604,
+    "z_eff": 1.6641867767173575,
+    "z_w": -0.21081322328264251
+  }
+}

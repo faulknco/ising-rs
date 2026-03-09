@@ -1,0 +1,7 @@
+section,status,n_metrics,n_ok,n_warn,n_bad
+Onsager 2D,ok,2,2,0,0
+Exact enumeration,ok,4,4,0,0
+Fluctuation-dissipation,ok,1,1,0,0
+Autocorrelation,ok,1,1,0,0
+2D limits,ok,6,6,0,0
+3D limits,ok,6,6,0,0
