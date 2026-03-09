@@ -1,0 +1,176 @@
+use ising::graph::GraphDef;
+use ising::xy::{observables::measure, XyLattice};
+use rand::SeedableRng;
+use rand_xoshiro::Xoshiro256PlusPlus;
+/// CLI: run XY temperature sweep on a graph loaded from JSON (J-fitting).
+///
+/// Usage:
+///   cargo run --release --bin xy_jfit -- \
+///     --graph analysis/graphs/bcc_N8.json \
+///     --tmin 2.3 --tmax 3.5 --steps 41 \
+///     --warmup 2000 --samples 2000 \
+///     --outdir analysis/data
+///
+/// Output: <outdir>/xy_jfit_<graphname>.csv
+/// Columns: T,E,E_err,M,M_err,M2,M2_err,M4,M4_err,Cv,Cv_err,chi,chi_err
+use std::env;
+use std::fs;
+use std::path::Path;
+
+fn get_arg(args: &[String], i: usize, flag: &str) -> String {
+    if i + 1 >= args.len() {
+        eprintln!("Error: {flag} requires a value");
+        std::process::exit(1);
+    }
+    args[i + 1].clone()
+}
+
+fn parse_flag<T: std::str::FromStr>(args: &[String], i: usize, flag: &str) -> T
+where
+    T::Err: std::fmt::Display,
+{
+    match get_arg(args, i, flag).parse::<T>() {
+        Ok(v) => v,
+        Err(e) => {
+            eprintln!("Error: invalid value for {flag}: {e}");
+            std::process::exit(1);
+        }
+    }
+}
+
+fn main() {
+    let args: Vec<String> = env::args().collect();
+
+    let mut graph_path = String::new();
+    let mut outdir = String::from("analysis/data");
+    let mut t_min = 2.3_f64;
+    let mut t_max = 3.5_f64;
+    let mut t_steps = 41usize;
+    let mut warmup = 2000usize;
+    let mut samples = 2000usize;
+    let mut j = 1.0_f64;
+    let mut seed = 42u64;
+
+    let mut i = 1;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--graph" => {
+                graph_path = get_arg(&args, i, "--graph");
+                i += 2;
+            }
+            "--outdir" => {
+                outdir = get_arg(&args, i, "--outdir");
+                i += 2;
+            }
+            "--tmin" => {
+                t_min = parse_flag::<f64>(&args, i, "--tmin");
+                i += 2;
+            }
+            "--tmax" => {
+                t_max = parse_flag::<f64>(&args, i, "--tmax");
+                i += 2;
+            }
+            "--steps" => {
+                t_steps = parse_flag::<usize>(&args, i, "--steps");
+                i += 2;
+            }
+            "--warmup" => {
+                warmup = parse_flag::<usize>(&args, i, "--warmup");
+                i += 2;
+            }
+            "--samples" => {
+                samples = parse_flag::<usize>(&args, i, "--samples");
+                i += 2;
+            }
+            "--j" => {
+                j = parse_flag::<f64>(&args, i, "--j");
+                i += 2;
+            }
+            "--seed" => {
+                seed = parse_flag::<u64>(&args, i, "--seed");
+                i += 2;
+            }
+            _ => {
+                i += 1;
+            }
+        }
+    }
+
+    if graph_path.is_empty() {
+        eprintln!("Error: --graph <path.json> is required");
+        std::process::exit(1);
+    }
+
+    if t_steps == 0 {
+        eprintln!("Error: --steps must be >= 1");
+        std::process::exit(1);
+    }
+
+    let content = fs::read_to_string(&graph_path).unwrap_or_else(|e| {
+        eprintln!("Error: failed to read graph file {graph_path}: {e}");
+        std::process::exit(1);
+    });
+    let graph = GraphDef::from_json(&content).expect("failed to parse graph JSON");
+
+    let graph_name = Path::new(&graph_path)
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or_else(|| {
+            eprintln!("Error: could not determine graph name: {graph_path}");
+            std::process::exit(1);
+        })
+        .to_string();
+
+    eprintln!(
+        "XY jfit: graph={graph_name}, N={}, T={t_min}..{t_max}",
+        graph.n_nodes
+    );
+
+    let mut neighbours: Vec<Vec<usize>> = vec![vec![]; graph.n_nodes];
+    for (a, b) in &graph.edges {
+        neighbours[*a].push(*b);
+        neighbours[*b].push(*a);
+    }
+
+    let mut rng = Xoshiro256PlusPlus::seed_from_u64(seed);
+    let mut lat = XyLattice::new(neighbours);
+    lat.randomise(&mut rng);
+
+    fs::create_dir_all(&outdir).expect("failed to create outdir");
+
+    let path = Path::new(&outdir).join(format!("xy_jfit_{graph_name}.csv"));
+    let mut csv = String::from("T,E,E_err,M,M_err,M2,M2_err,M4,M4_err,Cv,Cv_err,chi,chi_err\n");
+
+    for step in 0..t_steps {
+        let t = if t_steps == 1 {
+            t_min
+        } else {
+            t_min + (t_max - t_min) * step as f64 / (t_steps - 1) as f64
+        };
+        let beta = 1.0 / t;
+        let obs = measure(&mut lat, beta, j, warmup, samples, &mut rng);
+        csv.push_str(&format!(
+            "{:.4},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6}\n",
+            obs.temperature,
+            obs.energy,
+            obs.energy_err,
+            obs.magnetisation,
+            obs.magnetisation_err,
+            obs.m2,
+            obs.m2_err,
+            obs.m4,
+            obs.m4_err,
+            obs.heat_capacity,
+            obs.heat_capacity_err,
+            obs.susceptibility,
+            obs.susceptibility_err,
+        ));
+        eprintln!(
+            "  T={t:.3} M={:.4}±{:.4}",
+            obs.magnetisation, obs.magnetisation_err
+        );
+    }
+
+    fs::write(&path, &csv).expect("failed to write CSV");
+    eprintln!("Wrote {}", path.display());
+}

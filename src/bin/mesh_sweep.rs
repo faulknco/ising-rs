@@ -38,8 +38,17 @@ OPTIONS:
     --help, -h           Show this help message";
 
 const KNOWN_FLAGS: &[&str] = &[
-    "--graph", "--j", "--tmin", "--tmax", "--steps", "--warmup", "--samples", "--seed", "--outdir",
-    "--prefix", "--help",
+    "--graph",
+    "--j",
+    "--tmin",
+    "--tmax",
+    "--steps",
+    "--warmup",
+    "--samples",
+    "--seed",
+    "--outdir",
+    "--prefix",
+    "--help",
 ];
 
 fn main() {

@@ -4,16 +4,15 @@
 ///   cargo run --release --bin kz -- --n 20 --trials 10 \
 ///     --tau-min 100 --tau-max 100000 --tau-steps 20
 ///
-/// Output columns: tau_q,rho
+/// Output columns: tau_q,rho,rho_err,n_trials
 use std::env;
 use std::fs;
 use std::path::Path;
 
 use ising::cli::{
-    check_help, get_arg, parse_arg, parse_geometry, validate_lattice_size, validate_t_steps,
-    warn_unknown_flags,
+    check_help, get_arg, parse_arg, parse_geometry, validate_lattice_size, warn_unknown_flags,
 };
-use ising::kibble_zurek::run_kz_sweep;
+use ising::kibble_zurek::{run_kz_sweep, KzProtocol};
 use ising::lattice::Geometry;
 
 const USAGE: &str = "\
@@ -38,8 +37,19 @@ OPTIONS:
     --help, -h           Show this help message";
 
 const KNOWN_FLAGS: &[&str] = &[
-    "--n", "--geometry", "--j", "--t-start", "--t-end", "--tau-min", "--tau-max", "--tau-steps",
-    "--trials", "--seed", "--gpu", "--outdir", "--help",
+    "--n",
+    "--geometry",
+    "--j",
+    "--t-start",
+    "--t-end",
+    "--tau-min",
+    "--tau-max",
+    "--tau-steps",
+    "--trials",
+    "--seed",
+    "--gpu",
+    "--outdir",
+    "--help",
 ];
 
 fn main() {
@@ -56,6 +66,9 @@ fn main() {
     let mut tau_max: usize = 100_000;
     let mut tau_steps: usize = 20;
     let mut n_trials: usize = 5;
+    let mut warmup_sweeps: usize = 200;
+    let mut freeze_sweeps: usize = 0;
+    let mut freeze_temperature: f64 = 0.01;
     let mut seed: u64 = 42;
     let mut outdir = String::from("analysis/data");
     let mut use_gpu = false;
@@ -99,6 +112,18 @@ fn main() {
                 n_trials = parse_arg(&args, i, "--trials");
                 i += 2;
             }
+            "--warmup-sweeps" => {
+                warmup_sweeps = parse_arg(&args, i, "--warmup-sweeps");
+                i += 2;
+            }
+            "--freeze-sweeps" => {
+                freeze_sweeps = parse_arg(&args, i, "--freeze-sweeps");
+                i += 2;
+            }
+            "--freeze-temperature" => {
+                freeze_temperature = parse_arg(&args, i, "--freeze-temperature");
+                i += 2;
+            }
             "--seed" => {
                 seed = parse_arg(&args, i, "--seed");
                 i += 2;
@@ -119,12 +144,15 @@ fn main() {
 
     // Validation
     validate_lattice_size(n);
-    validate_t_steps(tau_steps);
+    if tau_steps == 0 {
+        eprintln!("Error: --tau-steps must be at least 1");
+        std::process::exit(1);
+    }
     if n_trials == 0 {
         eprintln!("Error: --trials must be at least 1");
         std::process::exit(1);
     }
-    if t_start <= 0.0 || t_end <= 0.0 {
+    if t_start <= 0.0 || t_end <= 0.0 || freeze_temperature <= 0.0 {
         eprintln!("Error: temperatures must be positive");
         std::process::exit(1);
     }
@@ -132,20 +160,38 @@ fn main() {
         eprintln!("Error: --tau-min must be >= 1 and <= --tau-max");
         std::process::exit(1);
     }
+    if use_gpu && geometry != Geometry::Cubic3D {
+        eprintln!("Error: --gpu KZ currently supports only --geometry cubic");
+        std::process::exit(1);
+    }
 
     // Build log-spaced tau_q values
-    let tau_q_values: Vec<usize> = (0..tau_steps)
-        .map(|k| {
-            let log_min = (tau_min as f64).ln();
-            let log_max = (tau_max as f64).ln();
-            let log_t = log_min + (log_max - log_min) * k as f64 / (tau_steps - 1) as f64;
-            log_t.exp().round() as usize
-        })
-        .collect();
+    let tau_q_values: Vec<usize> = if tau_steps == 1 {
+        vec![tau_min]
+    } else {
+        (0..tau_steps)
+            .map(|k| {
+                let log_min = (tau_min as f64).ln();
+                let log_max = (tau_max as f64).ln();
+                let log_t = log_min + (log_max - log_min) * k as f64 / (tau_steps - 1) as f64;
+                log_t.exp().round() as usize
+            })
+            .collect()
+    };
+
+    let protocol = KzProtocol {
+        warmup_sweeps,
+        freeze_sweeps,
+        freeze_temperature,
+    };
 
     let backend = if use_gpu { "GPU" } else { "CPU" };
     eprintln!(
         "KZ sweep [{backend}]: N={n}, tau_q={tau_min}..{tau_max} ({tau_steps} steps, log-spaced), {n_trials} trials each"
+    );
+    eprintln!(
+        "  Ramp: T_start={t_start} -> T_end={t_end}; {}",
+        protocol.describe()
     );
 
     let results = if use_gpu {
@@ -153,14 +199,19 @@ fn main() {
         {
             ising::cuda::kz_gpu::run_kz_sweep_gpu(
                 n,
+                geometry,
                 j,
                 t_start,
                 t_end,
                 &tau_q_values,
                 n_trials,
-                200,
+                protocol,
                 seed,
             )
+            .unwrap_or_else(|err| {
+                eprintln!("Error: {err}");
+                std::process::exit(1);
+            })
         }
         #[cfg(not(feature = "cuda"))]
         {
@@ -176,6 +227,7 @@ fn main() {
             t_end,
             &tau_q_values,
             n_trials,
+            protocol,
             seed,
         )
     };
@@ -183,9 +235,12 @@ fn main() {
     fs::create_dir_all(&outdir).expect("failed to create outdir");
     let fname = format!("kz_N{n}.csv");
     let path = Path::new(&outdir).join(&fname);
-    let mut csv = String::from("tau_q,rho\n");
-    for (tau_q, rho) in &results {
-        csv.push_str(&format!("{tau_q},{rho:.8}\n"));
+    let mut csv = String::from("tau_q,rho,rho_err,n_trials\n");
+    for point in &results {
+        csv.push_str(&format!(
+            "{},{:.8},{:.8},{}\n",
+            point.tau_q, point.rho, point.rho_err, point.n_trials
+        ));
     }
     fs::write(&path, &csv).expect("failed to write CSV");
     eprintln!("Wrote {}", path.display());

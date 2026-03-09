@@ -1,0 +1,4 @@
+n,tau_int_e,n_samples,raw_file
+16,50.29382206244534,20000,fss_raw_N16.csv
+32,164.35546167351035,20000,fss_raw_N32.csv
+64,505.1902000635486,20000,fss_raw_N64.csv

@@ -1,0 +1,211 @@
+{
+  "created_at": "2026-03-09T10:44:51.637667+00:00",
+  "files": [
+    {
+      "relative_path": "analysis_fss/dilution_binder_crossing_summary.csv",
+      "sha256": "8c9134a2fbb7cc14ec3b7532a2613f30462e0a1193f1a0434b7b59af1d2d465d",
+      "size_bytes": 579
+    },
+    {
+      "relative_path": "analysis_fss/dilution_binder_crossings.csv",
+      "sha256": "574c2a6bc468f5ce4fef96360d49ba462db06eabce71ec54924df355e58e15b0",
+      "size_bytes": 944
+    },
+    {
+      "relative_path": "analysis_fss/dilution_binder_curves.csv",
+      "sha256": "c8d4cc3a63395ab0a31ac4ae3d39891ebdf85120ee9b32ecd386193d1f1518c7",
+      "size_bytes": 52489
+    },
+    {
+      "relative_path": "analysis_fss/dilution_binder_curves.png",
+      "sha256": "152b9cb7857452fd4b371b0cfdba1daf1e89016eac05769459be66ccaa7c2154",
+      "size_bytes": 412411
+    },
+    {
+      "relative_path": "analysis_fss/dilution_fss_summary.json",
+      "sha256": "672c66cdc5dbc583af590d14ff2be860789922c8e98f7ee699c14ff11bfd5a2e",
+      "size_bytes": 866
+    },
+    {
+      "relative_path": "analysis_fss/dilution_tc_compare.png",
+      "sha256": "334c4a525065a222ec9b35a60f52d71d21d8714a555d6fb59be29ce3833a0c9f",
+      "size_bytes": 68386
+    },
+    {
+      "relative_path": "campaign_plan.csv",
+      "sha256": "0b85610a5dc73f9c2595d57a7a401b64dae539e7ee1b5bb8b35988ecd9cf65fc",
+      "size_bytes": 611
+    },
+    {
+      "relative_path": "campaign_status.csv",
+      "sha256": "3a8008dc718102345f664a1837ede73eabc8acc1fbd45125d03fe025a411c4de",
+      "size_bytes": 820
+    },
+    {
+      "relative_path": "campaign_tc_summary_N24.csv",
+      "sha256": "4e96c3c2c53427c6d8f6e775f137ac502854cd2412afe202e3a2c64cfe753545",
+      "size_bytes": 989
+    },
+    {
+      "relative_path": "campaign_tc_summary_N28.csv",
+      "sha256": "5b71b09e1be21faa9f47b18daa02ec1f4c64ab1e94ff2e7ceda8c578d35f16ac",
+      "size_bytes": 951
+    },
+    {
+      "relative_path": "campaign_tc_summary_N32.csv",
+      "sha256": "b1eadeb7c77816bd74ac7e473cb150388ddd7c2659d58951e9d284e3a31a8d68",
+      "size_bytes": 941
+    },
+    {
+      "relative_path": "campaign_tc_summary_all_sizes.csv",
+      "sha256": "8ce6bdf14744e522928ec91cc3678166a46e30a3cd02750acb4f0a0f31e31289",
+      "size_bytes": 2608
+    },
+    {
+      "relative_path": "size_N24/derived/dilution/dilution_job_progress.csv",
+      "sha256": "321b4ca6590028c219813cd06a50b2d756b40781bd37c557dcf5d92128400e38",
+      "size_bytes": 21521
+    },
+    {
+      "relative_path": "size_N24/derived/dilution/dilution_manifest_summary.csv",
+      "sha256": "64bf832d487c67b003f4dc28ae8878c3e068aa391474b62602a7ee4a0a9356e1",
+      "size_bytes": 19396
+    },
+    {
+      "relative_path": "size_N24/derived/dilution/dilution_observables_by_p.csv",
+      "sha256": "ca308f1a5d86b47996cc35b2d50626bf1e0bc6389b5de0c602892c2b9f5d066b",
+      "size_bytes": 81525
+    },
+    {
+      "relative_path": "size_N24/derived/dilution/dilution_tc_by_realization.csv",
+      "sha256": "79b579daed0f601f33bc61ca171953972374661aba5642d0ef9dfba3382ca646",
+      "size_bytes": 20348
+    },
+    {
+      "relative_path": "size_N24/derived/dilution/dilution_tc_partial.csv",
+      "sha256": "1991258ea09cc7f08533f11cfc2dece50f1b48230d19b07f2e32b707783c627a",
+      "size_bytes": 20542
+    },
+    {
+      "relative_path": "size_N24/derived/dilution/dilution_tc_summary.csv",
+      "sha256": "f667d6aa228c31da9589aa56b8619eaaf5a600c36135f021d8246575318dd827",
+      "size_bytes": 984
+    },
+    {
+      "relative_path": "size_N24/figures/dilution/dilution_observables.png",
+      "sha256": "6ccaff2068e5fab30f2d04d0f5f5e49f7d7ccdb9f83577ed983827870db808a0",
+      "size_bytes": 190599
+    },
+    {
+      "relative_path": "size_N24/figures/dilution/dilution_tc_summary.png",
+      "sha256": "edd192116c5f0a7f089d1a6dcc185e326abd3421e8b7f34291c73ce94664b69f",
+      "size_bytes": 58163
+    },
+    {
+      "relative_path": "size_N24/manifests/dilution/dilution_n24_r12_seed42.json",
+      "sha256": "7894e491e4ef8d33bb938ae4e7411119f256b8f2c99b9e642cffca6b7017b24e",
+      "size_bytes": 53556
+    },
+    {
+      "relative_path": "size_N28/derived/dilution/dilution_job_progress.csv",
+      "sha256": "857bb675a9a3206d4e5cd0f6d8891d5bd2c1ff11ed35587dccdc5ae5514ffa78",
+      "size_bytes": 21533
+    },
+    {
+      "relative_path": "size_N28/derived/dilution/dilution_manifest_summary.csv",
+      "sha256": "f9a06859f7d4ed112c19e53144b255399eaa7f4efc8226ee77c77bc2350934a4",
+      "size_bytes": 19408
+    },
+    {
+      "relative_path": "size_N28/derived/dilution/dilution_observables_by_p.csv",
+      "sha256": "161c32b7dee7322923c7d9c0b708673d3957f1a1f1ba80ea14e27b10d43e0e8b",
+      "size_bytes": 79799
+    },
+    {
+      "relative_path": "size_N28/derived/dilution/dilution_tc_by_realization.csv",
+      "sha256": "86ca4fd911843a97d4d35ed5302837cca4f9082857c1139f92ea52bbea762a69",
+      "size_bytes": 20340
+    },
+    {
+      "relative_path": "size_N28/derived/dilution/dilution_tc_partial.csv",
+      "sha256": "0980775a395eef6e578770d13ec8108d4b58989ce0bdedf19bd59b7b06b92d7b",
+      "size_bytes": 20534
+    },
+    {
+      "relative_path": "size_N28/derived/dilution/dilution_tc_summary.csv",
+      "sha256": "9e4fd2352e04039546fb0fa7e1e5dbcf38257f92ee0f318ec9ea4c67918a6e8a",
+      "size_bytes": 951
+    },
+    {
+      "relative_path": "size_N28/figures/dilution/dilution_observables.png",
+      "sha256": "a59caf8759093c0f4e3bc5b8043d9c3231ea443bdcc10cb39be1c4de6d904d1f",
+      "size_bytes": 194515
+    },
+    {
+      "relative_path": "size_N28/figures/dilution/dilution_tc_summary.png",
+      "sha256": "e4ff2f082021744aa1c0540b473266a1a082a4de92eb29d1b45115ddaae348e2",
+      "size_bytes": 57048
+    },
+    {
+      "relative_path": "size_N28/manifests/dilution/dilution_n28_r12_seed42.json",
+      "sha256": "1a7e89f854185cce87110781f15d84e645de89b5e4b0e8431ef6558b5d383c08",
+      "size_bytes": 53568
+    },
+    {
+      "relative_path": "size_N32/derived/dilution/dilution_job_progress.csv",
+      "sha256": "abf4a47e9c8e026b95e04e7cff4cafde66e685352f607748a4218ccb4b6e0f2f",
+      "size_bytes": 22537
+    },
+    {
+      "relative_path": "size_N32/derived/dilution/dilution_manifest_summary.csv",
+      "sha256": "4f3460045f7b459a89bca7bea22a21bc357442d53f96bbe9c25e6f8b5828379a",
+      "size_bytes": 20280
+    },
+    {
+      "relative_path": "size_N32/derived/dilution/dilution_observables_by_p.csv",
+      "sha256": "422e53cbb55605678e69bc1c96ef8cbc61dc411b26674da77e621e966988162e",
+      "size_bytes": 84634
+    },
+    {
+      "relative_path": "size_N32/derived/dilution/dilution_tc_by_realization.csv",
+      "sha256": "c0201f8b7694bf4290e9cf9e66a3387a7ff34b1b3848e5ba80f0d502e75cd4f8",
+      "size_bytes": 21239
+    },
+    {
+      "relative_path": "size_N32/derived/dilution/dilution_tc_partial.csv",
+      "sha256": "b1d553c3b77ec415d2ee2b753f3d9172303351b43720f6198884c0769e368b27",
+      "size_bytes": 21440
+    },
+    {
+      "relative_path": "size_N32/derived/dilution/dilution_tc_summary.csv",
+      "sha256": "48a9a3be68150134ae42837cfa3f71c1fdc2e1426d701034407327871e467292",
+      "size_bytes": 921
+    },
+    {
+      "relative_path": "size_N32/figures/dilution/dilution_observables.png",
+      "sha256": "3dace244cb918d9de7095ea5b2ec42b603ff161d87c85eceafefbc73c8507a35",
+      "size_bytes": 198524
+    },
+    {
+      "relative_path": "size_N32/figures/dilution/dilution_tc_summary.png",
+      "sha256": "0ac89e6da7f3c755f1a77fb90bda8301936e5863fabcb5e47a2071bbb5df2228",
+      "size_bytes": 58999
+    },
+    {
+      "relative_path": "size_N32/manifests/dilution/dilution_n32_r12_seed42.json",
+      "sha256": "383990b1fe036fbeb97c1e099e67802b014020a4e3ecc661fb6523baae1f618c",
+      "size_bytes": 53484
+    },
+    {
+      "relative_path": "size_N32/manifests/dilution/dilution_n32_r8_seed42.json",
+      "sha256": "eea6a2772f9f9c2e44fa4ec1f4518a085837e7a78644fa7ed5059732764a7781",
+      "size_bytes": 7670
+    }
+  ],
+  "includes_raw": false,
+  "pack_root": "/Users/faulknco/Projects/ising-rs/results/published/dilution_publish_v1",
+  "readme": "README.md",
+  "schema_version": "0.1.0",
+  "source_campaign_root": "/Volumes/Untitled/publishing_data/dilution_publish_v1",
+  "source_git_commit": "03bde771122fe0b3cd33613294a8a059e31e4baf"
+}

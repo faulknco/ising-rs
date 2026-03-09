@@ -1,0 +1,21 @@
+name,status,measured,reference,details
+onsager_energy_mean_abs_error,ok,0.0020703288321568037,0.01,largest lattice file fss_N128.csv
+onsager_magnetization_mean_abs_error,ok,2.6465469543107183e-05,0.03,"largest lattice file fss_N128.csv, restricted to T < Tc - 0.2"
+exact_enum_energy_max_abs_error,ok,0.011694626955095488,0.02,4x4 exact enumeration comparison
+exact_enum_magnetization_max_abs_error,ok,0.0045683260391128355,0.01,4x4 exact enumeration comparison
+exact_enum_cv_max_abs_error,ok,0.01328468880272271,0.2,4x4 exact enumeration comparison
+exact_enum_chi_max_abs_error,ok,0.008977629497949668,0.2,4x4 exact enumeration comparison
+fluctuation_dissipation_mean_relative_error_away_from_tc,ok,0.12652969507988188,0.2,"2D square fss_N64.csv, excluding critical window"
+wolff_dynamic_exponent_estimate,ok,-0.21081322328264251,0.25,2D Wolff estimate after fractal-dimension correction
+3d_fss_N16_low_temp_energy,ok,-3.0,-3.0,T=0.1 limit
+3d_fss_N16_low_temp_magnetisation,ok,1.0,1.0,T=0.1 limit
+3d_fss_N16_high_temp_energy,ok,-0.053064,0.0,T=50 limit
+3d_fss_N8_low_temp_energy,ok,-3.0,-3.0,T=0.1 limit
+3d_fss_N8_low_temp_magnetisation,ok,1.0,1.0,T=0.1 limit
+3d_fss_N8_high_temp_energy,ok,-0.039467,0.0,T=50 limit
+2d_fss_N16_low_temp_energy,ok,-2.0,-2.0,T=0.1 limit
+2d_fss_N16_low_temp_magnetisation,ok,1.0,1.0,T=0.1 limit
+2d_fss_N16_high_temp_energy,ok,-0.027537,0.0,T=50 limit
+2d_fss_N32_low_temp_energy,ok,-2.0,-2.0,T=0.1 limit
+2d_fss_N32_low_temp_magnetisation,ok,1.0,1.0,T=0.1 limit
+2d_fss_N32_high_temp_energy,ok,-0.055501,0.0,T=50 limit
