@@ -221,6 +221,8 @@ def run_publication(outdir: Path) -> None:
                 params["delta"],
                 "--overrelax",
                 params["overrelax"],
+                "--measure-every",
+                "5",
                 "--outdir",
                 str(publication_dir),
             ],
