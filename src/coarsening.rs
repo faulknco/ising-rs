@@ -1,18 +1,34 @@
+//! Domain coarsening after a thermal quench.
+//!
+//! Quenches a disordered lattice (equilibrated at `t_high`) to a low
+//! temperature `t_quench` and tracks the domain wall density ρ(t) as
+//! the system coarsens. The expected scaling is ρ ~ t^{-1/2} (Allen-Cahn).
+
 use rand::SeedableRng;
 use rand_xoshiro::Xoshiro256PlusPlus;
 
 use crate::lattice::{Geometry, Lattice};
 use crate::metropolis::{sweep, warm_up};
 
+/// Configuration for a coarsening (quench) experiment.
 pub struct CoarseningConfig {
+    /// Lattice size per dimension.
     pub n: usize,
+    /// Lattice geometry (Square2D, Triangular2D, Cubic3D).
     pub geometry: Geometry,
+    /// Coupling constant J.
     pub j: f64,
+    /// High temperature for initial equilibration.
     pub t_high: f64,
+    /// Quench target temperature (below Tc).
     pub t_quench: f64,
+    /// Number of Metropolis sweeps at `t_high` before quenching.
     pub warmup_sweeps: usize,
+    /// Total single-spin Metropolis steps after quench.
     pub total_steps: usize,
+    /// Measure domain wall density every this many steps.
     pub sample_every: usize,
+    /// RNG seed for reproducibility.
     pub seed: u64,
 }
 
@@ -32,8 +48,11 @@ impl Default for CoarseningConfig {
     }
 }
 
+/// A single measurement point: Monte Carlo step and domain wall density.
 pub struct CoarseningPoint {
+    /// Monte Carlo step number.
     pub step: usize,
+    /// Fraction of nearest-neighbour bonds across a domain wall (0 = ordered, 0.5 = random).
     pub rho: f64,
 }
 

@@ -1,0 +1,6 @@
+label,d_value,observable,size_a,size_b,tc_crossing,binder_crossing,method
+dm2,-2.0,Mxy,16,32,1.3815985169054064,0.6662776188462367,linear_interp
+dm2_refine,-2.0,Mxy,16,32,1.0481733464125922,0.6618527009437595,linear_interp
+d0,0.0,M,16,32,1.427379108880536,0.6334886732480994,linear_interp
+dp2,2.0,Mz,16,32,2.6042,1.0,exact_grid
+dp2_refine,2.0,Mz,16,32,0.9427360227606502,0.6504747943256377,linear_interp

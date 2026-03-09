@@ -101,6 +101,8 @@ cargo run --release --bin mesh_sweep -- \
 python analysis/scripts/reproduce_classical_baseline.py --quick
 ```
 
+All binaries support `--help` for full option listings.
+
 ### GPU-Accelerated FSS with Parallel Tempering
 
 Requires CUDA 12.x, an NVIDIA GPU, and the `cuda` feature.
@@ -140,17 +142,25 @@ reproduction steps, parameters, and expected results.
 
 ```text
 src/
-  lattice.rs          # regular-lattice construction
-  graph.rs            # graph loading from CSV/JSON
-  metropolis.rs       # CPU Metropolis updates
-  wolff.rs            # CPU Wolff cluster updates
-  observables.rs      # scalar observables
-  fitting.rs          # simple fitting helpers
-  fss.rs              # CPU FSS driver
-  kibble_zurek.rs     # shared KZ protocol, CPU driver, and error helpers
+  lib.rs              # Library root
+  cli.rs              # Shared CLI argument parsing, validation, --help
+  lattice.rs          # Lattice construction (2D/3D, PBC, arbitrary graphs)
+  metropolis.rs       # Metropolis single-spin updates
+  wolff.rs            # Wolff cluster algorithm
+  observables.rs      # Energy, magnetisation, Cv, chi, Binder cumulant
+  graph.rs            # Graph loading (CSV edge lists, JSON adjacency)
+  fitting.rs          # Critical exponent fitting (OLS on log-log data)
+  coarsening.rs       # Domain coarsening after thermal quench
+  kibble_zurek.rs     # KZ quench experiments
+  sweep.rs            # Temperature sweep driver
+  fss.rs              # Finite-size scaling driver
+  wasm.rs             # WebAssembly bindings
   heisenberg/         # Heisenberg workflows
   cuda/               # cubic-lattice CUDA backend
   bin/                # CLI entrypoints
+
+tests/
+  cli.rs              # Integration tests for all 5 binaries
 
 analysis/
   graphs/             # versioned graph inputs
@@ -161,6 +171,12 @@ analysis/
 docs/
   reproducibility.md  # workflow and data provenance rules
   physics-validation.md
+
+scripts/
+  run_fss_publication.sh    # Publication-quality FSS runs
+  run_kz_publication.sh     # Publication-quality KZ runs
+  run_jfit_publication.sh   # J-fitting sweep runs
+  run_all_publication.sh    # Run everything
 
 paper/
   draft.tex           # working manuscript
