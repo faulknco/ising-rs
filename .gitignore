@@ -38,6 +38,15 @@ paper/*.log
 paper/*.out
 paper/*Notes.bib
 
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
 # Figures copied by build.sh (duplicates of paper/figures/)
 paper/fss_*.png
 paper/val_*.png

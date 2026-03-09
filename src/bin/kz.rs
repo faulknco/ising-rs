@@ -9,12 +9,53 @@ use std::env;
 use std::fs;
 use std::path::Path;
 
-use ising::cli::{get_arg, parse_arg, parse_geometry};
+use ising::cli::{
+    check_help, get_arg, parse_arg, parse_geometry, validate_lattice_size, warn_unknown_flags,
+};
 use ising::kibble_zurek::{run_kz_sweep, KzProtocol};
 use ising::lattice::Geometry;
 
+const USAGE: &str = "\
+kz — Kibble-Zurek quench experiment
+
+USAGE:
+    kz [OPTIONS]
+
+OPTIONS:
+    --n <N>              Lattice size per dimension [default: 20]
+    --geometry <TYPE>    square, triangular, or cubic [default: cubic]
+    --j <J>              Coupling constant [default: 1.0]
+    --t-start <T>        Starting temperature (high T) [default: 6.0]
+    --t-end <T>          Ending temperature (low T) [default: 1.0]
+    --tau-min <N>        Minimum quench time [default: 100]
+    --tau-max <N>        Maximum quench time [default: 100000]
+    --tau-steps <N>      Number of tau_q values (>=2, log-spaced) [default: 20]
+    --trials <N>         Number of independent trials per tau_q [default: 5]
+    --seed <N>           RNG seed [default: 42]
+    --gpu                Use GPU acceleration (requires --features cuda)
+    --outdir <DIR>       Output directory [default: analysis/data]
+    --help, -h           Show this help message";
+
+const KNOWN_FLAGS: &[&str] = &[
+    "--n",
+    "--geometry",
+    "--j",
+    "--t-start",
+    "--t-end",
+    "--tau-min",
+    "--tau-max",
+    "--tau-steps",
+    "--trials",
+    "--seed",
+    "--gpu",
+    "--outdir",
+    "--help",
+];
+
 fn main() {
     let args: Vec<String> = env::args().collect();
+    check_help(&args, USAGE);
+    warn_unknown_flags(&args, KNOWN_FLAGS);
 
     let mut n: usize = 20;
     let mut geometry = Geometry::Cubic3D;
@@ -101,16 +142,10 @@ fn main() {
         }
     }
 
+    // Validation
+    validate_lattice_size(n);
     if tau_steps == 0 {
         eprintln!("Error: --tau-steps must be at least 1");
-        std::process::exit(1);
-    }
-    if tau_min == 0 {
-        eprintln!("Error: --tau-min must be positive");
-        std::process::exit(1);
-    }
-    if tau_max < tau_min {
-        eprintln!("Error: --tau-max must be >= --tau-min");
         std::process::exit(1);
     }
     if n_trials == 0 {
@@ -119,6 +154,10 @@ fn main() {
     }
     if t_start <= 0.0 || t_end <= 0.0 || freeze_temperature <= 0.0 {
         eprintln!("Error: temperatures must be positive");
+        std::process::exit(1);
+    }
+    if tau_min == 0 || tau_max == 0 || tau_min > tau_max {
+        eprintln!("Error: --tau-min must be >= 1 and <= --tau-max");
         std::process::exit(1);
     }
     if use_gpu && geometry != Geometry::Cubic3D {
