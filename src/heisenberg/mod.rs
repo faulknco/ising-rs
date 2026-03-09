@@ -1,8 +1,8 @@
+pub mod fss;
 pub mod metropolis;
 pub mod observables;
 pub mod overrelax;
 pub mod sweep;
-pub mod fss;
 
 use rand::Rng;
 
@@ -45,7 +45,9 @@ pub fn random_unit_vector(rng: &mut impl Rng) -> Spin3 {
         let x: f64 = rng.gen_range(-1.0..1.0);
         let y: f64 = rng.gen_range(-1.0..1.0);
         let r2 = x * x + y * y;
-        if r2 >= 1.0 { continue; }
+        if r2 >= 1.0 {
+            continue;
+        }
         let s = 2.0 * (1.0 - r2).sqrt();
         return [s * x, s * y, 1.0 - 2.0 * r2];
     }
@@ -58,11 +60,13 @@ pub fn energy_magnetisation(lat: &HeisenbergLattice, j: f64) -> (f64, [f64; 3]) 
     let mut e = 0.0_f64;
     let mut m = [0.0_f64; 3];
     for (idx, s) in lat.spins.iter().enumerate() {
-        m[0] += s[0]; m[1] += s[1]; m[2] += s[2];
+        m[0] += s[0];
+        m[1] += s[1];
+        m[2] += s[2];
         for &nb in &lat.neighbours[idx] {
             if nb > idx {
                 let sn = &lat.spins[nb];
-                e -= j * (s[0]*sn[0] + s[1]*sn[1] + s[2]*sn[2]);
+                e -= j * (s[0] * sn[0] + s[1] * sn[1] + s[2] * sn[2]);
             }
         }
     }
@@ -76,9 +80,11 @@ pub fn magnetisation_per_spin(lat: &HeisenbergLattice) -> f64 {
     let mut my = 0.0_f64;
     let mut mz = 0.0_f64;
     for s in &lat.spins {
-        mx += s[0]; my += s[1]; mz += s[2];
+        mx += s[0];
+        my += s[1];
+        mz += s[2];
     }
-    (mx*mx + my*my + mz*mz).sqrt() / n
+    (mx * mx + my * my + mz * mz).sqrt() / n
 }
 
 #[cfg(test)]
@@ -96,7 +102,7 @@ mod tests {
         let mut rng = rand_xoshiro::Xoshiro256PlusPlus::seed_from_u64(42);
         for _ in 0..1000 {
             let v = random_unit_vector(&mut rng);
-            let norm = (v[0]*v[0] + v[1]*v[1] + v[2]*v[2]).sqrt();
+            let norm = (v[0] * v[0] + v[1] * v[1] + v[2] * v[2]).sqrt();
             assert!((norm - 1.0).abs() < 1e-12, "unit vector norm = {norm}");
         }
     }
@@ -125,7 +131,7 @@ mod tests {
         let mut lat = HeisenbergLattice::new(nb);
         lat.randomise(&mut rng);
         for s in &lat.spins {
-            let norm = (s[0]*s[0] + s[1]*s[1] + s[2]*s[2]).sqrt();
+            let norm = (s[0] * s[0] + s[1] * s[1] + s[2] * s[2]).sqrt();
             assert!((norm - 1.0).abs() < 1e-12);
         }
     }
@@ -137,13 +143,20 @@ mod tests {
         let mut rng = rand_xoshiro::Xoshiro256PlusPlus::seed_from_u64(123);
         let n = 10_000;
         let mean_z: f64 = (0..n).map(|_| random_unit_vector(&mut rng)[2]).sum::<f64>() / n as f64;
-        assert!(mean_z.abs() < 0.05,
-            "mean z should be near 0 for uniform S², got {mean_z}");
-        let var_z: f64 = (0..n).map(|_| {
-            let z = random_unit_vector(&mut rng)[2];
-            z * z
-        }).sum::<f64>() / n as f64;
-        assert!((var_z - 1.0/3.0).abs() < 0.05,
-            "Var[z] should be ≈1/3 for uniform S², got {var_z}");
+        assert!(
+            mean_z.abs() < 0.05,
+            "mean z should be near 0 for uniform S², got {mean_z}"
+        );
+        let var_z: f64 = (0..n)
+            .map(|_| {
+                let z = random_unit_vector(&mut rng)[2];
+                z * z
+            })
+            .sum::<f64>()
+            / n as f64;
+        assert!(
+            (var_z - 1.0 / 3.0).abs() < 0.05,
+            "Var[z] should be ≈1/3 for uniform S², got {var_z}"
+        );
     }
 }

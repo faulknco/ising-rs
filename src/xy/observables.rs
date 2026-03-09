@@ -1,5 +1,5 @@
-use crate::xy::{XyLattice, energy_magnetisation};
 use crate::xy::wolff::sweep;
+use crate::xy::{energy_magnetisation, XyLattice};
 use rand::Rng;
 
 /// All measured observables for one temperature point, with jackknife error bars.
@@ -7,17 +7,23 @@ use rand::Rng;
 pub struct XyObservables {
     pub temperature: f64,
     /// Mean energy per spin E/N.
-    pub energy: f64,         pub energy_err: f64,
+    pub energy: f64,
+    pub energy_err: f64,
     /// Mean |M|/N (scalar magnetisation per spin).
-    pub magnetisation: f64,  pub magnetisation_err: f64,
+    pub magnetisation: f64,
+    pub magnetisation_err: f64,
     /// Total heat capacity C = β²N(⟨(E/N)²⟩ − ⟨E/N⟩²).
-    pub heat_capacity: f64,  pub heat_capacity_err: f64,
+    pub heat_capacity: f64,
+    pub heat_capacity_err: f64,
     /// Magnetic susceptibility χ = βN(⟨m²⟩ − ⟨m⟩²).
-    pub susceptibility: f64, pub susceptibility_err: f64,
+    pub susceptibility: f64,
+    pub susceptibility_err: f64,
     /// ⟨m²⟩ (needed for Binder cumulant).
-    pub m2: f64,             pub m2_err: f64,
+    pub m2: f64,
+    pub m2_err: f64,
     /// ⟨m⁴⟩ (needed for Binder cumulant).
-    pub m4: f64,             pub m4_err: f64,
+    pub m4: f64,
+    pub m4_err: f64,
 }
 
 /// Equilibrate a lattice and measure observables with 20-block jackknife error estimation.
@@ -57,13 +63,13 @@ pub fn measure(
         m_series.push(m_abs);
     }
 
-    let avg_e  = mean(&e_series);
-    let avg_m  = mean(&m_series);
+    let avg_e = mean(&e_series);
+    let avg_m = mean(&m_series);
     let avg_e2 = mean_of_sq(&e_series);
     let avg_m2 = mean_of_sq(&m_series);
     let avg_m4 = mean_of_pow4(&m_series);
 
-    let cv  = beta * beta * n * (avg_e2 - avg_e * avg_e);
+    let cv = beta * beta * n * (avg_e2 - avg_e * avg_e);
     let chi = beta * n * (avg_m2 - avg_m * avg_m);
 
     let n_blocks = 20;
@@ -80,12 +86,18 @@ pub fn measure(
 
     XyObservables {
         temperature: 1.0 / beta,
-        energy: avg_e,         energy_err: e_err,
-        magnetisation: avg_m,  magnetisation_err: m_err,
-        heat_capacity: cv,     heat_capacity_err: cv_err,
-        susceptibility: chi,   susceptibility_err: chi_err,
-        m2: avg_m2,            m2_err,
-        m4: avg_m4,            m4_err,
+        energy: avg_e,
+        energy_err: e_err,
+        magnetisation: avg_m,
+        magnetisation_err: m_err,
+        heat_capacity: cv,
+        heat_capacity_err: cv_err,
+        susceptibility: chi,
+        susceptibility_err: chi_err,
+        m2: avg_m2,
+        m2_err,
+        m4: avg_m4,
+        m4_err,
     }
 }
 
@@ -109,12 +121,12 @@ fn jackknife_errors(
     n_blocks: usize,
     block_size: usize,
 ) -> (f64, f64, f64, f64, f64, f64) {
-    let mut jk_e   = Vec::with_capacity(n_blocks);
-    let mut jk_m   = Vec::with_capacity(n_blocks);
-    let mut jk_cv  = Vec::with_capacity(n_blocks);
+    let mut jk_e = Vec::with_capacity(n_blocks);
+    let mut jk_m = Vec::with_capacity(n_blocks);
+    let mut jk_cv = Vec::with_capacity(n_blocks);
     let mut jk_chi = Vec::with_capacity(n_blocks);
-    let mut jk_m2  = Vec::with_capacity(n_blocks);
-    let mut jk_m4  = Vec::with_capacity(n_blocks);
+    let mut jk_m2 = Vec::with_capacity(n_blocks);
+    let mut jk_m4 = Vec::with_capacity(n_blocks);
 
     let total = n_blocks * block_size;
 
@@ -125,8 +137,8 @@ fn jackknife_errors(
         let e_jk: Vec<f64> = e[..lo].iter().chain(&e[hi..total]).copied().collect();
         let m_jk: Vec<f64> = m[..lo].iter().chain(&m[hi..total]).copied().collect();
 
-        let ae  = mean(&e_jk);
-        let am  = mean(&m_jk);
+        let ae = mean(&e_jk);
+        let am = mean(&m_jk);
         let ae2 = mean_of_sq(&e_jk);
         let am2 = mean_of_sq(&m_jk);
         let am4 = mean_of_pow4(&m_jk);

@@ -75,7 +75,7 @@ pub fn sweep(lat: &mut XyLattice, beta: f64, j: f64, rng: &mut impl Rng) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::xy::{XyLattice, magnetisation_per_spin};
+    use crate::xy::{magnetisation_per_spin, XyLattice};
     use rand::SeedableRng;
 
     fn cubic3d_neighbours(n: usize) -> Vec<Vec<usize>> {

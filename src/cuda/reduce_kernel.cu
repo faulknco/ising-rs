@@ -105,3 +105,47 @@ extern "C" __global__ void reduce_mag_continuous(
         partial_mz[blockIdx.x] = sdata[2*bd];
     }
 }
+
+// --- Continuous spins: partial energy (sum of -J * S_i · S_j, forward neighbours only) ---
+extern "C" __global__ void reduce_energy_continuous(
+    const float* spins,
+    float* partial_energy,
+    int    N,
+    int    n_comp,
+    float  J
+) {
+    int gid = blockIdx.x * blockDim.x + threadIdx.x;
+    int n_sites = N * N * N;
+
+    extern __shared__ float sdata[];
+    int tid = threadIdx.x;
+
+    float val = 0.0f;
+    if (gid < n_sites) {
+        int z = gid / (N * N);
+        int r = gid % (N * N);
+        int y = r / N;
+        int x = r % N;
+
+        int fwd[3];
+        fwd[0] = z*N*N + y*N + (x+1)%N;
+        fwd[1] = z*N*N + ((y+1)%N)*N + x;
+        fwd[2] = ((z+1)%N)*N*N + y*N + x;
+
+        for (int f = 0; f < 3; f++) {
+            float dot = 0.0f;
+            for (int c = 0; c < n_comp; c++) {
+                dot += spins[gid * n_comp + c] * spins[fwd[f] * n_comp + c];
+            }
+            val -= J * dot;
+        }
+    }
+
+    sdata[tid] = val;
+    __syncthreads();
+    for (int s = blockDim.x / 2; s > 0; s >>= 1) {
+        if (tid < s) sdata[tid] += sdata[tid + s];
+        __syncthreads();
+    }
+    if (tid == 0) partial_energy[blockIdx.x] = sdata[0];
+}

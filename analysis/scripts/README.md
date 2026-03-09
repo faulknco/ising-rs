@@ -4,6 +4,7 @@ This directory is reserved for deterministic analysis workflows that replace not
 
 Current scripts:
 
+- `reproduce_classical_baseline.py` — one-command entrypoint that runs the scripted classical validation workflow and can promote the resulting pack
 - `ising_stats.py` — shared jackknife/error-estimation helpers for Ising raw time-series analysis
 - `reproduce_fss.py` — rebuild FSS observable tables with jackknife error bars from `fss_raw_N*.csv`
 - `reproduce_validation.py` — regenerate the benchmark validation suite and machine-readable summary
@@ -24,6 +25,9 @@ analysis after each completed size.
 
 `reproduce_validation.py` now writes section-level comparison tables, generated figures, and a run
 manifest in addition to the metric and summary outputs.
+
+`reproduce_classical_baseline.py` is the cross-platform top-level entrypoint for rebuilding the
+baseline CPU validation story on a fresh machine.
 
 Planned scripts:
 
