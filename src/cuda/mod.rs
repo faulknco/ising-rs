@@ -6,3 +6,4 @@ pub mod lattice_gpu;
 pub mod msc_lattice;
 pub use crate::parallel_tempering;
 pub mod reduce_gpu;
+pub mod wolff_gpu;
