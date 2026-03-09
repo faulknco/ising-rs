@@ -331,17 +331,106 @@ def collapse_quality(nu, dfs, tc, gamma_nu):
     return float(np.sum(np.diff(ys) ** 2)) / rng ** 2
 
 
+def binder_slope_nu(dfs: dict[int, pd.DataFrame], tc: float, fit_sizes: list[int] | None = None):
+    """Estimate nu from Binder slope scaling: dU/dT|Tc ~ L^{1/nu}.
+
+    Computes dU/dT at Tc via cubic interpolation derivative for each size,
+    then fits log(|dU/dT|) vs log(L) to extract 1/nu.
+
+    Returns (nu, sizes_used, slopes) or (nan, [], []) on failure.
+    """
+    sizes = sorted(fit_sizes if fit_sizes else dfs.keys())
+    log_L = []
+    log_dUdT = []
+    slopes_out = []
+
+    for n in sizes:
+        if n not in dfs:
+            continue
+        df = dfs[n]
+        T = df["T"].values
+        U = df["U"].values
+
+        # Mask out unstable Binder tails where M2 is very small
+        if "M2" in df.columns:
+            stable = df["M2"].values > 1e-10
+            T = T[stable]
+            U = U[stable]
+
+        if len(T) < 4:
+            continue
+
+        # Check Tc is within the data range
+        if tc < T.min() or tc > T.max():
+            continue
+
+        try:
+            f_U = interp1d(T, U, kind="cubic")
+        except ValueError:
+            continue
+
+        # Numerical derivative at Tc via central difference
+        dT = (T.max() - T.min()) / len(T)  # ~spacing
+        h = max(dT * 0.5, 1e-5)
+        # Ensure we don't go out of bounds
+        if tc - h < T.min() or tc + h > T.max():
+            h = min(tc - T.min(), T.max() - tc) * 0.9
+        if h < 1e-6:
+            continue
+
+        dUdT = (f_U(tc + h) - f_U(tc - h)) / (2 * h)
+        slopes_out.append((n, dUdT))
+
+        if abs(dUdT) > 1e-10:
+            log_L.append(np.log(n))
+            log_dUdT.append(np.log(abs(dUdT)))
+
+    if len(log_L) < 2:
+        return np.nan, [], slopes_out
+
+    log_L = np.array(log_L)
+    log_dUdT = np.array(log_dUdT)
+    inv_nu, _ = np.polyfit(log_L, log_dUdT, 1)
+    nu = 1.0 / inv_nu if abs(inv_nu) > 1e-10 else np.nan
+
+    return nu, [s[0] for s in slopes_out], slopes_out
+
+
 def analyze_model(model: str, dfs: dict[int, pd.DataFrame], out_dir: Path,
-                   data_dir: Path, method: str = "wham"):
-    """Full FSS analysis for one model."""
+                   data_dir: Path, method: str = "wham",
+                   fit_sizes: list[int] | None = None,
+                   collapse_sizes: list[int] | None = None):
+    """Full FSS analysis for one model.
+
+    Parameters
+    ----------
+    fit_sizes : list[int] or None
+        Sizes to use for exponent fitting. If None, use all available sizes.
+    collapse_sizes : list[int] or None
+        Sizes to use for scaling collapse. If None, same as fit_sizes.
+    """
     th = THEORY[model]
     sizes = sorted(dfs.keys())
     colors = cm.viridis(np.linspace(0.15, 0.85, len(sizes)))
 
+    # Determine fit and collapse size sets
+    if fit_sizes is None:
+        fit_sizes_actual = sizes
+    else:
+        fit_sizes_actual = sorted(n for n in fit_sizes if n in dfs)
+    if collapse_sizes is None:
+        collapse_sizes_actual = fit_sizes_actual
+    else:
+        collapse_sizes_actual = sorted(n for n in collapse_sizes if n in dfs)
+
     print(f"\n{'=' * 60}")
     print(f"  {model.upper()} — 3D FSS Analysis")
     print(f"{'=' * 60}")
-    print(f"Sizes: {sizes}")
+    print(f"Sizes (all): {sizes}")
+    if fit_sizes_actual != sizes:
+        print(f"Sizes (fit): {fit_sizes_actual}")
+    if collapse_sizes_actual != fit_sizes_actual:
+        print(f"Sizes (collapse): {collapse_sizes_actual}")
     print(f"T range: [{dfs[sizes[0]]['T'].min():.4f}, {dfs[sizes[0]]['T'].max():.4f}]")
     print(f"Temperatures per size: {len(dfs[sizes[0]])}")
 
@@ -483,38 +572,48 @@ def analyze_model(model: str, dfs: dict[int, pd.DataFrame], out_dir: Path,
             tc_err = tc_rw_err
 
     # ── 4. Peak scaling from reweighted data → gamma/nu, beta/nu ──────────
-    rw_sizes = sorted(peak_src.keys())
-    log_n = np.log(rw_sizes)
+    # Use fit_sizes for exponent extraction, but collect data for all sizes for plots
+    all_rw_sizes = sorted(peak_src.keys())
+    fit_rw_sizes = sorted(n for n in fit_sizes_actual if n in peak_src)
+    if len(fit_rw_sizes) < 2:
+        fit_rw_sizes = all_rw_sizes  # fallback
 
-    chi_peaks = []
-    chi_peak_errs = []
-    for n in rw_sizes:
+    # Collect chi peaks for ALL sizes (for plotting)
+    all_chi_peaks = {}
+    all_chi_peak_errs = {}
+    for n in all_rw_sizes:
         df = peak_src[n]
         idx = df["chi_conn"].idxmax()
-        chi_peaks.append(df.loc[idx, "chi_conn"])
-        chi_peak_errs.append(df.loc[idx, "chi_err"] if "chi_err" in df.columns else 0.0)
+        all_chi_peaks[n] = df.loc[idx, "chi_conn"]
+        all_chi_peak_errs[n] = df.loc[idx, "chi_err"] if "chi_err" in df.columns else 0.0
 
-    slope_chi, _ = np.polyfit(log_n, np.log(chi_peaks), 1)
+    # Fit on fit_rw_sizes only
+    fit_log_n = np.log(fit_rw_sizes)
+    fit_chi_peaks = [all_chi_peaks[n] for n in fit_rw_sizes]
+    slope_chi, _ = np.polyfit(fit_log_n, np.log(fit_chi_peaks), 1)
     gamma_nu = slope_chi
     th_gamma_nu = th["gamma"] / th["nu"]
 
-    m_at_tc = []
-    m_at_tc_errs = []
-    for n in rw_sizes:
+    # M(Tc) for all sizes (for plotting)
+    all_m_at_tc = {}
+    all_m_at_tc_errs = {}
+    for n in all_rw_sizes:
         df = peak_src[n]
         try:
             f_m = interp1d(df["T"], df["M"], kind="cubic")
-            m_at_tc.append(float(f_m(tc_meas)))
+            all_m_at_tc[n] = float(f_m(tc_meas))
             if "M_err" in df.columns:
                 f_e = interp1d(df["T"], df["M_err"], kind="linear")
-                m_at_tc_errs.append(float(f_e(tc_meas)))
+                all_m_at_tc_errs[n] = float(f_e(tc_meas))
             else:
-                m_at_tc_errs.append(0.0)
+                all_m_at_tc_errs[n] = 0.0
         except (ValueError, KeyError):
-            m_at_tc.append(np.nan)
-            m_at_tc_errs.append(0.0)
+            all_m_at_tc[n] = np.nan
+            all_m_at_tc_errs[n] = 0.0
 
-    valid = [(n, m) for n, m in zip(rw_sizes, m_at_tc) if not np.isnan(m) and m > 0]
+    # Fit beta/nu on fit_rw_sizes only
+    valid = [(n, all_m_at_tc[n]) for n in fit_rw_sizes
+             if not np.isnan(all_m_at_tc.get(n, np.nan)) and all_m_at_tc.get(n, 0) > 0]
     if len(valid) >= 2:
         vn, vm = zip(*valid)
         slope_m, _ = np.polyfit(np.log(vn), np.log(vm), 1)
@@ -523,7 +622,8 @@ def analyze_model(model: str, dfs: dict[int, pd.DataFrame], out_dir: Path,
         beta_nu = np.nan
     th_beta_nu = th["beta"] / th["nu"]
 
-    print(f"\n  Peak scaling ({src_label}):")
+    fit_label = f"{src_label}, fit L={fit_rw_sizes}" if fit_rw_sizes != all_rw_sizes else src_label
+    print(f"\n  Peak scaling ({fit_label}):")
     print(f"    gamma/nu = {gamma_nu:.4f}  (theory = {th_gamma_nu:.4f}, error = {abs(gamma_nu - th_gamma_nu) / th_gamma_nu * 100:.1f}%)")
     if not np.isnan(beta_nu):
         print(f"    beta/nu  = {beta_nu:.4f}  (theory = {th_beta_nu:.4f}, error = {abs(beta_nu - th_beta_nu) / th_beta_nu * 100:.1f}%)")
@@ -531,55 +631,93 @@ def analyze_model(model: str, dfs: dict[int, pd.DataFrame], out_dir: Path,
         print(f"    2*beta/nu + gamma/nu = {hyperscaling:.4f}  (should = 3, error = {abs(hyperscaling - 3) / 3 * 100:.1f}%)")
 
     fig, axes = plt.subplots(1, 2, figsize=(8, 3.5))
-    n_fit = np.linspace(min(rw_sizes) * 0.9, max(rw_sizes) * 1.1, 100)
+    n_fit_line = np.linspace(min(all_rw_sizes) * 0.9, max(all_rw_sizes) * 1.1, 100)
 
     ax = axes[0]
-    ax.errorbar(rw_sizes, chi_peaks, yerr=chi_peak_errs, fmt="o", ms=5, color="C0",
-                capsize=3, zorder=5)
-    c0 = np.log(chi_peaks[0]) - gamma_nu * np.log(rw_sizes[0])
-    ax.plot(n_fit, np.exp(gamma_nu * np.log(n_fit) + c0), "--", color="C1", lw=0.8,
+    # Plot all sizes; highlight fit sizes
+    for n in all_rw_sizes:
+        is_fit = n in fit_rw_sizes
+        ax.errorbar(n, all_chi_peaks[n], yerr=all_chi_peak_errs[n],
+                     fmt="o" if is_fit else "s", ms=5 if is_fit else 4,
+                     color="C0" if is_fit else "C7", capsize=3, zorder=5 if is_fit else 3,
+                     alpha=1.0 if is_fit else 0.4)
+    c0 = np.log(fit_chi_peaks[0]) - gamma_nu * np.log(fit_rw_sizes[0])
+    ax.plot(n_fit_line, np.exp(gamma_nu * np.log(n_fit_line) + c0), "--", color="C1", lw=0.8,
             label=rf"$\gamma/\nu={gamma_nu:.3f}$")
     ax.set_xscale("log"); ax.set_yscale("log")
     ax.set_xlabel("$L$"); ax.set_ylabel(r"$\chi_{\mathrm{max}}$")
     ax.legend(fontsize=8)
 
     ax = axes[1]
-    valid_idx = [i for i, m in enumerate(m_at_tc) if not np.isnan(m) and m > 0]
-    if valid_idx:
-        vn = [rw_sizes[i] for i in valid_idx]
-        vm = [m_at_tc[i] for i in valid_idx]
-        ve = [m_at_tc_errs[i] for i in valid_idx]
-        ax.errorbar(vn, vm, yerr=ve, fmt="o", ms=5, color="C0", capsize=3, zorder=5)
-        if not np.isnan(beta_nu):
-            c0m = np.log(vm[0]) + beta_nu * np.log(vn[0])
-            ax.plot(n_fit, np.exp(-beta_nu * np.log(n_fit) + c0m), "--", color="C1", lw=0.8,
-                    label=rf"$\beta/\nu={beta_nu:.3f}$")
+    for n in all_rw_sizes:
+        m = all_m_at_tc.get(n, np.nan)
+        if np.isnan(m) or m <= 0:
+            continue
+        is_fit = n in fit_rw_sizes
+        ax.errorbar(n, m, yerr=all_m_at_tc_errs.get(n, 0),
+                     fmt="o" if is_fit else "s", ms=5 if is_fit else 4,
+                     color="C0" if is_fit else "C7", capsize=3, zorder=5 if is_fit else 3,
+                     alpha=1.0 if is_fit else 0.4)
+    if not np.isnan(beta_nu) and len(valid) >= 2:
+        c0m = np.log(valid[0][1]) + beta_nu * np.log(valid[0][0])
+        ax.plot(n_fit_line, np.exp(-beta_nu * np.log(n_fit_line) + c0m), "--", color="C1", lw=0.8,
+                label=rf"$\beta/\nu={beta_nu:.3f}$")
     ax.set_xscale("log"); ax.set_yscale("log")
     ax.set_xlabel("$L$"); ax.set_ylabel(r"$M(T_c)$")
     ax.legend(fontsize=8)
 
-    fig.suptitle(f"{model.upper()} — Peak Scaling ({src_label})", fontsize=11)
+    fig.suptitle(f"{model.upper()} — Peak Scaling ({fit_label})", fontsize=11)
     plt.tight_layout()
     fig.savefig(out_dir / f"{model}_peak_scaling.png", dpi=200, bbox_inches="tight")
     plt.close(fig)
     print(f"  Saved {model}_peak_scaling.png")
 
     # ── 5. Scaling collapse → nu ───────────────────────────────────────────
+    # Use collapse_sizes for the fit, but plot all sizes
+    collapse_src = {n: peak_src[n] for n in collapse_sizes_actual if n in peak_src}
+    if len(collapse_src) < 2:
+        collapse_src = peak_src  # fallback
+
     result = minimize_scalar(
         collapse_quality, bounds=(0.3, 1.2), method="bounded",
-        args=(peak_src, tc_meas, gamma_nu),
+        args=(collapse_src, tc_meas, gamma_nu),
     )
     nu_collapse = result.x
-    print(f"\n  Scaling collapse:")
+    collapse_label = f"L={sorted(collapse_src.keys())}" if sorted(collapse_src.keys()) != all_rw_sizes else "all"
+    print(f"\n  Scaling collapse ({collapse_label}):")
     print(f"    nu (chi collapse) = {nu_collapse:.4f}  (theory = {th['nu']:.4f}, error = {abs(nu_collapse - th['nu']) / th['nu'] * 100:.1f}%)")
 
+    # ── 5b. Binder-slope nu ──────────────────────────────────────────────
+    nu_binder, binder_sizes_used, binder_slopes = binder_slope_nu(
+        peak_src, tc_meas, fit_sizes=fit_rw_sizes,
+    )
+    if not np.isnan(nu_binder):
+        print(f"    nu (Binder slope) = {nu_binder:.4f}  (theory = {th['nu']:.4f}, error = {abs(nu_binder - th['nu']) / th['nu'] * 100:.1f}%)")
+        print(f"      dU/dT|Tc: ", end="")
+        for n, s in binder_slopes:
+            print(f"L={n}: {s:.2f}  ", end="")
+        print()
+    else:
+        print(f"    nu (Binder slope) = N/A (insufficient data)")
+
+    # Choose best nu: prefer Binder slope if reasonable, else collapse
+    if not np.isnan(nu_binder) and 0.3 < nu_binder < 1.5:
+        nu_best = nu_binder
+        nu_method = "Binder slope"
+    else:
+        nu_best = nu_collapse
+        nu_method = "collapse"
+
     fig, ax = plt.subplots(figsize=(5, 3.5))
+    # Plot all sizes for visual context
     for i, n in enumerate(sorted(peak_src.keys())):
         df = peak_src[n]
         x = (df["T"] - tc_meas) * n ** (1.0 / nu_collapse)
         y = df["chi_conn"] / n ** gamma_nu
         mask = (x > -15) & (x < 15)
-        ax.plot(x[mask], y[mask], "o-", color=colors[i], markersize=2, lw=0.6, label=f"L={n}")
+        in_collapse = n in collapse_src
+        ax.plot(x[mask], y[mask], "o-", color=colors[i], markersize=2, lw=0.6,
+                label=f"L={n}", alpha=1.0 if in_collapse else 0.3)
     ax.set_xlabel(r"$(T - T_c) L^{1/\nu}$")
     ax.set_ylabel(r"$\chi_{\mathrm{conn}} / L^{\gamma/\nu}$")
     ax.legend(fontsize=6, ncol=2)
@@ -591,28 +729,34 @@ def analyze_model(model: str, dfs: dict[int, pd.DataFrame], out_dir: Path,
     print(f"  Saved {model}_collapse.png")
 
     # ── 6. Summary table ───────────────────────────────────────────────────
-    print(f"\n  {'Quantity':<24} {'Measured':>10} {'Theory':>10} {'Error':>8}")
-    print(f"  {'-' * 55}")
-    rows = [
-        ("Tc (Binder)", tc_meas, th["Tc"]),
-        ("gamma/nu (peak)", gamma_nu, th_gamma_nu),
-        ("nu (collapse)", nu_collapse, th["nu"]),
+    print(f"\n  {'Quantity':<28} {'Measured':>10} {'Theory':>10} {'Error':>8} {'Sizes'}")
+    print(f"  {'-' * 75}")
+    table_rows = [
+        ("Tc (Binder)", tc_meas, th["Tc"], "all"),
+        ("gamma/nu (peak)", gamma_nu, th_gamma_nu, str(fit_rw_sizes)),
+        ("nu (collapse)", nu_collapse, th["nu"], str(sorted(collapse_src.keys()))),
     ]
+    if not np.isnan(nu_binder):
+        table_rows.append(("nu (Binder slope)", nu_binder, th["nu"], str(binder_sizes_used)))
     if not np.isnan(beta_nu):
-        rows.append(("beta/nu (M@Tc)", beta_nu, th_beta_nu))
-        rows.append(("2b/n + g/n", 2 * beta_nu + gamma_nu, 3.0))
+        table_rows.append(("beta/nu (M@Tc)", beta_nu, th_beta_nu, str(fit_rw_sizes)))
+        table_rows.append(("2b/n + g/n", 2 * beta_nu + gamma_nu, 3.0, ""))
 
-    for name, meas, theory in rows:
+    for name, meas, theory, sz in table_rows:
         err = abs(meas - theory) / abs(theory) * 100
         status = "OK" if err < 5 else "~" if err < 15 else "!"
-        print(f"  {name:<24} {meas:>10.4f} {theory:>10.4f} {err:>7.1f}%  {status}")
+        print(f"  {name:<28} {meas:>10.4f} {theory:>10.4f} {err:>7.1f}%  {status}  {sz}")
 
     return {
         "model": model,
         "Tc": tc_meas, "Tc_err": tc_err,
         "gamma_nu": gamma_nu,
         "beta_nu": beta_nu,
-        "nu": nu_collapse,
+        "nu_collapse": nu_collapse,
+        "nu_binder": nu_binder,
+        "nu_best": nu_best,
+        "nu_method": nu_method,
+        "fit_sizes": fit_rw_sizes,
     }
 
 
@@ -626,7 +770,15 @@ def main():
                         help="Analyze only one model (default: all)")
     parser.add_argument("--method", default="single", choices=["wham", "single"],
                         help="Reweighting method: wham (multi-histogram) or single (default: single)")
+    parser.add_argument("--fit-sizes", default=None, type=str,
+                        help="Comma-separated sizes for exponent fitting (e.g., 32,64,128,192). Default: all.")
+    parser.add_argument("--collapse-sizes", default=None, type=str,
+                        help="Comma-separated sizes for scaling collapse (e.g., 32,64,128). Default: same as --fit-sizes.")
     args = parser.parse_args()
+
+    # Parse size lists
+    fit_sizes = [int(x) for x in args.fit_sizes.split(",")] if args.fit_sizes else None
+    collapse_sizes = [int(x) for x in args.collapse_sizes.split(",")] if args.collapse_sizes else None
 
     repo_root = Path(__file__).resolve().parents[2]
     data_dir = (repo_root / args.data_dir).resolve()
@@ -645,7 +797,8 @@ def main():
         if not dfs:
             print(f"\nNo data found for {model}, skipping.")
             continue
-        res = analyze_model(model, dfs, out_dir, data_dir, method=args.method)
+        res = analyze_model(model, dfs, out_dir, data_dir, method=args.method,
+                            fit_sizes=fit_sizes, collapse_sizes=collapse_sizes)
         results.append(res)
 
     # ── Cross-model comparison ─────────────────────────────────────────────
@@ -653,11 +806,14 @@ def main():
         print(f"\n{'=' * 60}")
         print(f"  CROSS-MODEL COMPARISON")
         print(f"{'=' * 60}")
-        print(f"  {'Model':<14} {'Tc':>8} {'gamma/nu':>10} {'beta/nu':>10} {'nu':>8}")
-        print(f"  {'-' * 52}")
+        print(f"  {'Model':<14} {'Tc':>8} {'gamma/nu':>10} {'beta/nu':>10} {'nu(col)':>8} {'nu(Bnd)':>8} {'nu*':>8} {'method':>10}")
+        print(f"  {'-' * 82}")
         for r in results:
             bn = f"{r['beta_nu']:.4f}" if not np.isnan(r["beta_nu"]) else "N/A"
-            print(f"  {r['model']:<14} {r['Tc']:>8.4f} {r['gamma_nu']:>10.4f} {bn:>10} {r['nu']:>8.4f}")
+            nc = f"{r['nu_collapse']:.4f}"
+            nb = f"{r['nu_binder']:.4f}" if not np.isnan(r["nu_binder"]) else "N/A"
+            nu_best = f"{r['nu_best']:.4f}"
+            print(f"  {r['model']:<14} {r['Tc']:>8.4f} {r['gamma_nu']:>10.4f} {bn:>10} {nc:>8} {nb:>8} {nu_best:>8} {r['nu_method']:>10}")
         print(f"\n  Theory:")
         for model in models:
             if model in THEORY:
