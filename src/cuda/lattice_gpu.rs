@@ -10,7 +10,7 @@ pub struct LatticeGpu {
     pub n: usize,
     device: Arc<CudaDevice>,
     spins: CudaSlice<i8>,
-    // curandState is ~48 bytes per thread; store as raw u8 slice
+    // Philox RNG state: 16 bytes per thread
     rng_states: CudaSlice<u8>,
     n_threads: u32,
     // Pre-allocated reduction buffers (avoid per-sample allocation)
@@ -40,8 +40,8 @@ impl LatticeGpu {
             .collect();
 
         let spins = device.htod_sync_copy(&host_spins)?;
-        // 48 bytes per curandState
-        let rng_states = device.alloc_zeros::<u8>((n_threads as usize) * 48)?;
+        // 16 bytes per Philox RNG state
+        let rng_states = device.alloc_zeros::<u8>((n_threads as usize) * 16)?;
 
         // Pre-allocate reduction buffers
         let n_blocks = ((size as u32) + 256 - 1) / 256;

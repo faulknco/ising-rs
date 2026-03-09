@@ -62,7 +62,7 @@ impl ContinuousGpuLattice {
         }
 
         let spins = device.htod_sync_copy(&host_spins)?;
-        let rng_states = device.alloc_zeros::<u8>((n_threads as usize) * 48)?;
+        let rng_states = device.alloc_zeros::<u8>((n_threads as usize) * 16)?;
 
         // Pre-allocate reduction buffers
         let n_blocks = ((n_sites as u32) + BLOCK_SIZE - 1) / BLOCK_SIZE;
