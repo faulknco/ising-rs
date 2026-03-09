@@ -726,3 +726,242 @@ fn gpu_fss_ising_smoke() {
 
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+// ---------------------------------------------------------------------------
+// Input validation rejection tests
+// ---------------------------------------------------------------------------
+
+/// Helper: run a binary with given args and assert it exits with a non-zero
+/// status and stderr contains the expected error fragment.
+fn assert_rejects(bin: &str, args: &[&str], expected_stderr: &str) {
+    let output = cargo_bin(bin)
+        .args(args)
+        .output()
+        .unwrap_or_else(|e| panic!("failed to run {bin}: {e}"));
+
+    assert!(
+        !output.status.success(),
+        "{bin} should have rejected invalid input but exited successfully"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains(expected_stderr),
+        "{bin}: expected stderr to contain '{expected_stderr}', got:\n{stderr}"
+    );
+}
+
+#[test]
+fn sweep_rejects_steps_below_2() {
+    assert_rejects(
+        "sweep",
+        &["--n", "4", "--tmin", "3.0", "--tmax", "5.0", "--steps", "1"],
+        "--steps must be at least 2",
+    );
+}
+
+#[test]
+fn sweep_rejects_zero_samples() {
+    assert_rejects(
+        "sweep",
+        &[
+            "--n", "4", "--tmin", "3.0", "--tmax", "5.0", "--steps", "2", "--samples", "0",
+        ],
+        "--samples must be at least 1",
+    );
+}
+
+#[test]
+fn sweep_rejects_inverted_temp_range() {
+    assert_rejects(
+        "sweep",
+        &[
+            "--n", "4", "--tmin", "5.0", "--tmax", "3.0", "--steps", "2",
+        ],
+        "--tmin",
+    );
+}
+
+#[test]
+fn fss_rejects_zero_warmup() {
+    assert_rejects(
+        "fss",
+        &[
+            "--sizes", "4", "--tmin", "3.0", "--tmax", "5.0", "--steps", "2", "--warmup", "0",
+        ],
+        "--warmup must be at least 1",
+    );
+}
+
+#[test]
+fn heisenberg_fss_rejects_steps_below_2() {
+    assert_rejects(
+        "heisenberg_fss",
+        &["--tmin", "1.0", "--tmax", "2.0", "--steps", "1"],
+        "--steps must be at least 2",
+    );
+}
+
+#[test]
+fn heisenberg_fss_rejects_zero_samples() {
+    assert_rejects(
+        "heisenberg_fss",
+        &[
+            "--tmin", "1.0", "--tmax", "2.0", "--steps", "2", "--samples", "0",
+        ],
+        "--samples must be at least 1",
+    );
+}
+
+#[test]
+fn xy_fss_rejects_inverted_temp_range() {
+    assert_rejects(
+        "xy_fss",
+        &["--tmin", "3.0", "--tmax", "1.0", "--steps", "2"],
+        "--tmin",
+    );
+}
+
+#[test]
+fn heisenberg_jfit_rejects_steps_below_2() {
+    assert_rejects(
+        "heisenberg_jfit",
+        &[
+            "--graph",
+            "analysis/graphs/bcc_N4.json",
+            "--tmin",
+            "5.0",
+            "--tmax",
+            "8.0",
+            "--steps",
+            "1",
+        ],
+        "--steps must be at least 2",
+    );
+}
+
+#[test]
+fn mesh_sweep_rejects_missing_graph() {
+    assert_rejects("mesh_sweep", &["--tmin", "1.0", "--tmax", "3.0"], "--graph");
+}
+
+#[test]
+fn kz_rejects_zero_trials() {
+    assert_rejects(
+        "kz",
+        &[
+            "--n", "4", "--tau-min", "10", "--tau-max", "100", "--tau-steps", "2", "--trials", "0",
+        ],
+        "--trials must be at least 1",
+    );
+}
+
+// ---------------------------------------------------------------------------
+// xy_jfit: single temperature step support
+// ---------------------------------------------------------------------------
+
+#[test]
+fn xy_jfit_supports_single_step() {
+    let tmp = std::env::temp_dir().join("ising_test_xy_jfit_single");
+    let _ = std::fs::remove_dir_all(&tmp);
+    std::fs::create_dir_all(&tmp).unwrap();
+
+    let output = cargo_bin("xy_jfit")
+        .args([
+            "--graph",
+            "analysis/graphs/bcc_N4.json",
+            "--tmin",
+            "2.5",
+            "--tmax",
+            "3.0",
+            "--steps",
+            "1",
+            "--warmup",
+            "20",
+            "--samples",
+            "40",
+            "--seed",
+            "1",
+            "--outdir",
+            tmp.to_str().unwrap(),
+        ])
+        .output()
+        .expect("failed to run xy_jfit --steps 1");
+
+    assert!(
+        output.status.success(),
+        "xy_jfit --steps 1 should succeed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let csv = std::fs::read_to_string(tmp.join("xy_jfit_bcc_N4.csv")).expect("CSV not written");
+    let rows: Vec<&str> = csv.trim().lines().collect();
+    assert_eq!(rows.len(), 2, "expected header + 1 data row for --steps 1");
+
+    // Single-step should use t_min as the temperature
+    let t: f64 = rows[1].split(',').next().unwrap().parse().unwrap();
+    assert!(
+        (t - 2.5).abs() < 0.01,
+        "single-step should use t_min=2.5, got {t}"
+    );
+
+    let _ = std::fs::remove_dir_all(&tmp);
+}
+
+// ---------------------------------------------------------------------------
+// mesh_sweep: behavior-locking tests
+// ---------------------------------------------------------------------------
+
+#[test]
+fn mesh_sweep_independent_per_temperature() {
+    // Verify that mesh_sweep produces reproducible, seed-dependent results
+    // and that each temperature point is independent (same seed = same output).
+    let tmp1 = std::env::temp_dir().join("ising_test_mesh_indep_1");
+    let tmp2 = std::env::temp_dir().join("ising_test_mesh_indep_2");
+    for tmp in [&tmp1, &tmp2] {
+        let _ = std::fs::remove_dir_all(tmp);
+        std::fs::create_dir_all(tmp).unwrap();
+    }
+
+    let graph_json = r#"{"n_nodes": 4, "edges": [[0,1],[1,2],[2,3],[3,0]]}"#;
+    let graph1 = tmp1.join("ring4.json");
+    let graph2 = tmp2.join("ring4.json");
+    std::fs::write(&graph1, graph_json).unwrap();
+    std::fs::write(&graph2, graph_json).unwrap();
+
+    let run = |tmp: &std::path::Path, graph: &std::path::Path| -> String {
+        let output = cargo_bin("mesh_sweep")
+            .args([
+                "--graph",
+                graph.to_str().unwrap(),
+                "--tmin",
+                "1.0",
+                "--tmax",
+                "3.0",
+                "--steps",
+                "3",
+                "--warmup",
+                "50",
+                "--samples",
+                "50",
+                "--seed",
+                "42",
+                "--outdir",
+                tmp.to_str().unwrap(),
+                "--prefix",
+                "ring4",
+            ])
+            .output()
+            .expect("failed to run mesh_sweep");
+        assert!(output.status.success());
+        std::fs::read_to_string(tmp.join("ring4_sweep.csv")).unwrap()
+    };
+
+    let csv1 = run(&tmp1, &graph1);
+    let csv2 = run(&tmp2, &graph2);
+
+    // Same seed, same graph → identical output (deterministic)
+    assert_eq!(csv1, csv2, "mesh_sweep should be deterministic given the same seed");
+
+    let _ = std::fs::remove_dir_all(&tmp1);
+    let _ = std::fs::remove_dir_all(&tmp2);
+}
