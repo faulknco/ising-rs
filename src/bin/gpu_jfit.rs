@@ -57,18 +57,53 @@ fn main() {
     let mut i = 1;
     while i < args.len() {
         match args[i].as_str() {
-            "--model"          => { model        = get_arg(&args, i, "--model"); i += 2; }
-            "--graph"          => { graph_path   = get_arg(&args, i, "--graph"); i += 2; }
-            "--outdir"         => { outdir       = get_arg(&args, i, "--outdir"); i += 2; }
-            "--tmin"           => { t_min        = parse_flag(&args, i, "--tmin"); i += 2; }
-            "--tmax"           => { t_max        = parse_flag(&args, i, "--tmax"); i += 2; }
-            "--replicas"       => { n_replicas   = parse_flag(&args, i, "--replicas"); i += 2; }
-            "--warmup"         => { warmup       = parse_flag(&args, i, "--warmup"); i += 2; }
-            "--samples"        => { samples      = parse_flag(&args, i, "--samples"); i += 2; }
-            "--exchange-every" => { exchange_every = parse_flag(&args, i, "--exchange-every"); i += 2; }
-            "--seed"           => { seed         = parse_flag(&args, i, "--seed"); i += 2; }
-            "--j"              => { j            = parse_flag(&args, i, "--j"); i += 2; }
-            _ => { i += 1; }
+            "--model" => {
+                model = get_arg(&args, i, "--model");
+                i += 2;
+            }
+            "--graph" => {
+                graph_path = get_arg(&args, i, "--graph");
+                i += 2;
+            }
+            "--outdir" => {
+                outdir = get_arg(&args, i, "--outdir");
+                i += 2;
+            }
+            "--tmin" => {
+                t_min = parse_flag(&args, i, "--tmin");
+                i += 2;
+            }
+            "--tmax" => {
+                t_max = parse_flag(&args, i, "--tmax");
+                i += 2;
+            }
+            "--replicas" => {
+                n_replicas = parse_flag(&args, i, "--replicas");
+                i += 2;
+            }
+            "--warmup" => {
+                warmup = parse_flag(&args, i, "--warmup");
+                i += 2;
+            }
+            "--samples" => {
+                samples = parse_flag(&args, i, "--samples");
+                i += 2;
+            }
+            "--exchange-every" => {
+                exchange_every = parse_flag(&args, i, "--exchange-every");
+                i += 2;
+            }
+            "--seed" => {
+                seed = parse_flag(&args, i, "--seed");
+                i += 2;
+            }
+            "--j" => {
+                j = parse_flag(&args, i, "--j");
+                i += 2;
+            }
+            _ => {
+                i += 1;
+            }
         }
     }
 
@@ -103,9 +138,45 @@ fn main() {
     );
 
     match model.as_str() {
-        "ising"      => run_ising_jfit(&neighbours, &graph_name, t_min, t_max, n_replicas, warmup, samples, exchange_every, seed, j, &outdir),
-        "xy"         => run_xy_jfit(&neighbours, &graph_name, t_min, t_max, n_replicas, warmup, samples, exchange_every, seed, j, &outdir),
-        "heisenberg" => run_heisenberg_jfit(&neighbours, &graph_name, t_min, t_max, n_replicas, warmup, samples, exchange_every, seed, j, &outdir),
+        "ising" => run_ising_jfit(
+            &neighbours,
+            &graph_name,
+            t_min,
+            t_max,
+            n_replicas,
+            warmup,
+            samples,
+            exchange_every,
+            seed,
+            j,
+            &outdir,
+        ),
+        "xy" => run_xy_jfit(
+            &neighbours,
+            &graph_name,
+            t_min,
+            t_max,
+            n_replicas,
+            warmup,
+            samples,
+            exchange_every,
+            seed,
+            j,
+            &outdir,
+        ),
+        "heisenberg" => run_heisenberg_jfit(
+            &neighbours,
+            &graph_name,
+            t_min,
+            t_max,
+            n_replicas,
+            warmup,
+            samples,
+            exchange_every,
+            seed,
+            j,
+            &outdir,
+        ),
         _ => {
             eprintln!("Error: --model must be ising, xy, or heisenberg");
             std::process::exit(1);
@@ -114,12 +185,19 @@ fn main() {
 }
 
 fn run_ising_jfit(
-    neighbours: &[Vec<usize>], graph_name: &str,
-    t_min: f64, t_max: f64, n_replicas: usize,
-    warmup: usize, samples: usize, exchange_every: usize,
-    seed: u64, j: f64, outdir: &str,
+    neighbours: &[Vec<usize>],
+    graph_name: &str,
+    t_min: f64,
+    t_max: f64,
+    n_replicas: usize,
+    warmup: usize,
+    samples: usize,
+    exchange_every: usize,
+    seed: u64,
+    j: f64,
+    outdir: &str,
 ) {
-    use ising::lattice::{Lattice, Geometry};
+    use ising::lattice::{Geometry, Lattice};
     use ising::metropolis::sweep;
     use ising::observables::energy_magnetisation;
     use rand::SeedableRng;
@@ -158,12 +236,12 @@ fn run_ising_jfit(
     }
 
     // Accumulators per temperature index
-    let mut sum_e  = vec![0.0_f64; n_replicas];
+    let mut sum_e = vec![0.0_f64; n_replicas];
     let mut sum_e2 = vec![0.0_f64; n_replicas];
-    let mut sum_m  = vec![0.0_f64; n_replicas];
+    let mut sum_m = vec![0.0_f64; n_replicas];
     let mut sum_m2 = vec![0.0_f64; n_replicas];
     let mut sum_m4 = vec![0.0_f64; n_replicas];
-    let mut count  = vec![0usize; n_replicas];
+    let mut count = vec![0usize; n_replicas];
     let mut n_exchanges = 0usize;
 
     for s in 0..samples {
@@ -179,19 +257,22 @@ fn run_ising_jfit(
             let m_per = (m / n_f64).abs();
             energies[r] = e;
 
-            sum_e[t_idx]  += e_per;
+            sum_e[t_idx] += e_per;
             sum_e2[t_idx] += e_per * e_per;
-            sum_m[t_idx]  += m_per;
+            sum_m[t_idx] += m_per;
             sum_m2[t_idx] += m_per * m_per;
             sum_m4[t_idx] += m_per.powi(4);
-            count[t_idx]  += 1;
+            count[t_idx] += 1;
         }
 
         if (s + 1) % exchange_every == 0 {
             n_exchanges += replica_exchange(
-                &temperatures, &energies,
-                &mut replica_to_temp, &mut temp_to_replica,
-                &mut rng, s / exchange_every,
+                &temperatures,
+                &energies,
+                &mut replica_to_temp,
+                &mut temp_to_replica,
+                &mut rng,
+                s / exchange_every,
             );
         }
     }
@@ -201,7 +282,9 @@ fn run_ising_jfit(
 
     for t_idx in 0..n_replicas {
         let s = count[t_idx] as f64;
-        if s == 0.0 { continue; }
+        if s == 0.0 {
+            continue;
+        }
         let t = temperatures[t_idx];
         let beta = 1.0 / t;
         let avg_e = sum_e[t_idx] / s;
@@ -224,13 +307,20 @@ fn run_ising_jfit(
 }
 
 fn run_xy_jfit(
-    neighbours: &[Vec<usize>], graph_name: &str,
-    t_min: f64, t_max: f64, n_replicas: usize,
-    warmup: usize, samples: usize, exchange_every: usize,
-    seed: u64, j: f64, outdir: &str,
+    neighbours: &[Vec<usize>],
+    graph_name: &str,
+    t_min: f64,
+    t_max: f64,
+    n_replicas: usize,
+    warmup: usize,
+    samples: usize,
+    exchange_every: usize,
+    seed: u64,
+    j: f64,
+    outdir: &str,
 ) {
-    use ising::xy::{XyLattice, energy_magnetisation};
     use ising::xy::wolff::sweep;
+    use ising::xy::{energy_magnetisation, XyLattice};
     use rand::SeedableRng;
     use rand_xoshiro::Xoshiro256PlusPlus;
 
@@ -259,12 +349,12 @@ fn run_xy_jfit(
         }
     }
 
-    let mut sum_e  = vec![0.0_f64; n_replicas];
+    let mut sum_e = vec![0.0_f64; n_replicas];
     let mut sum_e2 = vec![0.0_f64; n_replicas];
-    let mut sum_m  = vec![0.0_f64; n_replicas];
+    let mut sum_m = vec![0.0_f64; n_replicas];
     let mut sum_m2 = vec![0.0_f64; n_replicas];
     let mut sum_m4 = vec![0.0_f64; n_replicas];
-    let mut count  = vec![0usize; n_replicas];
+    let mut count = vec![0usize; n_replicas];
     let mut n_exchanges = 0usize;
 
     for s in 0..samples {
@@ -280,19 +370,22 @@ fn run_xy_jfit(
             let m_abs = (mag[0] * mag[0] + mag[1] * mag[1]).sqrt() / n_f64;
             energies[r] = e;
 
-            sum_e[t_idx]  += e_per;
+            sum_e[t_idx] += e_per;
             sum_e2[t_idx] += e_per * e_per;
-            sum_m[t_idx]  += m_abs;
+            sum_m[t_idx] += m_abs;
             sum_m2[t_idx] += m_abs * m_abs;
             sum_m4[t_idx] += m_abs.powi(4);
-            count[t_idx]  += 1;
+            count[t_idx] += 1;
         }
 
         if (s + 1) % exchange_every == 0 {
             n_exchanges += replica_exchange(
-                &temperatures, &energies,
-                &mut replica_to_temp, &mut temp_to_replica,
-                &mut rng, s / exchange_every,
+                &temperatures,
+                &energies,
+                &mut replica_to_temp,
+                &mut temp_to_replica,
+                &mut rng,
+                s / exchange_every,
             );
         }
     }
@@ -302,7 +395,9 @@ fn run_xy_jfit(
 
     for t_idx in 0..n_replicas {
         let s = count[t_idx] as f64;
-        if s == 0.0 { continue; }
+        if s == 0.0 {
+            continue;
+        }
         let t = temperatures[t_idx];
         let beta = 1.0 / t;
         let avg_e = sum_e[t_idx] / s;
@@ -325,13 +420,20 @@ fn run_xy_jfit(
 }
 
 fn run_heisenberg_jfit(
-    neighbours: &[Vec<usize>], graph_name: &str,
-    t_min: f64, t_max: f64, n_replicas: usize,
-    warmup: usize, samples: usize, exchange_every: usize,
-    seed: u64, j: f64, outdir: &str,
+    neighbours: &[Vec<usize>],
+    graph_name: &str,
+    t_min: f64,
+    t_max: f64,
+    n_replicas: usize,
+    warmup: usize,
+    samples: usize,
+    exchange_every: usize,
+    seed: u64,
+    j: f64,
+    outdir: &str,
 ) {
-    use ising::heisenberg::{HeisenbergLattice, energy_magnetisation};
     use ising::heisenberg::metropolis::sweep as heisenberg_sweep;
+    use ising::heisenberg::{energy_magnetisation, HeisenbergLattice};
     use rand::SeedableRng;
     use rand_xoshiro::Xoshiro256PlusPlus;
 
@@ -360,12 +462,12 @@ fn run_heisenberg_jfit(
         }
     }
 
-    let mut sum_e  = vec![0.0_f64; n_replicas];
+    let mut sum_e = vec![0.0_f64; n_replicas];
     let mut sum_e2 = vec![0.0_f64; n_replicas];
-    let mut sum_m  = vec![0.0_f64; n_replicas];
+    let mut sum_m = vec![0.0_f64; n_replicas];
     let mut sum_m2 = vec![0.0_f64; n_replicas];
     let mut sum_m4 = vec![0.0_f64; n_replicas];
-    let mut count  = vec![0usize; n_replicas];
+    let mut count = vec![0usize; n_replicas];
     let mut n_exchanges = 0usize;
 
     for s in 0..samples {
@@ -381,19 +483,22 @@ fn run_heisenberg_jfit(
             let m_abs = (mag[0] * mag[0] + mag[1] * mag[1] + mag[2] * mag[2]).sqrt() / n_f64;
             energies[r] = e;
 
-            sum_e[t_idx]  += e_per;
+            sum_e[t_idx] += e_per;
             sum_e2[t_idx] += e_per * e_per;
-            sum_m[t_idx]  += m_abs;
+            sum_m[t_idx] += m_abs;
             sum_m2[t_idx] += m_abs * m_abs;
             sum_m4[t_idx] += m_abs.powi(4);
-            count[t_idx]  += 1;
+            count[t_idx] += 1;
         }
 
         if (s + 1) % exchange_every == 0 {
             n_exchanges += replica_exchange(
-                &temperatures, &energies,
-                &mut replica_to_temp, &mut temp_to_replica,
-                &mut rng, s / exchange_every,
+                &temperatures,
+                &energies,
+                &mut replica_to_temp,
+                &mut temp_to_replica,
+                &mut rng,
+                s / exchange_every,
             );
         }
     }
@@ -403,7 +508,9 @@ fn run_heisenberg_jfit(
 
     for t_idx in 0..n_replicas {
         let s = count[t_idx] as f64;
-        if s == 0.0 { continue; }
+        if s == 0.0 {
+            continue;
+        }
         let t = temperatures[t_idx];
         let beta = 1.0 / t;
         let avg_e = sum_e[t_idx] / s;

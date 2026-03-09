@@ -112,9 +112,21 @@ pub fn reduce_continuous_mag(
         )?;
     }
 
-    let mx: f64 = device.dtoh_sync_copy(&partial_mx)?.iter().map(|&x| x as f64).sum();
-    let my: f64 = device.dtoh_sync_copy(&partial_my)?.iter().map(|&x| x as f64).sum();
-    let mz: f64 = device.dtoh_sync_copy(&partial_mz)?.iter().map(|&x| x as f64).sum();
+    let mx: f64 = device
+        .dtoh_sync_copy(&partial_mx)?
+        .iter()
+        .map(|&x| x as f64)
+        .sum();
+    let my: f64 = device
+        .dtoh_sync_copy(&partial_my)?
+        .iter()
+        .map(|&x| x as f64)
+        .sum();
+    let mz: f64 = device
+        .dtoh_sync_copy(&partial_mz)?
+        .iter()
+        .map(|&x| x as f64)
+        .sum();
 
     Ok((mx, my, mz))
 }
@@ -132,7 +144,9 @@ pub fn reduce_continuous_energy(
     let shared = BLOCK_SIZE as u32 * 4; // sizeof(float)
 
     let mut partial_e = device.alloc_zeros::<f32>(n_blocks as usize)?;
-    let f = device.get_func("reduce", "reduce_energy_continuous").unwrap();
+    let f = device
+        .get_func("reduce", "reduce_energy_continuous")
+        .unwrap();
     unsafe {
         f.launch(
             LaunchConfig {

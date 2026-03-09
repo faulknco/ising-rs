@@ -683,13 +683,31 @@ fn gpu_fss_ising_smoke() {
 
     let status = std::process::Command::new("cargo")
         .args([
-            "run", "--release", "--features", "cuda", "--bin", "gpu_fss", "--",
-            "--model", "ising",
-            "--sizes", "4",
-            "--tmin", "4.4", "--tmax", "4.6", "--replicas", "4",
-            "--warmup", "50", "--samples", "100",
-            "--exchange-every", "10",
-            "--outdir", dir.to_str().unwrap(),
+            "run",
+            "--release",
+            "--features",
+            "cuda",
+            "--bin",
+            "gpu_fss",
+            "--",
+            "--model",
+            "ising",
+            "--sizes",
+            "4",
+            "--tmin",
+            "4.4",
+            "--tmax",
+            "4.6",
+            "--replicas",
+            "4",
+            "--warmup",
+            "50",
+            "--samples",
+            "100",
+            "--exchange-every",
+            "10",
+            "--outdir",
+            dir.to_str().unwrap(),
         ])
         .status()
         .expect("failed to run gpu_fss");

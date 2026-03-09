@@ -3,8 +3,7 @@ use std::sync::Arc;
 
 use crate::cuda::reduce_gpu;
 
-const CONTINUOUS_PTX: &str =
-    include_str!(concat!(env!("OUT_DIR"), "/continuous_spin_kernel.ptx"));
+const CONTINUOUS_PTX: &str = include_str!(concat!(env!("OUT_DIR"), "/continuous_spin_kernel.ptx"));
 const BLOCK_SIZE: u32 = 256;
 
 pub struct ContinuousGpuLattice {
@@ -181,7 +180,10 @@ impl ContinuousGpuLattice {
 
         // --- Magnetisation (3-component) ---
         let shared_mag = BLOCK_SIZE as u32 * 4 * 3; // 3 float arrays in shared mem
-        let f_mag = self.device.get_func("reduce", "reduce_mag_continuous").unwrap();
+        let f_mag = self
+            .device
+            .get_func("reduce", "reduce_mag_continuous")
+            .unwrap();
         unsafe {
             f_mag.launch(
                 LaunchConfig {
@@ -202,7 +204,10 @@ impl ContinuousGpuLattice {
 
         // --- Energy ---
         let shared_e = BLOCK_SIZE as u32 * 4;
-        let f_energy = self.device.get_func("reduce", "reduce_energy_continuous").unwrap();
+        let f_energy = self
+            .device
+            .get_func("reduce", "reduce_energy_continuous")
+            .unwrap();
         unsafe {
             f_energy.launch(
                 LaunchConfig {
@@ -210,7 +215,13 @@ impl ContinuousGpuLattice {
                     block_dim: (BLOCK_SIZE, 1, 1),
                     shared_mem_bytes: shared_e,
                 },
-                (&self.spins, &mut self.reduce_partial_e, self.n as i32, self.n_comp as i32, j),
+                (
+                    &self.spins,
+                    &mut self.reduce_partial_e,
+                    self.n as i32,
+                    self.n_comp as i32,
+                    j,
+                ),
             )?;
         }
 
