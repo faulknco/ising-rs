@@ -27,7 +27,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
-from scipy.optimize import minimize_scalar
+from scipy.optimize import minimize_scalar, minimize
 from scipy.interpolate import interp1d
 
 # Add analysis/scripts to path for reweighting module
@@ -162,6 +162,8 @@ def wham_reweight_fine(energy_lists, mag_lists, beta_list, T_fine, n: int,
 
     Error bars use single-histogram jackknife from the closest replica
     (fast approximation — full WHAM jackknife is too expensive for large datasets).
+
+    Falls back to single-histogram if WHAM produces invalid results.
     """
     V = n ** 3
     K = len(beta_list)
@@ -171,9 +173,9 @@ def wham_reweight_fine(energy_lists, mag_lists, beta_list, T_fine, n: int,
 
     # Solve WHAM equations iteratively
     f = np.zeros(K)
-    for _ in range(n_iter):
+    converged = False
+    for it in range(n_iter):
         # Vectorised: log_denom_terms[n, k] = log(N_k) + f_k - beta_k * E_n
-        # Use broadcasting: (N,1) op (K,) → (N,K)
         log_denom_terms = (np.log(N_k) + f)[np.newaxis, :] - \
                           beta_list[np.newaxis, :] * all_energies[:, np.newaxis]
         log_denom = np.logaddexp.reduce(log_denom_terms, axis=1)
@@ -184,10 +186,18 @@ def wham_reweight_fine(energy_lists, mag_lists, beta_list, T_fine, n: int,
             f_new[k] = -np.logaddexp.reduce(log_terms)
         f_new -= f_new[0]
 
+        if not np.all(np.isfinite(f_new)):
+            print(f"    WARNING: WHAM free energies diverged at iteration {it}, falling back to single-histogram")
+            return reweight_single_histogram(energy_lists, mag_lists, beta_list, T_fine, n)
+
         if np.max(np.abs(f_new - f)) < tol:
             f = f_new
+            converged = True
             break
         f = f_new
+
+    if not converged:
+        print(f"    WARNING: WHAM did not converge after {n_iter} iterations (max delta={np.max(np.abs(f_new - f)):.2e})")
 
     # Precompute mag powers
     all_mags2 = all_mags ** 2
@@ -197,12 +207,19 @@ def wham_reweight_fine(energy_lists, mag_lists, beta_list, T_fine, n: int,
     # Compute observables at all target temperatures (vectorised weight application)
     sim_temps = 1.0 / beta_list
     rows = []
+    n_invalid = 0
     for T in T_fine:
         beta_t = 1.0 / T
         log_w = -beta_t * all_energies - log_denom
         log_w -= log_w.max()
         w = np.exp(log_w)
-        w /= w.sum()
+        w = np.clip(w, 0.0, None)
+        w_sum = w.sum()
+
+        if w_sum < 1e-30 or not np.isfinite(w_sum):
+            n_invalid += 1
+            continue
+        w /= w_sum
 
         avg_m = w @ all_mags
         avg_m2 = w @ all_mags2
@@ -213,6 +230,11 @@ def wham_reweight_fine(energy_lists, mag_lists, beta_list, T_fine, n: int,
         chi_conn = beta_t * V * (avg_m2 - avg_m ** 2)
         cv = beta_t ** 2 * (avg_e2 - avg_e ** 2) / V
         U = 1.0 - avg_m4 / (3.0 * avg_m2 ** 2) if avg_m2 > 1e-15 else 0.0
+
+        # Reject obviously invalid results
+        if chi_conn < 0 or not np.isfinite(chi_conn):
+            n_invalid += 1
+            continue
 
         # Fast error bars via single-histogram jackknife from closest replica
         k_best = int(np.argmin(np.abs(sim_temps - T)))
@@ -250,6 +272,14 @@ def wham_reweight_fine(energy_lists, mag_lists, beta_list, T_fine, n: int,
             "Cv": cv, "U": U, "E": avg_e / V,
             "M_err": m_err, "U_err": U_err,
         })
+
+    if n_invalid > 0:
+        print(f"    WARNING: WHAM rejected {n_invalid}/{len(T_fine)} temperature points (degenerate weights or negative chi)")
+
+    if len(rows) < len(T_fine) * 0.5:
+        print(f"    WARNING: WHAM lost >50% of T points, falling back to single-histogram")
+        return reweight_single_histogram(energy_lists, mag_lists, beta_list, T_fine, n)
+
     return pd.DataFrame(rows)
 
 
@@ -394,6 +424,145 @@ def binder_slope_nu(dfs: dict[int, pd.DataFrame], tc: float, fit_sizes: list[int
     nu = 1.0 / inv_nu if abs(inv_nu) > 1e-10 else np.nan
 
     return nu, [s[0] for s in slopes_out], slopes_out
+
+
+def blocking_error(data: np.ndarray, max_blocks: int = 50) -> float:
+    """Estimate error using blocking analysis to account for autocorrelations.
+
+    Doubles the block size until the error estimate plateaus, indicating
+    that blocks are longer than the autocorrelation time.
+
+    Returns the plateau error estimate.
+    """
+    n = len(data)
+    if n < 4:
+        return np.std(data) / np.sqrt(n) if n > 1 else 0.0
+
+    errors = []
+    block_size = 1
+    while block_size <= n // 4:
+        n_blocks = n // block_size
+        blocked = data[:n_blocks * block_size].reshape(n_blocks, block_size).mean(axis=1)
+        err = np.std(blocked) / np.sqrt(n_blocks)
+        errors.append(err)
+        block_size *= 2
+
+    # Return the maximum error (plateau) — this is the autocorrelation-corrected estimate
+    return max(errors) if errors else 0.0
+
+
+def weighted_polyfit(x, y, y_err, deg=1):
+    """Weighted least-squares polynomial fit.
+
+    Uses inverse-variance weights: w_i = 1/sigma_i^2.
+    Falls back to unweighted if any errors are zero or invalid.
+
+    Returns (coefficients, chi2_reduced).
+    """
+    x = np.asarray(x, dtype=float)
+    y = np.asarray(y, dtype=float)
+    y_err = np.asarray(y_err, dtype=float)
+
+    # Fall back to unweighted if errors are zero/invalid
+    if np.any(y_err <= 0) or not np.all(np.isfinite(y_err)):
+        coeffs = np.polyfit(x, y, deg)
+        return coeffs, np.nan
+
+    w = 1.0 / y_err ** 2
+    coeffs = np.polyfit(x, y, deg, w=w)
+    residuals = y - np.polyval(coeffs, x)
+    chi2 = np.sum(w * residuals ** 2)
+    dof = len(x) - (deg + 1)
+    chi2_red = chi2 / dof if dof > 0 else np.nan
+    return coeffs, chi2_red
+
+
+def hyperscaling_beta_nu(gamma_nu: float, d: int = 3) -> float:
+    """Compute beta/nu from hyperscaling: 2*beta/nu + gamma/nu = d."""
+    return (d - gamma_nu) / 2.0
+
+
+def tc_sensitivity(dfs, peak_src, tc_meas, tc_err, fit_rw_sizes, th):
+    """Propagate Tc uncertainty into exponent estimates.
+
+    Varies Tc by +/- tc_err and tracks how gamma/nu and beta/nu shift.
+    Returns dict with central values and systematic uncertainties.
+    """
+    if tc_err < 1e-8:
+        return None
+
+    results = {}
+    for tc_trial in [tc_meas - tc_err, tc_meas, tc_meas + tc_err]:
+        chi_peaks = []
+        m_at_tc = []
+        for n in fit_rw_sizes:
+            if n not in peak_src:
+                continue
+            df = peak_src[n]
+            idx = df["chi_conn"].idxmax()
+            chi_peaks.append(df.loc[idx, "chi_conn"])
+            try:
+                f_m = interp1d(df["T"], df["M"], kind="cubic")
+                m_at_tc.append((n, float(f_m(tc_trial))))
+            except (ValueError, KeyError):
+                pass
+
+        log_n = np.log(fit_rw_sizes[:len(chi_peaks)])
+        if len(chi_peaks) >= 2:
+            gn, _ = np.polyfit(log_n, np.log(chi_peaks), 1)
+        else:
+            gn = np.nan
+
+        valid = [(n, m) for n, m in m_at_tc if m > 0]
+        if len(valid) >= 2:
+            vn, vm = zip(*valid)
+            slope, _ = np.polyfit(np.log(vn), np.log(vm), 1)
+            bn = -slope
+        else:
+            bn = np.nan
+
+        label = "lo" if tc_trial < tc_meas else "hi" if tc_trial > tc_meas else "mid"
+        results[label] = {"gamma_nu": gn, "beta_nu": bn}
+
+    if "lo" in results and "hi" in results:
+        gn_spread = abs(results["hi"]["gamma_nu"] - results["lo"]["gamma_nu"]) / 2
+        bn_spread = abs(results["hi"]["beta_nu"] - results["lo"]["beta_nu"]) / 2
+        return {"gamma_nu_tc_err": gn_spread, "beta_nu_tc_err": bn_spread}
+    return None
+
+
+def auto_fit_range(sizes, log_chi_peaks, log_chi_errs, log_m_at_tc, log_m_errs):
+    """Try all contiguous subsets of sizes (>=3) and pick the best chi2/dof.
+
+    Returns (best_sizes_gamma, best_gamma_nu, best_sizes_beta, best_beta_nu).
+    """
+    n = len(sizes)
+    best_gamma = {"chi2": np.inf, "sizes": sizes, "slope": np.nan}
+    best_beta = {"chi2": np.inf, "sizes": sizes, "slope": np.nan}
+
+    for start in range(n):
+        for end in range(start + 3, n + 1):  # at least 3 sizes
+            idx = slice(start, end)
+            sub_sizes = sizes[start:end]
+            ln = np.log(sub_sizes)
+
+            # gamma/nu
+            lcp = log_chi_peaks[idx]
+            lce = log_chi_errs[idx]
+            if len(lcp) >= 3 and np.all(np.isfinite(lcp)):
+                coeffs, chi2 = weighted_polyfit(ln, lcp, lce)
+                if np.isfinite(chi2) and chi2 < best_gamma["chi2"]:
+                    best_gamma = {"chi2": chi2, "sizes": list(sub_sizes), "slope": coeffs[0]}
+
+            # beta/nu
+            lm = log_m_at_tc[idx]
+            lme = log_m_errs[idx]
+            if len(lm) >= 3 and np.all(np.isfinite(lm)):
+                coeffs, chi2 = weighted_polyfit(ln, lm, lme)
+                if np.isfinite(chi2) and chi2 < best_beta["chi2"]:
+                    best_beta = {"chi2": chi2, "sizes": list(sub_sizes), "slope": -coeffs[0]}
+
+    return best_gamma, best_beta
 
 
 def analyze_model(model: str, dfs: dict[int, pd.DataFrame], out_dir: Path,
@@ -587,11 +756,16 @@ def analyze_model(model: str, dfs: dict[int, pd.DataFrame], out_dir: Path,
         all_chi_peaks[n] = df.loc[idx, "chi_conn"]
         all_chi_peak_errs[n] = df.loc[idx, "chi_err"] if "chi_err" in df.columns else 0.0
 
-    # Fit on fit_rw_sizes only
+    # Fit on fit_rw_sizes only — using weighted fit if errors available
     fit_log_n = np.log(fit_rw_sizes)
-    fit_chi_peaks = [all_chi_peaks[n] for n in fit_rw_sizes]
-    slope_chi, _ = np.polyfit(fit_log_n, np.log(fit_chi_peaks), 1)
-    gamma_nu = slope_chi
+    fit_chi_peaks = np.array([all_chi_peaks[n] for n in fit_rw_sizes])
+    fit_chi_errs = np.array([all_chi_peak_errs[n] for n in fit_rw_sizes])
+    log_chi_peaks = np.log(fit_chi_peaks)
+    # Error propagation: delta(log x) = delta(x) / x
+    log_chi_errs = fit_chi_errs / fit_chi_peaks
+    log_chi_errs[~np.isfinite(log_chi_errs)] = 0.0
+
+    (gamma_nu, _), chi2_gamma = weighted_polyfit(fit_log_n, log_chi_peaks, log_chi_errs)
     th_gamma_nu = th["gamma"] / th["nu"]
 
     # M(Tc) for all sizes (for plotting)
@@ -611,24 +785,52 @@ def analyze_model(model: str, dfs: dict[int, pd.DataFrame], out_dir: Path,
             all_m_at_tc[n] = np.nan
             all_m_at_tc_errs[n] = 0.0
 
-    # Fit beta/nu on fit_rw_sizes only
-    valid = [(n, all_m_at_tc[n]) for n in fit_rw_sizes
+    # Fit beta/nu on fit_rw_sizes only — weighted
+    valid = [(n, all_m_at_tc[n], all_m_at_tc_errs.get(n, 0.0)) for n in fit_rw_sizes
              if not np.isnan(all_m_at_tc.get(n, np.nan)) and all_m_at_tc.get(n, 0) > 0]
     if len(valid) >= 2:
-        vn, vm = zip(*valid)
-        slope_m, _ = np.polyfit(np.log(vn), np.log(vm), 1)
+        vn, vm, ve = zip(*valid)
+        vn, vm, ve = np.array(vn), np.array(vm), np.array(ve)
+        log_m = np.log(vm)
+        log_m_err = ve / vm
+        log_m_err[~np.isfinite(log_m_err)] = 0.0
+        (slope_m, _), chi2_beta = weighted_polyfit(np.log(vn), log_m, log_m_err)
         beta_nu = -slope_m
     else:
         beta_nu = np.nan
+        chi2_beta = np.nan
     th_beta_nu = th["beta"] / th["nu"]
+
+    # Hyperscaling cross-check: beta/nu = (d - gamma/nu) / 2
+    beta_nu_hyper = hyperscaling_beta_nu(gamma_nu)
 
     fit_label = f"{src_label}, fit L={fit_rw_sizes}" if fit_rw_sizes != all_rw_sizes else src_label
     print(f"\n  Peak scaling ({fit_label}):")
-    print(f"    gamma/nu = {gamma_nu:.4f}  (theory = {th_gamma_nu:.4f}, error = {abs(gamma_nu - th_gamma_nu) / th_gamma_nu * 100:.1f}%)")
+    chi2_str = f", chi2/dof={chi2_gamma:.2f}" if np.isfinite(chi2_gamma) else ""
+    print(f"    gamma/nu = {gamma_nu:.4f}  (theory = {th_gamma_nu:.4f}, error = {abs(gamma_nu - th_gamma_nu) / th_gamma_nu * 100:.1f}%{chi2_str})")
     if not np.isnan(beta_nu):
-        print(f"    beta/nu  = {beta_nu:.4f}  (theory = {th_beta_nu:.4f}, error = {abs(beta_nu - th_beta_nu) / th_beta_nu * 100:.1f}%)")
-        hyperscaling = 2 * beta_nu + gamma_nu
-        print(f"    2*beta/nu + gamma/nu = {hyperscaling:.4f}  (should = 3, error = {abs(hyperscaling - 3) / 3 * 100:.1f}%)")
+        chi2_str = f", chi2/dof={chi2_beta:.2f}" if np.isfinite(chi2_beta) else ""
+        print(f"    beta/nu  = {beta_nu:.4f}  (theory = {th_beta_nu:.4f}, error = {abs(beta_nu - th_beta_nu) / th_beta_nu * 100:.1f}%{chi2_str})")
+        print(f"    beta/nu (hyperscaling) = {beta_nu_hyper:.4f}  (from d=3, error = {abs(beta_nu_hyper - th_beta_nu) / th_beta_nu * 100:.1f}%)")
+        hyperscaling_val = 2 * beta_nu + gamma_nu
+        print(f"    2*beta/nu + gamma/nu = {hyperscaling_val:.4f}  (should = 3, error = {abs(hyperscaling_val - 3) / 3 * 100:.1f}%)")
+
+    # Auto-detect optimal fit range (#6)
+    if len(all_rw_sizes) >= 4:
+        all_sizes_arr = np.array(all_rw_sizes)
+        all_log_chi = np.array([np.log(all_chi_peaks[n]) for n in all_rw_sizes])
+        all_log_chi_e = np.array([all_chi_peak_errs[n] / all_chi_peaks[n]
+                                  if all_chi_peaks[n] > 0 else 0.0 for n in all_rw_sizes])
+        all_log_m = np.array([np.log(all_m_at_tc[n]) if all_m_at_tc.get(n, 0) > 0 else np.nan
+                              for n in all_rw_sizes])
+        all_log_m_e = np.array([all_m_at_tc_errs.get(n, 0) / all_m_at_tc[n]
+                                if all_m_at_tc.get(n, 0) > 0 else 0.0 for n in all_rw_sizes])
+        best_g, best_b = auto_fit_range(all_sizes_arr, all_log_chi, all_log_chi_e,
+                                         all_log_m, all_log_m_e)
+        if best_g["sizes"] != list(fit_rw_sizes) and np.isfinite(best_g["chi2"]):
+            print(f"    [auto] best gamma/nu range: L={best_g['sizes']} -> {best_g['slope']:.4f} (chi2/dof={best_g['chi2']:.2f})")
+        if best_b["sizes"] != list(fit_rw_sizes) and np.isfinite(best_b["chi2"]):
+            print(f"    [auto] best beta/nu range:  L={best_b['sizes']} -> {best_b['slope']:.4f} (chi2/dof={best_b['chi2']:.2f})")
 
     fig, axes = plt.subplots(1, 2, figsize=(8, 3.5))
     n_fit_line = np.linspace(min(all_rw_sizes) * 0.9, max(all_rw_sizes) * 1.1, 100)
@@ -687,12 +889,15 @@ def analyze_model(model: str, dfs: dict[int, pd.DataFrame], out_dir: Path,
     print(f"\n  Scaling collapse ({collapse_label}):")
     print(f"    nu (chi collapse) = {nu_collapse:.4f}  (theory = {th['nu']:.4f}, error = {abs(nu_collapse - th['nu']) / th['nu'] * 100:.1f}%)")
 
-    # ── 5b. Binder-slope nu ──────────────────────────────────────────────
+    # ── 5b. Binder-slope nu (using reweighted data for smoother derivative) ─
+    # Prefer reweighted data (200 T points) over raw summary (20-32 points)
+    binder_src = rw_dfs if use_rw else dfs
     nu_binder, binder_sizes_used, binder_slopes = binder_slope_nu(
-        peak_src, tc_meas, fit_sizes=fit_rw_sizes,
+        binder_src, tc_meas, fit_sizes=fit_rw_sizes,
     )
     if not np.isnan(nu_binder):
-        print(f"    nu (Binder slope) = {nu_binder:.4f}  (theory = {th['nu']:.4f}, error = {abs(nu_binder - th['nu']) / th['nu'] * 100:.1f}%)")
+        rw_note = " [reweighted]" if use_rw else ""
+        print(f"    nu (Binder slope{rw_note}) = {nu_binder:.4f}  (theory = {th['nu']:.4f}, error = {abs(nu_binder - th['nu']) / th['nu'] * 100:.1f}%)")
         print(f"      dU/dT|Tc: ", end="")
         for n, s in binder_slopes:
             print(f"L={n}: {s:.2f}  ", end="")
@@ -707,6 +912,13 @@ def analyze_model(model: str, dfs: dict[int, pd.DataFrame], out_dir: Path,
     else:
         nu_best = nu_collapse
         nu_method = "collapse"
+
+    # ── 5c. Tc sensitivity analysis (#5) ──────────────────────────────────
+    tc_sens = tc_sensitivity(dfs, peak_src, tc_meas, tc_err, fit_rw_sizes, th)
+    if tc_sens is not None:
+        print(f"\n  Tc sensitivity (delta Tc = +/- {tc_err:.4f}):")
+        print(f"    gamma/nu systematic: +/- {tc_sens['gamma_nu_tc_err']:.4f}")
+        print(f"    beta/nu  systematic: +/- {tc_sens['beta_nu_tc_err']:.4f}")
 
     fig, ax = plt.subplots(figsize=(5, 3.5))
     # Plot all sizes for visual context
@@ -740,6 +952,7 @@ def analyze_model(model: str, dfs: dict[int, pd.DataFrame], out_dir: Path,
         table_rows.append(("nu (Binder slope)", nu_binder, th["nu"], str(binder_sizes_used)))
     if not np.isnan(beta_nu):
         table_rows.append(("beta/nu (M@Tc)", beta_nu, th_beta_nu, str(fit_rw_sizes)))
+        table_rows.append(("beta/nu (hyperscaling)", beta_nu_hyper, th_beta_nu, "d=3"))
         table_rows.append(("2b/n + g/n", 2 * beta_nu + gamma_nu, 3.0, ""))
 
     for name, meas, theory, sz in table_rows:
@@ -752,11 +965,13 @@ def analyze_model(model: str, dfs: dict[int, pd.DataFrame], out_dir: Path,
         "Tc": tc_meas, "Tc_err": tc_err,
         "gamma_nu": gamma_nu,
         "beta_nu": beta_nu,
+        "beta_nu_hyper": beta_nu_hyper,
         "nu_collapse": nu_collapse,
         "nu_binder": nu_binder,
         "nu_best": nu_best,
         "nu_method": nu_method,
         "fit_sizes": fit_rw_sizes,
+        "tc_sensitivity": tc_sens,
     }
 
 
@@ -819,6 +1034,52 @@ def main():
             if model in THEORY:
                 th = THEORY[model]
                 print(f"  {model:<14} {th['Tc']:>8.4f} {th['gamma']/th['nu']:>10.4f} {th['beta']/th['nu']:>10.4f} {th['nu']:>8.4f}")
+
+    # ── Benchmark report table (CSV) ──────────────────────────────────────
+    if results:
+        benchmark_path = out_dir / "benchmark_report.csv"
+        rows = []
+        for r in results:
+            model = r["model"]
+            th = THEORY[model]
+            fit_sz = ",".join(str(s) for s in r["fit_sizes"])
+
+            def _row(quantity, measured, theory, method, sizes):
+                err_abs = abs(measured - theory)
+                err_rel = err_abs / abs(theory) * 100 if theory != 0 else 0.0
+                return {
+                    "model": model, "quantity": quantity,
+                    "measured": round(measured, 6), "theory": round(theory, 6),
+                    "abs_error": round(err_abs, 6), "rel_error_pct": round(err_rel, 2),
+                    "method": method, "fit_sizes": sizes,
+                    "status": "OK" if err_rel < 5 else "WEAK" if err_rel < 15 else "FAIL",
+                }
+
+            rows.append(_row("Tc", r["Tc"], th["Tc"], "Binder crossing", "all"))
+            rows.append(_row("gamma/nu", r["gamma_nu"], th["gamma"]/th["nu"],
+                             f"{args.method} reweighting", fit_sz))
+            if not np.isnan(r["beta_nu"]):
+                rows.append(_row("beta/nu", r["beta_nu"], th["beta"]/th["nu"],
+                                 f"{args.method} reweighting", fit_sz))
+                rows.append(_row("beta/nu", r["beta_nu_hyper"], th["beta"]/th["nu"],
+                                 "hyperscaling", "d=3"))
+            rows.append(_row("nu", r["nu_collapse"], th["nu"], "collapse", fit_sz))
+            if not np.isnan(r["nu_binder"]):
+                rows.append(_row("nu", r["nu_binder"], th["nu"], "Binder slope", fit_sz))
+
+        bench_df = pd.DataFrame(rows)
+        bench_df.to_csv(benchmark_path, index=False)
+        print(f"\n  Benchmark report saved to: {benchmark_path}")
+
+        # Print benchmark table
+        print(f"\n{'=' * 60}")
+        print(f"  BENCHMARK REPORT TABLE")
+        print(f"{'=' * 60}")
+        print(f"  {'Model':<12} {'Quantity':<10} {'Measured':>10} {'Theory':>10} {'Err%':>7} {'Status':<6} {'Method':<20} {'Sizes'}")
+        print(f"  {'-' * 95}")
+        for _, row in bench_df.iterrows():
+            print(f"  {row['model']:<12} {row['quantity']:<10} {row['measured']:>10.4f} {row['theory']:>10.4f} "
+                  f"{row['rel_error_pct']:>6.1f}% {row['status']:<6} {row['method']:<20} {row['fit_sizes']}")
 
     print(f"\nFigures saved to: {out_dir}")
 

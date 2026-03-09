@@ -96,11 +96,25 @@ def wham_reweight(energy_lists, beta_list, beta_target, n_iter=100, tol=1e-8):
             break
         f = f_new
 
+    # Validate free energies
+    if not np.all(np.isfinite(f)):
+        raise ValueError(f"WHAM free energies diverged: f={f}")
+
     # Compute weights at target beta
     log_w = -beta_target * all_energies - log_denom
     log_w -= log_w.max()
     w = np.exp(log_w)
-    w /= w.sum()
+
+    # Clamp near-zero weights and check for invalid values
+    w = np.clip(w, 0.0, None)
+    w_sum = w.sum()
+    if w_sum < 1e-30 or not np.isfinite(w_sum):
+        raise ValueError(f"WHAM weights are degenerate: sum={w_sum}")
+    w /= w_sum
+
+    # Final sanity check
+    if not np.all(np.isfinite(w)):
+        raise ValueError("WHAM produced non-finite weights after normalization")
 
     # Which simulation each sample came from
     sim_idx = np.concatenate([np.full(n, k) for k, n in enumerate(N_k)])
