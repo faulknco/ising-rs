@@ -913,55 +913,80 @@ fn xy_jfit_supports_single_step() {
 
 #[test]
 fn mesh_sweep_independent_per_temperature() {
-    // Verify that mesh_sweep produces reproducible, seed-dependent results
-    // and that each temperature point is independent (same seed = same output).
-    let tmp1 = std::env::temp_dir().join("ising_test_mesh_indep_1");
-    let tmp2 = std::env::temp_dir().join("ising_test_mesh_indep_2");
-    for tmp in [&tmp1, &tmp2] {
+    // Verify that each temperature point is independently initialized.
+    // Oracle: run T=2.0 alone (--steps 1, tmin=tmax=2.0), then run a
+    // 3-step sweep containing T=2.0. If temperatures are independent,
+    // the T=2.0 row must be identical in both runs. An annealing
+    // implementation would carry state from T=3.0→T=2.0, producing
+    // different results than the isolated single-temperature run.
+    let tmp_single = std::env::temp_dir().join("ising_test_mesh_single");
+    let tmp_multi = std::env::temp_dir().join("ising_test_mesh_multi");
+    for tmp in [&tmp_single, &tmp_multi] {
         let _ = std::fs::remove_dir_all(tmp);
         std::fs::create_dir_all(tmp).unwrap();
     }
 
     let graph_json = r#"{"n_nodes": 4, "edges": [[0,1],[1,2],[2,3],[3,0]]}"#;
-    let graph1 = tmp1.join("ring4.json");
-    let graph2 = tmp2.join("ring4.json");
-    std::fs::write(&graph1, graph_json).unwrap();
-    std::fs::write(&graph2, graph_json).unwrap();
+    let graph_s = tmp_single.join("ring4.json");
+    let graph_m = tmp_multi.join("ring4.json");
+    std::fs::write(&graph_s, graph_json).unwrap();
+    std::fs::write(&graph_m, graph_json).unwrap();
 
-    let run = |tmp: &std::path::Path, graph: &std::path::Path| -> String {
-        let output = cargo_bin("mesh_sweep")
-            .args([
-                "--graph",
-                graph.to_str().unwrap(),
-                "--tmin",
-                "1.0",
-                "--tmax",
-                "3.0",
-                "--steps",
-                "3",
-                "--warmup",
-                "50",
-                "--samples",
-                "50",
-                "--seed",
-                "42",
-                "--outdir",
-                tmp.to_str().unwrap(),
-                "--prefix",
-                "ring4",
-            ])
-            .output()
-            .expect("failed to run mesh_sweep");
-        assert!(output.status.success());
-        std::fs::read_to_string(tmp.join("ring4_sweep.csv")).unwrap()
-    };
+    // Run 1: single temperature T=2.0
+    let out_single = cargo_bin("mesh_sweep")
+        .args([
+            "--graph", graph_s.to_str().unwrap(),
+            "--tmin", "2.0", "--tmax", "3.0",
+            "--steps", "2",
+            "--warmup", "100", "--samples", "100",
+            "--seed", "42",
+            "--outdir", tmp_single.to_str().unwrap(),
+            "--prefix", "ring4",
+        ])
+        .output()
+        .expect("failed to run mesh_sweep single");
+    assert!(out_single.status.success());
 
-    let csv1 = run(&tmp1, &graph1);
-    let csv2 = run(&tmp2, &graph2);
+    // Run 2: three-step sweep that includes T=2.0
+    let out_multi = cargo_bin("mesh_sweep")
+        .args([
+            "--graph", graph_m.to_str().unwrap(),
+            "--tmin", "2.0", "--tmax", "4.0",
+            "--steps", "3",
+            "--warmup", "100", "--samples", "100",
+            "--seed", "42",
+            "--outdir", tmp_multi.to_str().unwrap(),
+            "--prefix", "ring4",
+        ])
+        .output()
+        .expect("failed to run mesh_sweep multi");
+    assert!(out_multi.status.success());
 
-    // Same seed, same graph → identical output (deterministic)
-    assert_eq!(csv1, csv2, "mesh_sweep should be deterministic given the same seed");
+    let csv_single = std::fs::read_to_string(tmp_single.join("ring4_sweep.csv")).unwrap();
+    let csv_multi = std::fs::read_to_string(tmp_multi.join("ring4_sweep.csv")).unwrap();
 
-    let _ = std::fs::remove_dir_all(&tmp1);
-    let _ = std::fs::remove_dir_all(&tmp2);
+    // Extract T=2.0 row from each (first data row in both)
+    let row_single = csv_single.trim().lines().nth(1)
+        .expect("single CSV missing data row");
+    let row_multi = csv_multi.trim().lines().nth(1)
+        .expect("multi CSV missing data row");
+
+    // Both should start with T=2.0
+    let t_single: f64 = row_single.split(',').next().unwrap().parse().unwrap();
+    let t_multi: f64 = row_multi.split(',').next().unwrap().parse().unwrap();
+    assert!((t_single - 2.0).abs() < 0.01, "single run T mismatch");
+    assert!((t_multi - 2.0).abs() < 0.01, "multi run T mismatch");
+
+    // The T=2.0 rows must be identical — proving each temperature is
+    // independently initialized rather than carrying state from prior temps.
+    assert_eq!(
+        row_single, row_multi,
+        "T=2.0 row differs between isolated and multi-step runs, \
+         suggesting temperatures are not independently initialized.\n\
+         single: {row_single}\n\
+         multi:  {row_multi}"
+    );
+
+    let _ = std::fs::remove_dir_all(&tmp_single);
+    let _ = std::fs::remove_dir_all(&tmp_multi);
 }
