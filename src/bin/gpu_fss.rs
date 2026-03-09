@@ -108,6 +108,7 @@ fn run_ising_fss(
     use ising::cuda::parallel_tempering::{linspace_temperatures, replica_exchange};
     use rand::SeedableRng;
     use rand_xoshiro::Xoshiro256PlusPlus;
+    use std::io::{BufWriter, Write as IoWrite};
 
     let temperatures = linspace_temperatures(t_min, t_max, n_replicas);
 
@@ -124,13 +125,23 @@ fn run_ising_fss(
 
         // Warmup
         eprintln!("  N={n}: warming up {warmup} sweeps...");
-        for _ in 0..warmup {
+        for w in 0..warmup {
             for (r, lat) in replicas.iter_mut().enumerate() {
                 let t_idx = replica_to_temp[r];
                 let beta = 1.0 / temperatures[t_idx];
                 lat.step(beta as f32, 1.0, 0.0).expect("GPU step failed");
             }
+            if (w + 1) % 1000 == 0 {
+                eprintln!("    warmup {}/{warmup}", w + 1);
+            }
         }
+
+        // Open timeseries file for streaming writes
+        let model_name = "ising";
+        let ts_path = Path::new(outdir).join(format!("gpu_fss_{model_name}_N{n}_timeseries.csv"));
+        let ts_file = fs::File::create(&ts_path).expect("create timeseries file failed");
+        let mut ts_writer = BufWriter::new(ts_file);
+        writeln!(ts_writer, "temp_idx,E,M").expect("write header failed");
 
         // Sampling with parallel tempering
         let mut sum_e    = vec![0.0_f64; n_replicas];
@@ -139,9 +150,9 @@ fn run_ising_fss(
         let mut sum_m2   = vec![0.0_f64; n_replicas];
         let mut sum_m4   = vec![0.0_f64; n_replicas];
         let mut count    = vec![0usize; n_replicas];
-        // Pre-allocate with capacity to avoid reallocation during sampling
+        // Keep ts_data in memory for jackknife at the end
         let mut ts_data: Vec<Vec<(f64, f64)>> = (0..n_replicas)
-            .map(|_| Vec::with_capacity(samples / n_replicas + samples))
+            .map(|_| Vec::with_capacity(samples / measure_every + 1))
             .collect();
         let mut energies = vec![0.0_f64; n_replicas]; // reused every sweep
 
@@ -175,6 +186,10 @@ fn run_ising_fss(
                         count[t_idx]  += 1;
 
                         ts_data[t_idx].push((e_per, m_per));
+
+                        // Stream to disk immediately
+                        writeln!(ts_writer, "{t_idx},{e_per:.8},{m_per:.8}")
+                            .expect("write timeseries row failed");
                     }
                 }
             }
@@ -187,10 +202,19 @@ fn run_ising_fss(
                     &mut rng, sweep / exchange_every,
                 );
             }
+
+            // Progress logging
+            if (sweep + 1) % 10000 == 0 {
+                eprintln!("    sweep {}/{samples}", sweep + 1);
+            }
         }
 
+        // Flush timeseries
+        ts_writer.flush().expect("flush timeseries failed");
+        drop(ts_writer);
+        eprintln!("  Wrote {}", ts_path.display());
+
         // Write summary CSV with jackknife error bars
-        let model_name = "ising";
         let summary_path = Path::new(outdir).join(format!("gpu_fss_{model_name}_N{n}_summary.csv"));
         let mut csv = String::from("T,E,E_err,M,M_err,M2,M2_err,M4,M4_err,Cv,Cv_err,chi,chi_err\n");
         for t_idx in 0..n_replicas {
@@ -207,17 +231,6 @@ fn run_ising_fss(
         }
         fs::write(&summary_path, &csv).expect("write summary failed");
         eprintln!("  Wrote {}", summary_path.display());
-
-        // Write time series CSV for reweighting
-        let ts_path = Path::new(outdir).join(format!("gpu_fss_{model_name}_N{n}_timeseries.csv"));
-        let mut ts_csv = String::from("temp_idx,E,M\n");
-        for (t_idx, data) in ts_data.iter().enumerate() {
-            for &(e, m) in data {
-                ts_csv.push_str(&format!("{t_idx},{e:.8},{m:.8}\n"));
-            }
-        }
-        fs::write(&ts_path, &ts_csv).expect("write timeseries failed");
-        eprintln!("  Wrote {}", ts_path.display());
     }
 }
 
@@ -337,6 +350,7 @@ fn run_continuous_fss(
     use cudarc::driver::CudaDevice;
     use rand::SeedableRng;
     use rand_xoshiro::Xoshiro256PlusPlus;
+    use std::io::{BufWriter, Write as IoWrite};
 
     let model_name = if n_comp == 2 { "xy" } else { "heisenberg" };
     let temperatures = linspace_temperatures(t_min, t_max, n_replicas);
@@ -362,13 +376,22 @@ fn run_continuous_fss(
 
         // Warmup
         eprintln!("  N={n}: warming up {warmup} sweeps...");
-        for _ in 0..warmup {
+        for w in 0..warmup {
             for (r, lat) in replicas.iter_mut().enumerate() {
                 let t_idx = replica_to_temp[r];
                 let beta = (1.0 / temperatures[t_idx]) as f32;
                 lat.sweep(beta, 1.0, delta, n_overrelax).expect("sweep failed");
             }
+            if (w + 1) % 1000 == 0 {
+                eprintln!("    warmup {}/{warmup}", w + 1);
+            }
         }
+
+        // Open timeseries file for streaming writes
+        let ts_path = Path::new(outdir).join(format!("gpu_fss_{model_name}_N{n}_timeseries.csv"));
+        let ts_file = fs::File::create(&ts_path).expect("create timeseries file failed");
+        let mut ts_writer = BufWriter::new(ts_file);
+        writeln!(ts_writer, "temp_idx,E,M").expect("write header failed");
 
         // Accumulators
         let mut sum_e  = vec![0.0_f64; n_replicas];
@@ -378,7 +401,7 @@ fn run_continuous_fss(
         let mut sum_m4 = vec![0.0_f64; n_replicas];
         let mut count  = vec![0usize; n_replicas];
         let mut ts_data: Vec<Vec<(f64, f64)>> = (0..n_replicas)
-            .map(|_| Vec::with_capacity(samples / n_replicas + samples))
+            .map(|_| Vec::with_capacity(samples / measure_every + 1))
             .collect();
         let mut energies = vec![0.0_f64; n_replicas]; // reused every sweep
 
@@ -411,6 +434,10 @@ fn run_continuous_fss(
                         count[t_idx]  += 1;
 
                         ts_data[t_idx].push((e_per, m_abs));
+
+                        // Stream to disk immediately
+                        writeln!(ts_writer, "{t_idx},{e_per:.8},{m_abs:.8}")
+                            .expect("write timeseries row failed");
                     }
                 }
             }
@@ -427,6 +454,11 @@ fn run_continuous_fss(
                 eprintln!("    sweep {}/{samples}", sweep + 1);
             }
         }
+
+        // Flush timeseries
+        ts_writer.flush().expect("flush timeseries failed");
+        drop(ts_writer);
+        eprintln!("  Wrote {}", ts_path.display());
 
         // Write summary CSV with jackknife error bars
         let summary_path = Path::new(outdir).join(format!("gpu_fss_{model_name}_N{n}_summary.csv"));
@@ -445,17 +477,6 @@ fn run_continuous_fss(
         }
         fs::write(&summary_path, &csv).expect("write summary failed");
         eprintln!("  Wrote {}", summary_path.display());
-
-        // Write time series
-        let ts_path = Path::new(outdir).join(format!("gpu_fss_{model_name}_N{n}_timeseries.csv"));
-        let mut ts_csv = String::from("temp_idx,E,M\n");
-        for (t_idx, data) in ts_data.iter().enumerate() {
-            for &(e, m) in data {
-                ts_csv.push_str(&format!("{t_idx},{e:.8},{m:.8}\n"));
-            }
-        }
-        fs::write(&ts_path, &ts_csv).expect("write timeseries failed");
-        eprintln!("  Wrote {}", ts_path.display());
     }
 }
 
