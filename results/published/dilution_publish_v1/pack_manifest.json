@@ -1,25 +1,25 @@
 {
-  "created_at": "2026-03-09T01:41:13.089464+00:00",
+  "created_at": "2026-03-09T10:44:51.637667+00:00",
   "files": [
     {
       "relative_path": "analysis_fss/dilution_binder_crossing_summary.csv",
-      "sha256": "28a3158bbab3689bdd0b3e7dbd14adbc751108a1f7c307322bf843cdcdc34719",
-      "size_bytes": 578
+      "sha256": "8c9134a2fbb7cc14ec3b7532a2613f30462e0a1193f1a0434b7b59af1d2d465d",
+      "size_bytes": 579
     },
     {
       "relative_path": "analysis_fss/dilution_binder_crossings.csv",
-      "sha256": "1147f5da783c42223a2cc43a8453b22db44835bc2ba5467fc38e6a6189cfafa8",
-      "size_bytes": 943
+      "sha256": "574c2a6bc468f5ce4fef96360d49ba462db06eabce71ec54924df355e58e15b0",
+      "size_bytes": 944
     },
     {
       "relative_path": "analysis_fss/dilution_binder_curves.csv",
-      "sha256": "95288d891f9601dc92a83a6bfd6a6a4f56a892c61d7b6b6e7d9c0b13dee93541",
-      "size_bytes": 50853
+      "sha256": "c8d4cc3a63395ab0a31ac4ae3d39891ebdf85120ee9b32ecd386193d1f1518c7",
+      "size_bytes": 52489
     },
     {
       "relative_path": "analysis_fss/dilution_binder_curves.png",
-      "sha256": "89fd3ebc563bcdbf31066c9cf84479af34874232f66859b15b9f55e794743509",
-      "size_bytes": 409727
+      "sha256": "152b9cb7857452fd4b371b0cfdba1daf1e89016eac05769459be66ccaa7c2154",
+      "size_bytes": 412411
     },
     {
       "relative_path": "analysis_fss/dilution_fss_summary.json",
@@ -28,8 +28,8 @@
     },
     {
       "relative_path": "analysis_fss/dilution_tc_compare.png",
-      "sha256": "5dfc76640d5516bb65f5f51495c2095b7d8097bf79fe89280af55c5f7dd66f84",
-      "size_bytes": 68475
+      "sha256": "334c4a525065a222ec9b35a60f52d71d21d8714a555d6fb59be29ce3833a0c9f",
+      "size_bytes": 68386
     },
     {
       "relative_path": "campaign_plan.csv",
@@ -53,13 +53,13 @@
     },
     {
       "relative_path": "campaign_tc_summary_N32.csv",
-      "sha256": "8db9c43f5b4c9e5ff7541ad90abfd8c79a6c9cb9cf4b3973ae61c05ff1c4b4ad",
-      "size_bytes": 924
+      "sha256": "b1eadeb7c77816bd74ac7e473cb150388ddd7c2659d58951e9d284e3a31a8d68",
+      "size_bytes": 941
     },
     {
       "relative_path": "campaign_tc_summary_all_sizes.csv",
-      "sha256": "5e8fbe9222173907e009dd488a24e4568b19a480a2361e533842f2543fc55075",
-      "size_bytes": 2610
+      "sha256": "8ce6bdf14744e522928ec91cc3678166a46e30a3cd02750acb4f0a0f31e31289",
+      "size_bytes": 2608
     },
     {
       "relative_path": "size_N24/derived/dilution/dilution_job_progress.csv",
@@ -153,48 +153,53 @@
     },
     {
       "relative_path": "size_N32/derived/dilution/dilution_job_progress.csv",
-      "sha256": "92a20344a05e8c57508e9cd473e81e364b80bf533f372c9be20abc1d529b4bfa",
-      "size_bytes": 21449
+      "sha256": "abf4a47e9c8e026b95e04e7cff4cafde66e685352f607748a4218ccb4b6e0f2f",
+      "size_bytes": 22537
     },
     {
       "relative_path": "size_N32/derived/dilution/dilution_manifest_summary.csv",
-      "sha256": "a2ffc3105efe45068427a604503d1b47ceef3d05c16082492fc46b8949ebb7ad",
-      "size_bytes": 19324
+      "sha256": "4f3460045f7b459a89bca7bea22a21bc357442d53f96bbe9c25e6f8b5828379a",
+      "size_bytes": 20280
     },
     {
       "relative_path": "size_N32/derived/dilution/dilution_observables_by_p.csv",
-      "sha256": "2c220a6a78bc89162cdafe99073aba6379ad690cd82341399dec49f43febc4ce",
-      "size_bytes": 77698
+      "sha256": "422e53cbb55605678e69bc1c96ef8cbc61dc411b26674da77e621e966988162e",
+      "size_bytes": 84634
     },
     {
       "relative_path": "size_N32/derived/dilution/dilution_tc_by_realization.csv",
-      "sha256": "fa9a54a89e8fe083533ba27faacde3061afa9344feb189438c2719bfe05cf87a",
-      "size_bytes": 20228
+      "sha256": "c0201f8b7694bf4290e9cf9e66a3387a7ff34b1b3848e5ba80f0d502e75cd4f8",
+      "size_bytes": 21239
     },
     {
       "relative_path": "size_N32/derived/dilution/dilution_tc_partial.csv",
-      "sha256": "5aacabe21b3c99f1ae26a074df6070f617d4c19d1190f2325eb4069dc3fac6b4",
-      "size_bytes": 20422
+      "sha256": "b1d553c3b77ec415d2ee2b753f3d9172303351b43720f6198884c0769e368b27",
+      "size_bytes": 21440
     },
     {
       "relative_path": "size_N32/derived/dilution/dilution_tc_summary.csv",
-      "sha256": "669608ce428c9dc76fb3dd41a840599d54f50c4244dfa018c1a175be6ef269ca",
-      "size_bytes": 918
+      "sha256": "48a9a3be68150134ae42837cfa3f71c1fdc2e1426d701034407327871e467292",
+      "size_bytes": 921
     },
     {
       "relative_path": "size_N32/figures/dilution/dilution_observables.png",
-      "sha256": "e139dcb4f6734b7e3a247738bdbfe239d139c493e805a9fd15ed461940c34ac0",
-      "size_bytes": 238255
+      "sha256": "3dace244cb918d9de7095ea5b2ec42b603ff161d87c85eceafefbc73c8507a35",
+      "size_bytes": 198524
     },
     {
       "relative_path": "size_N32/figures/dilution/dilution_tc_summary.png",
-      "sha256": "5f8ee2241276dc1d0a35a9201d18d59a616d19e40b794d2c9d4461ce5018347a",
-      "size_bytes": 58594
+      "sha256": "0ac89e6da7f3c755f1a77fb90bda8301936e5863fabcb5e47a2071bbb5df2228",
+      "size_bytes": 58999
     },
     {
       "relative_path": "size_N32/manifests/dilution/dilution_n32_r12_seed42.json",
       "sha256": "383990b1fe036fbeb97c1e099e67802b014020a4e3ecc661fb6523baae1f618c",
       "size_bytes": 53484
+    },
+    {
+      "relative_path": "size_N32/manifests/dilution/dilution_n32_r8_seed42.json",
+      "sha256": "eea6a2772f9f9c2e44fa4ec1f4518a085837e7a78644fa7ed5059732764a7781",
+      "size_bytes": 7670
     }
   ],
   "includes_raw": false,
@@ -202,5 +207,5 @@
   "readme": "README.md",
   "schema_version": "0.1.0",
   "source_campaign_root": "/Volumes/Untitled/publishing_data/dilution_publish_v1",
-  "source_git_commit": "1f9aa478a4abb5c7714077f386c85440465e78e5"
+  "source_git_commit": "03bde771122fe0b3cd33613294a8a059e31e4baf"
 }

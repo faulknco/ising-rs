@@ -1,0 +1,191 @@
+{
+  "backend": "cpu_metropolis_mesh",
+  "binary": "mesh_sweep",
+  "created_at": "2026-03-09T10:37:42.633109+00:00",
+  "environment": {
+    "python": "/Users/faulknco/Projects/ising-rs/analysis/.venv/bin/python",
+    "repo_root": "/Users/faulknco/Projects/ising-rs"
+  },
+  "geometry": "cubic3d_bond_diluted",
+  "git_commit": "03bde771122fe0b3cd33613294a8a059e31e4baf",
+  "input_files": [
+    "/Volumes/Untitled/publishing_data/n32_p000_refine/raw/dilution/graphs/N32/p000/diluted_N32_p000_r000.json",
+    "/Volumes/Untitled/publishing_data/n32_p000_refine/raw/dilution/graphs/N32/p000/diluted_N32_p000_r001.json",
+    "/Volumes/Untitled/publishing_data/n32_p000_refine/raw/dilution/graphs/N32/p000/diluted_N32_p000_r002.json",
+    "/Volumes/Untitled/publishing_data/n32_p000_refine/raw/dilution/graphs/N32/p000/diluted_N32_p000_r003.json",
+    "/Volumes/Untitled/publishing_data/n32_p000_refine/raw/dilution/graphs/N32/p000/diluted_N32_p000_r004.json",
+    "/Volumes/Untitled/publishing_data/n32_p000_refine/raw/dilution/graphs/N32/p000/diluted_N32_p000_r005.json",
+    "/Volumes/Untitled/publishing_data/n32_p000_refine/raw/dilution/graphs/N32/p000/diluted_N32_p000_r006.json",
+    "/Volumes/Untitled/publishing_data/n32_p000_refine/raw/dilution/graphs/N32/p000/diluted_N32_p000_r007.json"
+  ],
+  "jobs": [
+    {
+      "csv_path": "/Volumes/Untitled/publishing_data/n32_p000_refine/raw/dilution/sweeps/N32/p000/diluted_N32_p000_r000_sweep.csv",
+      "graph_path": "/Volumes/Untitled/publishing_data/n32_p000_refine/raw/dilution/graphs/N32/p000/diluted_N32_p000_r000.json",
+      "mean_degree": 6.0,
+      "n": 32,
+      "n_edges": 98304,
+      "p_removed": 0.0,
+      "realization": 0,
+      "samples": 6000,
+      "seed": 1000042,
+      "steps": 81,
+      "tmax": 4.7,
+      "tmin": 4.3,
+      "warmup": 8000
+    },
+    {
+      "csv_path": "/Volumes/Untitled/publishing_data/n32_p000_refine/raw/dilution/sweeps/N32/p000/diluted_N32_p000_r001_sweep.csv",
+      "graph_path": "/Volumes/Untitled/publishing_data/n32_p000_refine/raw/dilution/graphs/N32/p000/diluted_N32_p000_r001.json",
+      "mean_degree": 6.0,
+      "n": 32,
+      "n_edges": 98304,
+      "p_removed": 0.0,
+      "realization": 1,
+      "samples": 6000,
+      "seed": 1001051,
+      "steps": 81,
+      "tmax": 4.7,
+      "tmin": 4.3,
+      "warmup": 8000
+    },
+    {
+      "csv_path": "/Volumes/Untitled/publishing_data/n32_p000_refine/raw/dilution/sweeps/N32/p000/diluted_N32_p000_r002_sweep.csv",
+      "graph_path": "/Volumes/Untitled/publishing_data/n32_p000_refine/raw/dilution/graphs/N32/p000/diluted_N32_p000_r002.json",
+      "mean_degree": 6.0,
+      "n": 32,
+      "n_edges": 98304,
+      "p_removed": 0.0,
+      "realization": 2,
+      "samples": 6000,
+      "seed": 1002060,
+      "steps": 81,
+      "tmax": 4.7,
+      "tmin": 4.3,
+      "warmup": 8000
+    },
+    {
+      "csv_path": "/Volumes/Untitled/publishing_data/n32_p000_refine/raw/dilution/sweeps/N32/p000/diluted_N32_p000_r003_sweep.csv",
+      "graph_path": "/Volumes/Untitled/publishing_data/n32_p000_refine/raw/dilution/graphs/N32/p000/diluted_N32_p000_r003.json",
+      "mean_degree": 6.0,
+      "n": 32,
+      "n_edges": 98304,
+      "p_removed": 0.0,
+      "realization": 3,
+      "samples": 6000,
+      "seed": 1003069,
+      "steps": 81,
+      "tmax": 4.7,
+      "tmin": 4.3,
+      "warmup": 8000
+    },
+    {
+      "csv_path": "/Volumes/Untitled/publishing_data/n32_p000_refine/raw/dilution/sweeps/N32/p000/diluted_N32_p000_r004_sweep.csv",
+      "graph_path": "/Volumes/Untitled/publishing_data/n32_p000_refine/raw/dilution/graphs/N32/p000/diluted_N32_p000_r004.json",
+      "mean_degree": 6.0,
+      "n": 32,
+      "n_edges": 98304,
+      "p_removed": 0.0,
+      "realization": 4,
+      "samples": 6000,
+      "seed": 1004078,
+      "steps": 81,
+      "tmax": 4.7,
+      "tmin": 4.3,
+      "warmup": 8000
+    },
+    {
+      "csv_path": "/Volumes/Untitled/publishing_data/n32_p000_refine/raw/dilution/sweeps/N32/p000/diluted_N32_p000_r005_sweep.csv",
+      "graph_path": "/Volumes/Untitled/publishing_data/n32_p000_refine/raw/dilution/graphs/N32/p000/diluted_N32_p000_r005.json",
+      "mean_degree": 6.0,
+      "n": 32,
+      "n_edges": 98304,
+      "p_removed": 0.0,
+      "realization": 5,
+      "samples": 6000,
+      "seed": 1005087,
+      "steps": 81,
+      "tmax": 4.7,
+      "tmin": 4.3,
+      "warmup": 8000
+    },
+    {
+      "csv_path": "/Volumes/Untitled/publishing_data/n32_p000_refine/raw/dilution/sweeps/N32/p000/diluted_N32_p000_r006_sweep.csv",
+      "graph_path": "/Volumes/Untitled/publishing_data/n32_p000_refine/raw/dilution/graphs/N32/p000/diluted_N32_p000_r006.json",
+      "mean_degree": 6.0,
+      "n": 32,
+      "n_edges": 98304,
+      "p_removed": 0.0,
+      "realization": 6,
+      "samples": 6000,
+      "seed": 1006096,
+      "steps": 81,
+      "tmax": 4.7,
+      "tmin": 4.3,
+      "warmup": 8000
+    },
+    {
+      "csv_path": "/Volumes/Untitled/publishing_data/n32_p000_refine/raw/dilution/sweeps/N32/p000/diluted_N32_p000_r007_sweep.csv",
+      "graph_path": "/Volumes/Untitled/publishing_data/n32_p000_refine/raw/dilution/graphs/N32/p000/diluted_N32_p000_r007.json",
+      "mean_degree": 6.0,
+      "n": 32,
+      "n_edges": 98304,
+      "p_removed": 0.0,
+      "realization": 7,
+      "samples": 6000,
+      "seed": 1007105,
+      "steps": 81,
+      "tmax": 4.7,
+      "tmin": 4.3,
+      "warmup": 8000
+    }
+  ],
+  "model": "classical_ising",
+  "output_files": {
+    "derived": [
+      "/Volumes/Untitled/publishing_data/n32_p000_refine/derived/dilution/dilution_observables_by_p.csv",
+      "/Volumes/Untitled/publishing_data/n32_p000_refine/derived/dilution/dilution_tc_by_realization.csv",
+      "/Volumes/Untitled/publishing_data/n32_p000_refine/derived/dilution/dilution_tc_summary.csv",
+      "/Volumes/Untitled/publishing_data/n32_p000_refine/derived/dilution/dilution_manifest_summary.csv"
+    ],
+    "figures": [
+      "/Volumes/Untitled/publishing_data/n32_p000_refine/figures/dilution/dilution_observables.png",
+      "/Volumes/Untitled/publishing_data/n32_p000_refine/figures/dilution/dilution_tc_summary.png"
+    ],
+    "raw_sweeps": [
+      "/Volumes/Untitled/publishing_data/n32_p000_refine/raw/dilution/sweeps/N32/p000/diluted_N32_p000_r000_sweep.csv",
+      "/Volumes/Untitled/publishing_data/n32_p000_refine/raw/dilution/sweeps/N32/p000/diluted_N32_p000_r001_sweep.csv",
+      "/Volumes/Untitled/publishing_data/n32_p000_refine/raw/dilution/sweeps/N32/p000/diluted_N32_p000_r002_sweep.csv",
+      "/Volumes/Untitled/publishing_data/n32_p000_refine/raw/dilution/sweeps/N32/p000/diluted_N32_p000_r003_sweep.csv",
+      "/Volumes/Untitled/publishing_data/n32_p000_refine/raw/dilution/sweeps/N32/p000/diluted_N32_p000_r004_sweep.csv",
+      "/Volumes/Untitled/publishing_data/n32_p000_refine/raw/dilution/sweeps/N32/p000/diluted_N32_p000_r005_sweep.csv",
+      "/Volumes/Untitled/publishing_data/n32_p000_refine/raw/dilution/sweeps/N32/p000/diluted_N32_p000_r006_sweep.csv",
+      "/Volumes/Untitled/publishing_data/n32_p000_refine/raw/dilution/sweeps/N32/p000/diluted_N32_p000_r007_sweep.csv"
+    ]
+  },
+  "rng": {
+    "graph_seed_base": 42,
+    "sweep_seed_base": 1000042
+  },
+  "run_id": "dilution_n32_r8_seed42",
+  "schema_version": "0.1.0",
+  "subcommand_args": {
+    "j": 1.0,
+    "max_workers": 4,
+    "n": 32,
+    "output_root": "/Volumes/Untitled/publishing_data/n32_p000_refine",
+    "p_values": [
+      0.0
+    ],
+    "realizations": 8,
+    "realizations_spec": "",
+    "samples": 6000,
+    "seed": 42,
+    "steps": 81,
+    "t_window_spec": "",
+    "tmax": 4.7,
+    "tmin": 4.3,
+    "warmup": 8000
+  },
+  "workflow": "analysis/scripts/reproduce_dilution.py"
+}
