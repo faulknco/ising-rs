@@ -158,20 +158,30 @@ fn main() {
     };
     let path = Path::new(&outdir).join(format!("{prefix}_sweep.csv"));
 
-    let mut csv = String::from("T,E,M,M2,M4,Cv,chi\n");
+    // Single RNG seeded once; randomise lattice once before annealing.
+    let mut rng = Xoshiro256PlusPlus::seed_from_u64(seed);
+    lattice.randomise(&mut rng);
 
+    // Anneal from high to low temperature (keeps spin correlations between steps).
+    let mut rows: Vec<String> = Vec::with_capacity(t_steps);
     for step in 0..t_steps {
-        let t = t_min + (t_max - t_min) * step as f64 / (t_steps - 1) as f64;
+        let t = t_max - (t_max - t_min) * step as f64 / (t_steps - 1) as f64;
         let beta = 1.0 / t;
-        let mut rng = Xoshiro256PlusPlus::seed_from_u64(seed.wrapping_add((t * 1000.0) as u64));
-        lattice.randomise(&mut rng);
         warm_up(&mut lattice, beta, j, 0.0, warmup, &mut rng);
         let obs = measure(&mut lattice, beta, j, 0.0, samples, &mut rng);
-        csv.push_str(&format!(
-            "{:.4},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6}\n",
+        rows.push(format!(
+            "{:.4},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6}",
             t, obs.energy, obs.magnetisation, obs.m2, obs.m4, obs.heat_capacity, obs.susceptibility
         ));
         eprintln!("T={t:.3}: M={:.4}", obs.magnetisation);
+    }
+
+    // Write CSV sorted low-to-high T (reverse of annealing order).
+    rows.reverse();
+    let mut csv = String::from("T,E,M,M2,M4,Cv,chi\n");
+    for row in &rows {
+        csv.push_str(row);
+        csv.push('\n');
     }
 
     fs::write(&path, &csv).expect("failed to write CSV");
