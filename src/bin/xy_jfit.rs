@@ -1,4 +1,4 @@
-use ising::cli::{get_arg, parse_arg, validate_samples, validate_t_steps, validate_temp_range};
+use ising::cli::{get_arg, parse_arg, validate_samples, validate_temp_range};
 use ising::graph::GraphDef;
 use ising::xy::{observables::measure, XyLattice};
 use rand::SeedableRng;
@@ -81,7 +81,10 @@ fn main() {
         std::process::exit(1);
     }
 
-    validate_t_steps(t_steps);
+    if t_steps == 0 {
+        eprintln!("Error: --steps must be at least 1");
+        std::process::exit(1);
+    }
     validate_temp_range(t_min, t_max);
     validate_samples(warmup, "--warmup");
     validate_samples(samples, "--samples");
