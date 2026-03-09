@@ -27,23 +27,32 @@ class CrossingResult:
     method: str
 
 
-def binder_from_df(df: pd.DataFrame) -> pd.Series:
-    denom = 3.0 * np.square(df["M2"].to_numpy(dtype=float))
+def stderr(values: pd.Series) -> float:
+    if len(values) <= 1:
+        return 0.0
+    return float(values.std(ddof=1) / math.sqrt(len(values)))
+
+
+def binder_from_moments(m2: np.ndarray, m4: np.ndarray) -> np.ndarray:
+    denom = 3.0 * np.square(m2)
     with np.errstate(divide="ignore", invalid="ignore"):
-        binder = 1.0 - df["M4"].to_numpy(dtype=float) / denom
-    return pd.Series(binder, index=df.index)
+        return 1.0 - m4 / denom
 
 
-def linear_crossing(df_a: pd.DataFrame, df_b: pd.DataFrame) -> tuple[float, float, str] | None:
+def find_crossings(df_a: pd.DataFrame, df_b: pd.DataFrame) -> list[tuple[float, float, str]]:
     merged = df_a.merge(df_b, on="T", suffixes=("_a", "_b"))
     if len(merged) < 2:
-        return None
+        return []
     diff = merged["binder_a"] - merged["binder_b"]
+    crossings: list[tuple[float, float, str]] = []
     for idx in range(len(merged) - 1):
         d0 = float(diff.iloc[idx])
         d1 = float(diff.iloc[idx + 1])
         if d0 == 0.0:
-            return float(merged.iloc[idx]["T"]), float(merged.iloc[idx]["binder_a"]), "exact_grid"
+            crossings.append(
+                (float(merged.iloc[idx]["T"]), float(merged.iloc[idx]["binder_a"]), "exact_grid")
+            )
+            continue
         if d0 * d1 < 0.0:
             t0 = float(merged.iloc[idx]["T"])
             t1 = float(merged.iloc[idx + 1]["T"])
@@ -51,8 +60,8 @@ def linear_crossing(df_a: pd.DataFrame, df_b: pd.DataFrame) -> tuple[float, floa
             u1 = float(merged.iloc[idx + 1]["binder_a"])
             tc = t0 - d0 * (t1 - t0) / (d1 - d0)
             u_cross = u0 + (u1 - u0) * (tc - t0) / (t1 - t0)
-            return tc, u_cross, "linear_interp"
-    return None
+            crossings.append((tc, u_cross, "linear_interp"))
+    return crossings
 
 
 def parse_args() -> argparse.Namespace:
@@ -79,13 +88,43 @@ def parse_args() -> argparse.Namespace:
 
 def load_size_tables(campaign_root: Path) -> dict[int, pd.DataFrame]:
     tables: dict[int, pd.DataFrame] = {}
-    for path in sorted(campaign_root.glob("size_N*/derived/dilution/dilution_observables_by_p.csv")):
+    for path in sorted(campaign_root.glob("size_N*/derived/dilution/dilution_manifest_summary.csv")):
         size = int(path.parts[-4].split("N")[1])
-        df = pd.read_csv(path)
-        df["binder"] = binder_from_df(df)
-        tables[size] = df
+        manifest_df = pd.read_csv(path)
+        frames = []
+        for row in manifest_df.itertuples(index=False):
+            sweep_path = Path(row.sweep_file)
+            sweep_df = pd.read_csv(sweep_path, usecols=["T", "M2", "M4"])
+            frames.append(
+                pd.DataFrame(
+                    {
+                        "T": sweep_df["T"].to_numpy(dtype=float),
+                        "p_removed": float(row.p_removed),
+                        "realization": int(row.realization),
+                        "binder": binder_from_moments(
+                            sweep_df["M2"].to_numpy(dtype=float),
+                            sweep_df["M4"].to_numpy(dtype=float),
+                        ),
+                    }
+                )
+            )
+        if not frames:
+            continue
+        all_rows = pd.concat(frames, ignore_index=True)
+        tables[size] = (
+            all_rows.groupby(["p_removed", "T"], as_index=False)
+            .agg(
+                binder=("binder", "mean"),
+                binder_err=("binder", stderr),
+                n_realizations=("realization", "nunique"),
+            )
+            .sort_values(["p_removed", "T"])
+            .reset_index(drop=True)
+        )
     if not tables:
-        raise SystemExit(f"no size_N*/derived/dilution/dilution_observables_by_p.csv files found in {campaign_root}")
+        raise SystemExit(
+            f"no size_N*/derived/dilution/dilution_manifest_summary.csv files found in {campaign_root}"
+        )
     return tables
 
 
@@ -109,7 +148,34 @@ def build_binder_table(size_tables: dict[int, pd.DataFrame]) -> pd.DataFrame:
     return pd.concat(frames, ignore_index=True).sort_values(["p_removed", "n", "T"]).reset_index(drop=True)
 
 
-def build_crossings(size_tables: dict[int, pd.DataFrame]) -> pd.DataFrame:
+def peak_tc_reference(
+    peak_summary: pd.DataFrame,
+    p_removed: float,
+    size_a: int,
+    size_b: int,
+) -> float | None:
+    if peak_summary.empty or "n" not in peak_summary.columns:
+        return None
+    subset = peak_summary.loc[
+        (peak_summary["p_removed"] == p_removed) & (peak_summary["n"].isin([size_a, size_b]))
+    ]
+    if len(subset) != 2:
+        return None
+    return float(subset["tc_mean"].mean())
+
+
+def choose_crossing(
+    candidates: list[tuple[float, float, str]],
+    reference_tc: float | None,
+) -> tuple[float, float, str] | None:
+    if not candidates:
+        return None
+    if reference_tc is None or math.isnan(reference_tc):
+        return candidates[0]
+    return min(candidates, key=lambda item: abs(item[0] - reference_tc))
+
+
+def build_crossings(size_tables: dict[int, pd.DataFrame], peak_summary: pd.DataFrame) -> pd.DataFrame:
     sizes = sorted(size_tables)
     p_values = sorted({float(p) for df in size_tables.values() for p in df["p_removed"].unique()})
     rows = []
@@ -119,7 +185,9 @@ def build_crossings(size_tables: dict[int, pd.DataFrame]) -> pd.DataFrame:
         for size_a, size_b in zip(available_sizes, available_sizes[1:]):
             df_a = size_tables[size_a].loc[size_tables[size_a]["p_removed"] == p_removed, ["T", "binder"]].copy()
             df_b = size_tables[size_b].loc[size_tables[size_b]["p_removed"] == p_removed, ["T", "binder"]].copy()
-            crossing = linear_crossing(df_a, df_b)
+            candidates = find_crossings(df_a, df_b)
+            reference_tc = peak_tc_reference(peak_summary, p_removed, size_a, size_b)
+            crossing = choose_crossing(candidates, reference_tc)
             if crossing is None:
                 rows.append(
                     asdict(
@@ -135,6 +203,8 @@ def build_crossings(size_tables: dict[int, pd.DataFrame]) -> pd.DataFrame:
                 )
                 continue
             tc_crossing, binder_crossing, method = crossing
+            if reference_tc is not None:
+                method = f"{method}_peak_guided"
             rows.append(
                 asdict(
                     CrossingResult(
@@ -160,11 +230,6 @@ def summarise_crossings(crossings: pd.DataFrame) -> pd.DataFrame:
         return pd.DataFrame(
             columns=["p_removed", "tc_binder_mean", "tc_binder_err", "u_cross_mean", "u_cross_err", "n_pairs"]
         )
-
-    def stderr(values: pd.Series) -> float:
-        if len(values) <= 1:
-            return 0.0
-        return float(values.std(ddof=1) / math.sqrt(len(values)))
 
     summary = (
         valid.groupby("p_removed", as_index=False)
@@ -197,6 +262,13 @@ def plot_binder_curves(binder_table: pd.DataFrame, output_path: Path) -> None:
         subset = binder_table.loc[binder_table["p_removed"] == p_removed]
         for n, df in subset.groupby("n"):
             ax.plot(df["T"], df["binder"], label=f"N={n}", linewidth=1.3)
+            if "binder_err" in df.columns:
+                ax.fill_between(
+                    df["T"],
+                    df["binder"] - df["binder_err"],
+                    df["binder"] + df["binder_err"],
+                    alpha=0.12,
+                )
         ax.set_title(f"Binder cumulant, p={p_removed:.3f}")
         ax.set_xlabel("T (J/k_B)")
         ax.set_ylabel("U")
@@ -256,10 +328,9 @@ def main() -> None:
 
     size_tables = load_size_tables(args.campaign_root)
     binder_table = build_binder_table(size_tables)
-    crossings = build_crossings(size_tables)
-    crossing_summary = summarise_crossings(crossings)
-
     peak_summary = load_peak_summary(args.campaign_root)
+    crossings = build_crossings(size_tables, peak_summary)
+    crossing_summary = summarise_crossings(crossings)
 
     binder_table_path = output_dir / "dilution_binder_curves.csv"
     crossings_path = output_dir / "dilution_binder_crossings.csv"

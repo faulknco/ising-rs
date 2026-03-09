@@ -1,0 +1,23 @@
+{
+  "binder_figure": "/Volumes/Untitled/publishing_data/dilution_publish_v1/analysis_fss/dilution_binder_curves.png",
+  "binder_table_csv": "/Volumes/Untitled/publishing_data/dilution_publish_v1/analysis_fss/dilution_binder_curves.csv",
+  "campaign_root": "/Volumes/Untitled/publishing_data/dilution_publish_v1",
+  "crossing_summary_csv": "/Volumes/Untitled/publishing_data/dilution_publish_v1/analysis_fss/dilution_binder_crossing_summary.csv",
+  "crossings_csv": "/Volumes/Untitled/publishing_data/dilution_publish_v1/analysis_fss/dilution_binder_crossings.csv",
+  "n_sizes_loaded": 3,
+  "n_valid_crossing_pairs": 12,
+  "p_values_loaded": [
+    0.0,
+    0.1,
+    0.2,
+    0.3,
+    0.4,
+    0.5
+  ],
+  "sizes_loaded": [
+    24,
+    28,
+    32
+  ],
+  "tc_compare_figure": "/Volumes/Untitled/publishing_data/dilution_publish_v1/analysis_fss/dilution_tc_compare.png"
+}
