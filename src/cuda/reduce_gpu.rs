@@ -98,9 +98,21 @@ pub fn reduce_continuous_mag(
         )?;
     }
 
-    let mx: f64 = device.dtoh_sync_copy(&partial_mx)?.iter().map(|&x| x as f64).sum();
-    let my: f64 = device.dtoh_sync_copy(&partial_my)?.iter().map(|&x| x as f64).sum();
-    let mz: f64 = device.dtoh_sync_copy(&partial_mz)?.iter().map(|&x| x as f64).sum();
+    let mx: f64 = device
+        .dtoh_sync_copy(&partial_mx)?
+        .iter()
+        .map(|&x| x as f64)
+        .sum();
+    let my: f64 = device
+        .dtoh_sync_copy(&partial_my)?
+        .iter()
+        .map(|&x| x as f64)
+        .sum();
+    let mz: f64 = device
+        .dtoh_sync_copy(&partial_mz)?
+        .iter()
+        .map(|&x| x as f64)
+        .sum();
 
     Ok((mx, my, mz))
 }

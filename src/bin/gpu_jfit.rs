@@ -57,18 +57,53 @@ fn main() {
     let mut i = 1;
     while i < args.len() {
         match args[i].as_str() {
-            "--model"          => { model        = get_arg(&args, i, "--model"); i += 2; }
-            "--graph"          => { graph_path   = get_arg(&args, i, "--graph"); i += 2; }
-            "--outdir"         => { outdir       = get_arg(&args, i, "--outdir"); i += 2; }
-            "--tmin"           => { t_min        = parse_flag(&args, i, "--tmin"); i += 2; }
-            "--tmax"           => { t_max        = parse_flag(&args, i, "--tmax"); i += 2; }
-            "--replicas"       => { n_replicas   = parse_flag(&args, i, "--replicas"); i += 2; }
-            "--warmup"         => { warmup       = parse_flag(&args, i, "--warmup"); i += 2; }
-            "--samples"        => { samples      = parse_flag(&args, i, "--samples"); i += 2; }
-            "--exchange-every" => { exchange_every = parse_flag(&args, i, "--exchange-every"); i += 2; }
-            "--seed"           => { seed         = parse_flag(&args, i, "--seed"); i += 2; }
-            "--j"              => { j            = parse_flag(&args, i, "--j"); i += 2; }
-            _ => { i += 1; }
+            "--model" => {
+                model = get_arg(&args, i, "--model");
+                i += 2;
+            }
+            "--graph" => {
+                graph_path = get_arg(&args, i, "--graph");
+                i += 2;
+            }
+            "--outdir" => {
+                outdir = get_arg(&args, i, "--outdir");
+                i += 2;
+            }
+            "--tmin" => {
+                t_min = parse_flag(&args, i, "--tmin");
+                i += 2;
+            }
+            "--tmax" => {
+                t_max = parse_flag(&args, i, "--tmax");
+                i += 2;
+            }
+            "--replicas" => {
+                n_replicas = parse_flag(&args, i, "--replicas");
+                i += 2;
+            }
+            "--warmup" => {
+                warmup = parse_flag(&args, i, "--warmup");
+                i += 2;
+            }
+            "--samples" => {
+                samples = parse_flag(&args, i, "--samples");
+                i += 2;
+            }
+            "--exchange-every" => {
+                exchange_every = parse_flag(&args, i, "--exchange-every");
+                i += 2;
+            }
+            "--seed" => {
+                seed = parse_flag(&args, i, "--seed");
+                i += 2;
+            }
+            "--j" => {
+                j = parse_flag(&args, i, "--j");
+                i += 2;
+            }
+            _ => {
+                i += 1;
+            }
         }
     }
 
@@ -103,9 +138,45 @@ fn main() {
     );
 
     match model.as_str() {
-        "ising"      => run_ising_jfit(&neighbours, &graph_name, t_min, t_max, n_replicas, warmup, samples, exchange_every, seed, j, &outdir),
-        "xy"         => run_xy_jfit(&neighbours, &graph_name, t_min, t_max, n_replicas, warmup, samples, exchange_every, seed, j, &outdir),
-        "heisenberg" => run_heisenberg_jfit(&neighbours, &graph_name, t_min, t_max, n_replicas, warmup, samples, exchange_every, seed, j, &outdir),
+        "ising" => run_ising_jfit(
+            &neighbours,
+            &graph_name,
+            t_min,
+            t_max,
+            n_replicas,
+            warmup,
+            samples,
+            exchange_every,
+            seed,
+            j,
+            &outdir,
+        ),
+        "xy" => run_xy_jfit(
+            &neighbours,
+            &graph_name,
+            t_min,
+            t_max,
+            n_replicas,
+            warmup,
+            samples,
+            exchange_every,
+            seed,
+            j,
+            &outdir,
+        ),
+        "heisenberg" => run_heisenberg_jfit(
+            &neighbours,
+            &graph_name,
+            t_min,
+            t_max,
+            n_replicas,
+            warmup,
+            samples,
+            exchange_every,
+            seed,
+            j,
+            &outdir,
+        ),
         _ => {
             eprintln!("Error: --model must be ising, xy, or heisenberg");
             std::process::exit(1);
@@ -114,12 +185,19 @@ fn main() {
 }
 
 fn run_ising_jfit(
-    neighbours: &[Vec<usize>], graph_name: &str,
-    t_min: f64, t_max: f64, n_replicas: usize,
-    warmup: usize, samples: usize, _exchange_every: usize,
-    seed: u64, j: f64, outdir: &str,
+    neighbours: &[Vec<usize>],
+    graph_name: &str,
+    t_min: f64,
+    t_max: f64,
+    n_replicas: usize,
+    warmup: usize,
+    samples: usize,
+    _exchange_every: usize,
+    seed: u64,
+    j: f64,
+    outdir: &str,
 ) {
-    use ising::lattice::{Lattice, Geometry};
+    use ising::lattice::{Geometry, Lattice};
     use ising::metropolis::warm_up;
     use ising::observables::measure;
     use rand::SeedableRng;
@@ -146,8 +224,7 @@ fn run_ising_jfit(
         let obs = measure(&mut lattice, beta, j, 0.0, samples, &mut rng);
         csv.push_str(&format!(
             "{:.4},{:.6},0.0,{:.6},0.0,{:.6},0.0,{:.6},0.0,{:.6},0.0,{:.6},0.0\n",
-            t, obs.energy, obs.magnetisation,
-            obs.m2, obs.m4, obs.heat_capacity, obs.susceptibility,
+            t, obs.energy, obs.magnetisation, obs.m2, obs.m4, obs.heat_capacity, obs.susceptibility,
         ));
         eprintln!("  T={t:.3} M={:.4}", obs.magnetisation);
     }
@@ -157,10 +234,17 @@ fn run_ising_jfit(
 }
 
 fn run_xy_jfit(
-    neighbours: &[Vec<usize>], graph_name: &str,
-    t_min: f64, t_max: f64, n_replicas: usize,
-    warmup: usize, samples: usize, _exchange_every: usize,
-    seed: u64, j: f64, outdir: &str,
+    neighbours: &[Vec<usize>],
+    graph_name: &str,
+    t_min: f64,
+    t_max: f64,
+    n_replicas: usize,
+    warmup: usize,
+    samples: usize,
+    _exchange_every: usize,
+    seed: u64,
+    j: f64,
+    outdir: &str,
 ) {
     use ising::xy::{observables::measure, XyLattice};
 
@@ -180,13 +264,24 @@ fn run_xy_jfit(
         let obs = measure(&mut lat, beta, j, warmup, samples, &mut rng);
         csv.push_str(&format!(
             "{:.4},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6}\n",
-            obs.temperature, obs.energy, obs.energy_err,
-            obs.magnetisation, obs.magnetisation_err,
-            obs.m2, obs.m2_err, obs.m4, obs.m4_err,
-            obs.heat_capacity, obs.heat_capacity_err,
-            obs.susceptibility, obs.susceptibility_err,
+            obs.temperature,
+            obs.energy,
+            obs.energy_err,
+            obs.magnetisation,
+            obs.magnetisation_err,
+            obs.m2,
+            obs.m2_err,
+            obs.m4,
+            obs.m4_err,
+            obs.heat_capacity,
+            obs.heat_capacity_err,
+            obs.susceptibility,
+            obs.susceptibility_err,
         ));
-        eprintln!("  T={t:.3} M={:.4}±{:.4}", obs.magnetisation, obs.magnetisation_err);
+        eprintln!(
+            "  T={t:.3} M={:.4}±{:.4}",
+            obs.magnetisation, obs.magnetisation_err
+        );
     }
 
     fs::write(&path, &csv).expect("failed to write CSV");
@@ -194,10 +289,17 @@ fn run_xy_jfit(
 }
 
 fn run_heisenberg_jfit(
-    neighbours: &[Vec<usize>], graph_name: &str,
-    t_min: f64, t_max: f64, n_replicas: usize,
-    warmup: usize, samples: usize, _exchange_every: usize,
-    seed: u64, j: f64, outdir: &str,
+    neighbours: &[Vec<usize>],
+    graph_name: &str,
+    t_min: f64,
+    t_max: f64,
+    n_replicas: usize,
+    warmup: usize,
+    samples: usize,
+    _exchange_every: usize,
+    seed: u64,
+    j: f64,
+    outdir: &str,
 ) {
     use ising::heisenberg::{observables::measure, HeisenbergLattice};
 
@@ -217,13 +319,24 @@ fn run_heisenberg_jfit(
         let obs = measure(&mut lat, beta, j, 0.5, 5, warmup, samples, &mut rng);
         csv.push_str(&format!(
             "{:.4},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6}\n",
-            obs.temperature, obs.energy, obs.energy_err,
-            obs.magnetisation, obs.magnetisation_err,
-            obs.m2, obs.m2_err, obs.m4, obs.m4_err,
-            obs.heat_capacity, obs.heat_capacity_err,
-            obs.susceptibility, obs.susceptibility_err,
+            obs.temperature,
+            obs.energy,
+            obs.energy_err,
+            obs.magnetisation,
+            obs.magnetisation_err,
+            obs.m2,
+            obs.m2_err,
+            obs.m4,
+            obs.m4_err,
+            obs.heat_capacity,
+            obs.heat_capacity_err,
+            obs.susceptibility,
+            obs.susceptibility_err,
         ));
-        eprintln!("  T={t:.3} M={:.4}±{:.4}", obs.magnetisation, obs.magnetisation_err);
+        eprintln!(
+            "  T={t:.3} M={:.4}±{:.4}",
+            obs.magnetisation, obs.magnetisation_err
+        );
     }
 
     fs::write(&path, &csv).expect("failed to write CSV");

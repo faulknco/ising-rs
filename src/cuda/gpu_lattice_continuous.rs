@@ -3,8 +3,7 @@ use std::sync::Arc;
 
 use crate::cuda::reduce_gpu;
 
-const CONTINUOUS_PTX: &str =
-    include_str!(concat!(env!("OUT_DIR"), "/continuous_spin_kernel.ptx"));
+const CONTINUOUS_PTX: &str = include_str!(concat!(env!("OUT_DIR"), "/continuous_spin_kernel.ptx"));
 const BLOCK_SIZE: u32 = 256;
 
 pub struct ContinuousGpuLattice {

@@ -1,5 +1,5 @@
-use crate::heisenberg::{HeisenbergLattice, energy_magnetisation};
 use crate::heisenberg::sweep::combined_sweep;
+use crate::heisenberg::{energy_magnetisation, HeisenbergLattice};
 use rand::Rng;
 
 /// All measured observables for one temperature point, with jackknife error bars.
@@ -9,17 +9,23 @@ use rand::Rng;
 pub struct HeisenbergObservables {
     pub temperature: f64,
     /// Mean energy per spin E/N.
-    pub energy: f64,         pub energy_err: f64,
+    pub energy: f64,
+    pub energy_err: f64,
     /// Mean |M|/N (scalar magnetisation per spin).
-    pub magnetisation: f64,  pub magnetisation_err: f64,
+    pub magnetisation: f64,
+    pub magnetisation_err: f64,
     /// Total heat capacity C = β²N(⟨(E/N)²⟩ − ⟨E/N⟩²), where E/N is energy per spin (extensive in N).
-    pub heat_capacity: f64,  pub heat_capacity_err: f64,
+    pub heat_capacity: f64,
+    pub heat_capacity_err: f64,
     /// Magnetic susceptibility χ = βN(⟨m²⟩ − ⟨m⟩²).
-    pub susceptibility: f64, pub susceptibility_err: f64,
+    pub susceptibility: f64,
+    pub susceptibility_err: f64,
     /// ⟨m²⟩ (needed for Binder cumulant).
-    pub m2: f64,             pub m2_err: f64,
+    pub m2: f64,
+    pub m2_err: f64,
     /// ⟨m⁴⟩ (needed for Binder cumulant).
-    pub m4: f64,             pub m4_err: f64,
+    pub m4: f64,
+    pub m4_err: f64,
 }
 
 /// Equilibrate a lattice and measure observables with 20-block jackknife error estimation.
@@ -59,40 +65,49 @@ pub fn measure(
     for _ in 0..samples {
         combined_sweep(lat, beta, j, delta, n_overrelax, rng);
         let (e, mv) = energy_magnetisation(lat, j);
-        let m_abs = (mv[0]*mv[0] + mv[1]*mv[1] + mv[2]*mv[2]).sqrt() / n;
+        let m_abs = (mv[0] * mv[0] + mv[1] * mv[1] + mv[2] * mv[2]).sqrt() / n;
         e_series.push(e / n);
         m_series.push(m_abs);
     }
 
     // Full-sample averages
-    let avg_e  = mean(&e_series);
-    let avg_m  = mean(&m_series);
+    let avg_e = mean(&e_series);
+    let avg_m = mean(&m_series);
     let avg_e2 = mean_of_sq(&e_series);
     let avg_m2 = mean_of_sq(&m_series);
     let avg_m4 = mean_of_pow4(&m_series);
 
     // Derived quantities (extensive in system size)
-    let cv  = beta * beta * n * (avg_e2 - avg_e * avg_e);
+    let cv = beta * beta * n * (avg_e2 - avg_e * avg_e);
     let chi = beta * n * (avg_m2 - avg_m * avg_m);
 
     // Jackknife error estimation with 20 blocks
     let n_blocks = 20;
     let block_size = samples / n_blocks;
-    debug_assert!(samples.is_multiple_of(n_blocks),
+    debug_assert!(
+        samples.is_multiple_of(n_blocks),
         "samples ({samples}) is not divisible by n_blocks ({n_blocks}); \
-         {} samples will be silently discarded", samples % n_blocks);
+         {} samples will be silently discarded",
+        samples % n_blocks
+    );
 
     let (e_err, m_err, cv_err, chi_err, m2_err, m4_err) =
         jackknife_errors(&e_series, &m_series, beta, n, n_blocks, block_size);
 
     HeisenbergObservables {
         temperature: 1.0 / beta,
-        energy: avg_e,         energy_err: e_err,
-        magnetisation: avg_m,  magnetisation_err: m_err,
-        heat_capacity: cv,     heat_capacity_err: cv_err,
-        susceptibility: chi,   susceptibility_err: chi_err,
-        m2: avg_m2,            m2_err,
-        m4: avg_m4,            m4_err,
+        energy: avg_e,
+        energy_err: e_err,
+        magnetisation: avg_m,
+        magnetisation_err: m_err,
+        heat_capacity: cv,
+        heat_capacity_err: cv_err,
+        susceptibility: chi,
+        susceptibility_err: chi_err,
+        m2: avg_m2,
+        m2_err,
+        m4: avg_m4,
+        m4_err,
     }
 }
 
@@ -102,12 +117,12 @@ fn mean(v: &[f64]) -> f64 {
 
 /// Mean of squares: ⟨x²⟩
 fn mean_of_sq(v: &[f64]) -> f64 {
-    v.iter().map(|x| x*x).sum::<f64>() / v.len() as f64
+    v.iter().map(|x| x * x).sum::<f64>() / v.len() as f64
 }
 
 /// Mean of fourth powers: ⟨x⁴⟩
 fn mean_of_pow4(v: &[f64]) -> f64 {
-    v.iter().map(|x| x*x*x*x).sum::<f64>() / v.len() as f64
+    v.iter().map(|x| x * x * x * x).sum::<f64>() / v.len() as f64
 }
 
 /// Jackknife error estimation using leave-one-block-out resampling.
@@ -124,12 +139,12 @@ fn jackknife_errors(
     n_blocks: usize,
     block_size: usize,
 ) -> (f64, f64, f64, f64, f64, f64) {
-    let mut jk_e   = Vec::with_capacity(n_blocks);
-    let mut jk_m   = Vec::with_capacity(n_blocks);
-    let mut jk_cv  = Vec::with_capacity(n_blocks);
+    let mut jk_e = Vec::with_capacity(n_blocks);
+    let mut jk_m = Vec::with_capacity(n_blocks);
+    let mut jk_cv = Vec::with_capacity(n_blocks);
     let mut jk_chi = Vec::with_capacity(n_blocks);
-    let mut jk_m2  = Vec::with_capacity(n_blocks);
-    let mut jk_m4  = Vec::with_capacity(n_blocks);
+    let mut jk_m2 = Vec::with_capacity(n_blocks);
+    let mut jk_m4 = Vec::with_capacity(n_blocks);
 
     let total = n_blocks * block_size;
 
@@ -141,8 +156,8 @@ fn jackknife_errors(
         let e_jk: Vec<f64> = e[..lo].iter().chain(&e[hi..total]).copied().collect();
         let m_jk: Vec<f64> = m[..lo].iter().chain(&m[hi..total]).copied().collect();
 
-        let ae  = mean(&e_jk);
-        let am  = mean(&m_jk);
+        let ae = mean(&e_jk);
+        let am = mean(&m_jk);
         let ae2 = mean_of_sq(&e_jk);
         let am2 = mean_of_sq(&m_jk);
         let am4 = mean_of_pow4(&m_jk);
@@ -182,14 +197,21 @@ mod tests {
     use rand::SeedableRng;
 
     fn cubic3d_neighbours(n: usize) -> Vec<Vec<usize>> {
-        (0..n*n*n).map(|idx| {
-            let z = idx/(n*n); let y = (idx/n)%n; let x = idx%n;
-            vec![
-                ((x+1)%n) + y*n + z*n*n, ((x+n-1)%n) + y*n + z*n*n,
-                x + ((y+1)%n)*n + z*n*n, x + ((y+n-1)%n)*n + z*n*n,
-                x + y*n + ((z+1)%n)*n*n, x + y*n + ((z+n-1)%n)*n*n,
-            ]
-        }).collect()
+        (0..n * n * n)
+            .map(|idx| {
+                let z = idx / (n * n);
+                let y = (idx / n) % n;
+                let x = idx % n;
+                vec![
+                    ((x + 1) % n) + y * n + z * n * n,
+                    ((x + n - 1) % n) + y * n + z * n * n,
+                    x + ((y + 1) % n) * n + z * n * n,
+                    x + ((y + n - 1) % n) * n + z * n * n,
+                    x + y * n + ((z + 1) % n) * n * n,
+                    x + y * n + ((z + n - 1) % n) * n * n,
+                ]
+            })
+            .collect()
     }
 
     #[test]
@@ -198,8 +220,11 @@ mod tests {
         let nb = cubic3d_neighbours(4);
         let mut lat = HeisenbergLattice::new(nb);
         let obs = measure(&mut lat, 0.5_f64.recip(), 1.0, 0.3, 5, 200, 200, &mut rng);
-        assert!(obs.magnetisation > 0.85,
-            "at T=0.5 |m| should be >0.85, got {}", obs.magnetisation);
+        assert!(
+            obs.magnetisation > 0.85,
+            "at T=0.5 |m| should be >0.85, got {}",
+            obs.magnetisation
+        );
     }
 
     #[test]
@@ -208,9 +233,21 @@ mod tests {
         let nb = cubic3d_neighbours(6);
         let mut lat = HeisenbergLattice::new(nb);
         lat.randomise(&mut rng);
-        let obs = measure(&mut lat, (10.0_f64).recip(), 1.0, 0.5, 5, 200, 500, &mut rng);
-        assert!(obs.magnetisation < 0.3,
-            "at T=10 |m| should be <0.3, got {}", obs.magnetisation);
+        let obs = measure(
+            &mut lat,
+            (10.0_f64).recip(),
+            1.0,
+            0.5,
+            5,
+            200,
+            500,
+            &mut rng,
+        );
+        assert!(
+            obs.magnetisation < 0.3,
+            "at T=10 |m| should be <0.3, got {}",
+            obs.magnetisation
+        );
     }
 
     #[test]
@@ -220,8 +257,10 @@ mod tests {
         let mut lat = HeisenbergLattice::new(nb);
         let obs = measure(&mut lat, (0.1_f64).recip(), 1.0, 0.1, 5, 500, 500, &mut rng);
         let u = 1.0 - obs.m4 / (3.0 * obs.m2 * obs.m2);
-        assert!((u - 2.0/3.0).abs() < 0.05,
-            "Binder cumulant at T→0 should be ≈2/3, got {u}");
+        assert!(
+            (u - 2.0 / 3.0).abs() < 0.05,
+            "Binder cumulant at T→0 should be ≈2/3, got {u}"
+        );
     }
 
     #[test]

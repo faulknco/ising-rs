@@ -1,6 +1,6 @@
-pub mod wolff;
-pub mod observables;
 pub mod fss;
+pub mod observables;
+pub mod wolff;
 
 use rand::Rng;
 
@@ -136,8 +136,7 @@ mod tests {
     fn random_unit_circle_is_uniform() {
         let mut rng = rand_xoshiro::Xoshiro256PlusPlus::seed_from_u64(123);
         let n = 10_000;
-        let mean_x: f64 =
-            (0..n).map(|_| random_unit_circle(&mut rng)[0]).sum::<f64>() / n as f64;
+        let mean_x: f64 = (0..n).map(|_| random_unit_circle(&mut rng)[0]).sum::<f64>() / n as f64;
         assert!(
             mean_x.abs() < 0.05,
             "mean cos should be near 0 for uniform S¹, got {mean_x}"
