@@ -5,14 +5,35 @@
 
 ---
 
-## Phase 1: Data & Figures (blocked on Windows run)
+## Phase 1: Data & Figures
 
-- [ ] `git pull` new data from Windows machine
-- [ ] Check if new CSVs differ from current (larger N, more samples, better statistics)
-- [ ] Re-run `analysis/fss.ipynb` if FSS data changed → regenerate FSS figures
+### GPU FSS Pipeline (completed 2026-03-09)
+- [x] GPU parallel tempering pipeline running on RTX 2060
+- [x] Three models: Ising (Z2), Heisenberg (O(3)), XY (O(2))
+- [x] Sizes N=8,16,32,64,128 with 100k samples, 32 replicas (Ising) / 20 replicas (Heis/XY)
+- [x] Publication data: `analysis/data/gpu_windows_pipeline/publication/` (30 files, 128 MB)
+- [x] Analysis script with single-histogram reweighting: `analysis/scripts/analyze_gpu_fss.py`
+- [x] 15 publication figures in `analysis/figures/gpu_fss/`
+- [x] Reproducibility guide: `analysis/REPRODUCIBILITY.md`
+- [x] Summary CSVs + figures committed to `gpu-windows-pipeline` branch
+
+### Results (current)
+| Model | Tc error | gamma/nu | nu | beta/nu |
+|-------|----------|----------|-----|---------|
+| Ising | 0.02% | 2.5% | 1.2% | 12.6% |
+| Heisenberg | 0.04% | 1.6% | 18% | 1.9% |
+| XY | 0.001% | 0.5% | 3.7% | 2.0% |
+
+### Improving weak exponents (in progress)
+- [ ] Run Ising N=192 (100k samples) — running now
+- [ ] Rerun Ising N=128 with 500k samples for better statistics
+- [ ] Rerun Heisenberg N=128 with 500k samples
+- [ ] Re-run analysis with additional sizes → update figures and tables
+- [ ] Target: Ising beta/nu < 5%, Heisenberg nu < 5%
+
+### Remaining figure tasks
 - [ ] Re-run `analysis/kz.ipynb` if KZ data changed → regenerate `kz_fit.png`
-- [ ] Verify KZM exponent κ improves toward 0.279 with cleaner data
-- [ ] Confirm all figures in `paper/figures/` are up to date
+- [ ] Confirm all figures in `paper/figures/` are up to date with GPU data
 - [ ] Re-run `paper/build.sh` and verify clean compile
 
 ---
@@ -64,7 +85,11 @@
 
 ## Future Work (Paper 2 / extensions — do not block submission)
 
+- Multi-GPU support for N≥256 lattices
+- Wolff cluster algorithm on GPU (currently CPU Wolff, GPU checkerboard Metropolis)
+- GPU-side parallel tempering exchange (currently CPU-mediated)
+- Kibble-Zurek quench on GPU for larger N
+- Domain coarsening dynamics on GPU
+- BCC/FCC lattice GPU kernels for J-fitting
 - Heisenberg model on same BCC/FCC graphs → better J-fitting for Fe/Ni
-- KZM on diluted/BCC/FCC graphs → disorder modification of κ
 - Spin glass on network topologies → cybersecurity bridge paper
-- Quantum transverse-field Ising → quantum KZM on arbitrary graphs
