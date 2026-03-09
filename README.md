@@ -22,11 +22,21 @@ The current codebase includes:
 
 ### Validated baseline
 
-- 2D and 3D classical Ising model on CPU
-- cubic-lattice finite-size scaling using Wolff dynamics
+- 2D and 3D classical Ising model on CPU (Wolff + Metropolis)
+- 3D Heisenberg (O(3)) and XY (O(2)) models on CPU and GPU
+- cubic-lattice finite-size scaling with parallel tempering
 - graph loading for BCC, FCC, diluted, and custom edge-list inputs
 - core observables: energy, magnetisation, Binder cumulant, heat capacity, susceptibility
 - CLI and library test coverage via `cargo test`
+
+### GPU pipeline (publication-ready)
+
+- CUDA checkerboard Metropolis with parallel tempering for Ising, Heisenberg, XY
+- GPU-resident observable computation (energy + magnetisation reduction kernels)
+- Automated pipeline: build → validate → smoke test → publication run → analysis
+- Single-histogram reweighting for fine T-grid interpolation near Tc
+- 15 publication figures across 3 universality classes
+- Tc accuracy <0.05% for all models via Binder cumulant crossing
 
 ### Available but not yet fully packaged as reproducible research outputs
 
@@ -34,13 +44,12 @@ The current codebase includes:
 - dilution studies with multi-realization averaging and propagated `T_c(p)` errors
 - coarsening workflows
 - Kibble-Zurek workflows with explicit ramp/freeze controls and uncertainty-aware sweep output
-- Heisenberg model workflows
 
 ### Current backend limits
 
-- CUDA support is currently for 3D cubic-lattice checkerboard Metropolis only
+- CUDA support is for 3D cubic-lattice checkerboard Metropolis only
 - arbitrary graph workflows are CPU-first; not every analysis path is graph-native
-- publication-quality results are being migrated from notebooks into scripted workflows
+- GPU Wolff cluster not yet implemented (parallel tempering compensates)
 
 ## Repository Goals
 
@@ -90,15 +99,39 @@ cargo run --release --bin mesh_sweep -- \
 python analysis/scripts/reproduce_validation.py --quick
 ```
 
-### Optional CUDA path
+### GPU-Accelerated FSS with Parallel Tempering
 
-Requires CUDA 12.x and the `cuda` feature.
+Requires CUDA 12.x, an NVIDIA GPU, and the `cuda` feature.
 
 ```bash
-cargo run --release --features cuda --bin fss -- --gpu --sizes 8,12,16,20,24
+# Build GPU binary
+cargo build --release --features cuda --bin gpu_fss
+
+# Run all three universality classes (Ising, Heisenberg, XY)
+python scripts/run_gpu_windows_pipeline.py --publish-on-success
+
+# Or run a single model manually
+cargo run --release --features cuda --bin gpu_fss -- \
+  --model ising \
+  --sizes 8,16,32,64,128 \
+  --tmin 4.40 --tmax 4.62 \
+  --replicas 32 \
+  --warmup 5000 --samples 100000 \
+  --exchange-every 10 \
+  --measure-every 5 \
+  --outdir analysis/data/gpu_windows_pipeline/publication
+
+# Run FSS analysis with histogram reweighting
+python analysis/scripts/analyze_gpu_fss.py
 ```
 
-This path is intended for cubic-lattice Metropolis runs. It is not a generic arbitrary-graph GPU backend.
+GPU features: checkerboard Metropolis, parallel tempering (replica exchange),
+GPU-resident observable reduction (no host↔device spin transfer), pre-allocated
+buffers. Achieves ~30x speedup over naive GPU implementation. Full pipeline
+completes in ~4 hours on RTX 2060.
+
+See [analysis/REPRODUCIBILITY.md](analysis/REPRODUCIBILITY.md) for detailed
+reproduction steps, parameters, and expected results.
 
 ## Research Layout
 

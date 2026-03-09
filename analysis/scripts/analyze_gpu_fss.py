@@ -150,6 +150,109 @@ def reweight_single_histogram(energy_lists, mag_lists, beta_list, T_fine, n: int
     return pd.DataFrame(rows)
 
 
+def wham_reweight_fine(energy_lists, mag_lists, beta_list, T_fine, n: int,
+                       n_iter=100, tol=1e-8):
+    """WHAM (multiple-histogram) reweighting to fine T grid.
+
+    Unlike single-histogram, this uses ALL replicas simultaneously for each
+    target T, giving better accuracy especially near Tc where overlap matters.
+
+    The expensive WHAM denominator (log_denom) is computed once and reused
+    for all target temperatures.
+
+    Error bars use single-histogram jackknife from the closest replica
+    (fast approximation — full WHAM jackknife is too expensive for large datasets).
+    """
+    V = n ** 3
+    K = len(beta_list)
+    N_k = np.array([len(e) for e in energy_lists])
+    all_energies = np.concatenate(energy_lists)
+    all_mags = np.concatenate(mag_lists)
+
+    # Solve WHAM equations iteratively
+    f = np.zeros(K)
+    for _ in range(n_iter):
+        # Vectorised: log_denom_terms[n, k] = log(N_k) + f_k - beta_k * E_n
+        # Use broadcasting: (N,1) op (K,) → (N,K)
+        log_denom_terms = (np.log(N_k) + f)[np.newaxis, :] - \
+                          beta_list[np.newaxis, :] * all_energies[:, np.newaxis]
+        log_denom = np.logaddexp.reduce(log_denom_terms, axis=1)
+
+        f_new = np.zeros(K)
+        for k in range(K):
+            log_terms = -beta_list[k] * all_energies - log_denom
+            f_new[k] = -np.logaddexp.reduce(log_terms)
+        f_new -= f_new[0]
+
+        if np.max(np.abs(f_new - f)) < tol:
+            f = f_new
+            break
+        f = f_new
+
+    # Precompute mag powers
+    all_mags2 = all_mags ** 2
+    all_mags4 = all_mags ** 4
+    all_energies2 = all_energies ** 2
+
+    # Compute observables at all target temperatures (vectorised weight application)
+    sim_temps = 1.0 / beta_list
+    rows = []
+    for T in T_fine:
+        beta_t = 1.0 / T
+        log_w = -beta_t * all_energies - log_denom
+        log_w -= log_w.max()
+        w = np.exp(log_w)
+        w /= w.sum()
+
+        avg_m = w @ all_mags
+        avg_m2 = w @ all_mags2
+        avg_m4 = w @ all_mags4
+        avg_e = w @ all_energies
+        avg_e2 = w @ all_energies2
+
+        chi_conn = beta_t * V * (avg_m2 - avg_m ** 2)
+        cv = beta_t ** 2 * (avg_e2 - avg_e ** 2) / V
+        U = 1.0 - avg_m4 / (3.0 * avg_m2 ** 2) if avg_m2 > 1e-15 else 0.0
+
+        # Fast error bars via single-histogram jackknife from closest replica
+        k_best = int(np.argmin(np.abs(sim_temps - T)))
+        e_sim = energy_lists[k_best]
+        m_sim = mag_lists[k_best]
+        delta_beta = beta_t - beta_list[k_best]
+        n_blocks = 20
+        n_s = len(e_sim)
+        bs = n_s // n_blocks
+        jk_chi = np.zeros(n_blocks)
+        jk_m_arr = np.zeros(n_blocks)
+        jk_U_arr = np.zeros(n_blocks)
+        for b in range(n_blocks):
+            idx = np.concatenate([np.arange(0, b * bs), np.arange((b + 1) * bs, n_blocks * bs)])
+            ej, mj = e_sim[idx], m_sim[idx]
+            lw = -delta_beta * ej
+            lw -= lw.max()
+            wj = np.exp(lw)
+            wj /= wj.sum()
+            jm = np.sum(wj * mj)
+            jm2 = np.sum(wj * mj ** 2)
+            jm4 = np.sum(wj * mj ** 4)
+            jk_chi[b] = beta_t * V * (jm2 - jm ** 2)
+            jk_m_arr[b] = jm
+            jk_U_arr[b] = 1.0 - jm4 / (3.0 * jm2 ** 2) if jm2 > 1e-15 else 0.0
+
+        jk_f = (n_blocks - 1.0) / n_blocks
+        chi_err = np.sqrt(jk_f * np.sum((jk_chi - chi_conn) ** 2))
+        m_err = np.sqrt(jk_f * np.sum((jk_m_arr - avg_m) ** 2))
+        U_err = np.sqrt(jk_f * np.sum((jk_U_arr - U) ** 2))
+
+        rows.append({
+            "T": T, "M": avg_m, "M2": avg_m2, "M4": avg_m4,
+            "chi_conn": chi_conn, "chi_err": chi_err,
+            "Cv": cv, "U": U, "E": avg_e / V,
+            "M_err": m_err, "U_err": U_err,
+        })
+    return pd.DataFrame(rows)
+
+
 def find_binder_crossings(dfs: dict[int, pd.DataFrame]) -> list[float]:
     """Find Tc from Binder cumulant crossings between adjacent sizes."""
     sizes = sorted(dfs.keys())
@@ -229,7 +332,7 @@ def collapse_quality(nu, dfs, tc, gamma_nu):
 
 
 def analyze_model(model: str, dfs: dict[int, pd.DataFrame], out_dir: Path,
-                   data_dir: Path):
+                   data_dir: Path, method: str = "wham"):
     """Full FSS analysis for one model."""
     th = THEORY[model]
     sizes = sorted(dfs.keys())
@@ -299,8 +402,8 @@ def analyze_model(model: str, dfs: dict[int, pd.DataFrame], out_dir: Path,
         tc_err = 0.0
         print("  No Binder crossings found — using theory Tc")
 
-    # ── 3. WHAM histogram reweighting → fine T grid ─────────────────────────
-    print(f"\n  Histogram reweighting (WHAM)...")
+    # ── 3. Histogram reweighting → fine T grid ──────────────────────────────
+    print(f"\n  Histogram reweighting ({method})...")
     t_lo = dfs[sizes[0]]["T"].min()
     t_hi = dfs[sizes[0]]["T"].max()
     T_fine = np.linspace(t_lo, t_hi, 200)
@@ -312,9 +415,13 @@ def analyze_model(model: str, dfs: dict[int, pd.DataFrame], out_dir: Path,
         if e_lists is None:
             print(f"    N={n}: no timeseries, skipping reweighting")
             continue
-        print(f"    N={n}: reweighting ({sum(len(e) for e in e_lists)} samples, "
+        n_samples = sum(len(e) for e in e_lists)
+        print(f"    N={n}: {method} reweighting ({n_samples} samples, "
               f"{len(e_lists)} replicas)...", end=" ", flush=True)
-        rw = reweight_single_histogram(e_lists, m_lists, beta_list, T_fine, n)
+        if method == "wham":
+            rw = wham_reweight_fine(e_lists, m_lists, beta_list, T_fine, n)
+        else:
+            rw = reweight_single_histogram(e_lists, m_lists, beta_list, T_fine, n)
         rw_dfs[n] = rw
         idx = rw["chi_conn"].idxmax()
         print(f"chi_peak={rw.loc[idx, 'chi_conn']:.1f} at T={rw.loc[idx, 'T']:.4f}")
@@ -517,6 +624,8 @@ def main():
                         help="Output directory for figures")
     parser.add_argument("--model", default=None, choices=["ising", "heisenberg", "xy"],
                         help="Analyze only one model (default: all)")
+    parser.add_argument("--method", default="single", choices=["wham", "single"],
+                        help="Reweighting method: wham (multi-histogram) or single (default: single)")
     args = parser.parse_args()
 
     repo_root = Path(__file__).resolve().parents[2]
@@ -536,7 +645,7 @@ def main():
         if not dfs:
             print(f"\nNo data found for {model}, skipping.")
             continue
-        res = analyze_model(model, dfs, out_dir, data_dir)
+        res = analyze_model(model, dfs, out_dir, data_dir, method=args.method)
         results.append(res)
 
     # ── Cross-model comparison ─────────────────────────────────────────────
