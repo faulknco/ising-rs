@@ -1,0 +1,43 @@
+{
+  "analysis_only": false,
+  "created_at": "2026-03-09T11:01:17.894603+00:00",
+  "derived_root": "/Users/faulknco/Projects/ising-rs/analysis/data/derived/validation",
+  "figure_root": "/Users/faulknco/Projects/ising-rs/analysis/figures/generated/validation",
+  "generated_figures": [
+    "/Users/faulknco/Projects/ising-rs/analysis/figures/generated/validation/autocorrelation_scaling.png",
+    "/Users/faulknco/Projects/ising-rs/analysis/figures/generated/validation/exact_enumeration.png",
+    "/Users/faulknco/Projects/ising-rs/analysis/figures/generated/validation/fluctuation_dissipation.png",
+    "/Users/faulknco/Projects/ising-rs/analysis/figures/generated/validation/known_limits.png",
+    "/Users/faulknco/Projects/ising-rs/analysis/figures/generated/validation/onsager_comparison.png"
+  ],
+  "generated_tables": [
+    "/Users/faulknco/Projects/ising-rs/analysis/data/derived/validation/validation_metrics.csv",
+    "/Users/faulknco/Projects/ising-rs/analysis/data/derived/validation/validation_overview.csv",
+    "/Users/faulknco/Projects/ising-rs/analysis/data/derived/validation/onsager_comparison.csv",
+    "/Users/faulknco/Projects/ising-rs/analysis/data/derived/validation/exact_enumeration_comparison.csv",
+    "/Users/faulknco/Projects/ising-rs/analysis/data/derived/validation/fluctuation_dissipation.csv",
+    "/Users/faulknco/Projects/ising-rs/analysis/data/derived/validation/autocorrelation_summary.csv",
+    "/Users/faulknco/Projects/ising-rs/analysis/data/derived/validation/known_limits_summary.csv",
+    "/Users/faulknco/Projects/ising-rs/analysis/data/derived/validation/validation_summary.json"
+  ],
+  "git_commit": "8421e956598cf0001355ac94fb3455811b53abd2",
+  "input_files": [
+    "/Users/faulknco/Projects/ising-rs/analysis/data/raw/validation/val_2d/fss_N128.csv",
+    "/Users/faulknco/Projects/ising-rs/analysis/data/raw/validation/val_2d/fss_N16.csv",
+    "/Users/faulknco/Projects/ising-rs/analysis/data/raw/validation/val_2d/fss_N32.csv",
+    "/Users/faulknco/Projects/ising-rs/analysis/data/raw/validation/val_2d/fss_N64.csv",
+    "/Users/faulknco/Projects/ising-rs/analysis/data/raw/validation/val_autocorr_wolff/fss_raw_N16.csv",
+    "/Users/faulknco/Projects/ising-rs/analysis/data/raw/validation/val_autocorr_wolff/fss_raw_N32.csv",
+    "/Users/faulknco/Projects/ising-rs/analysis/data/raw/validation/val_autocorr_wolff/fss_raw_N64.csv",
+    "/Users/faulknco/Projects/ising-rs/analysis/data/raw/validation/val_enum/fss_N4.csv",
+    "/Users/faulknco/Projects/ising-rs/analysis/data/raw/validation/val_limits_2d/fss_N16.csv",
+    "/Users/faulknco/Projects/ising-rs/analysis/data/raw/validation/val_limits_2d/fss_N32.csv",
+    "/Users/faulknco/Projects/ising-rs/analysis/data/raw/validation/val_limits_3d/fss_N16.csv",
+    "/Users/faulknco/Projects/ising-rs/analysis/data/raw/validation/val_limits_3d/fss_N8.csv"
+  ],
+  "mode": "full",
+  "raw_root": "/Users/faulknco/Projects/ising-rs/analysis/data/raw/validation",
+  "schema_version": "0.1.0",
+  "skip_existing": false,
+  "workflow": "analysis/scripts/reproduce_validation.py"
+}
