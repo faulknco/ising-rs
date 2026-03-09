@@ -184,6 +184,7 @@ fn main() {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn run_ising_jfit(
     neighbours: &[Vec<usize>],
     graph_name: &str,
@@ -233,6 +234,7 @@ fn run_ising_jfit(
     eprintln!("Wrote {}", path.display());
 }
 
+#[allow(clippy::too_many_arguments)]
 fn run_xy_jfit(
     neighbours: &[Vec<usize>],
     graph_name: &str,
@@ -288,6 +290,7 @@ fn run_xy_jfit(
     eprintln!("Wrote {}", path.display());
 }
 
+#[allow(clippy::too_many_arguments)]
 fn run_heisenberg_jfit(
     neighbours: &[Vec<usize>],
     graph_name: &str,
