@@ -22,6 +22,31 @@ path = "src/bin/kz.rs"
 name = "mesh_sweep"
 path = "src/bin/mesh_sweep.rs"
 
+[[bin]]
+name = "heisenberg_fss"
+path = "src/bin/heisenberg_fss.rs"
+
+[[bin]]
+name = "heisenberg_jfit"
+path = "src/bin/heisenberg_jfit.rs"
+
+[[bin]]
+name = "xy_fss"
+path = "src/bin/xy_fss.rs"
+
+[[bin]]
+name = "xy_jfit"
+path = "src/bin/xy_jfit.rs"
+
+[[bin]]
+name = "gpu_fss"
+path = "src/bin/gpu_fss.rs"
+required-features = ["cuda"]
+
+[[bin]]
+name = "gpu_jfit"
+path = "src/bin/gpu_jfit.rs"
+
 [lib]
 name = "ising"
 path = "src/lib.rs"
@@ -32,6 +57,7 @@ rand = { version = "0.8", features = ["small_rng"] }
 rand_xoshiro = "0.6"
 wasm-bindgen = "0.2"
 anyhow = "1"
+serde_json = "1"
 
 [dependencies.cudarc]
 version = "0.12"

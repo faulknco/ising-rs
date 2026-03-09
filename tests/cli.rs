@@ -344,16 +344,94 @@ fn kz_writes_csv() {
     assert!(path.exists(), "missing {}", path.display());
     let content = std::fs::read_to_string(&path).unwrap();
     let lines: Vec<&str> = content.trim().lines().collect();
-    assert_eq!(lines[0], "tau_q,rho", "bad header in kz CSV");
+    assert_eq!(
+        lines[0], "tau_q,rho,rho_err,n_trials",
+        "bad header in kz CSV"
+    );
     assert_eq!(lines.len(), 4, "expected header + 3 rows");
 
-    // rho should be between 0 and 1
+    // rho and rho_err should be between 0 and 1
     for line in &lines[1..] {
-        let rho: f64 = line.split(',').nth(1).unwrap().parse().unwrap();
+        let fields: Vec<&str> = line.split(',').collect();
+        assert_eq!(
+            fields.len(),
+            4,
+            "expected 4 columns, got {}: {line}",
+            fields.len()
+        );
+        let rho: f64 = fields[1].parse().unwrap();
+        let rho_err: f64 = fields[2].parse().unwrap();
+        let n_trials: usize = fields[3].parse().unwrap();
         assert!((0.0..=1.0).contains(&rho), "rho={rho} out of range [0,1]");
+        assert!(
+            (0.0..=1.0).contains(&rho_err),
+            "rho_err={rho_err} out of range [0,1]"
+        );
+        assert_eq!(n_trials, 2, "unexpected trial count in KZ CSV");
     }
 
     let _ = std::fs::remove_dir_all(&tmp);
+}
+
+#[test]
+fn kz_supports_single_tau_step() {
+    let tmp = std::env::temp_dir().join("ising_test_kz_single_step");
+    let _ = std::fs::remove_dir_all(&tmp);
+    std::fs::create_dir_all(&tmp).unwrap();
+
+    let output = cargo_bin("kz")
+        .args([
+            "--n",
+            "4",
+            "--geometry",
+            "cubic",
+            "--tau-min",
+            "25",
+            "--tau-max",
+            "25",
+            "--tau-steps",
+            "1",
+            "--trials",
+            "1",
+            "--seed",
+            "2",
+            "--outdir",
+            tmp.to_str().unwrap(),
+        ])
+        .output()
+        .expect("failed to run kz with one tau step");
+
+    assert!(
+        output.status.success(),
+        "kz single-step exited with error: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let path = tmp.join("kz_N4.csv");
+    let content = std::fs::read_to_string(&path).unwrap();
+    let lines: Vec<&str> = content.trim().lines().collect();
+    assert_eq!(lines.len(), 2, "expected header + 1 row");
+    assert!(lines[1].starts_with("25,"), "expected tau_q=25 row");
+
+    let _ = std::fs::remove_dir_all(&tmp);
+}
+
+#[test]
+fn kz_gpu_rejects_non_cubic_geometry() {
+    let output = cargo_bin("kz")
+        .args(["--geometry", "square", "--gpu"])
+        .output()
+        .expect("failed to run kz --gpu --geometry square");
+
+    assert!(
+        !output.status.success(),
+        "expected kz to reject non-cubic GPU geometry"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("supports only --geometry cubic"),
+        "unexpected stderr: {stderr}"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -402,4 +480,249 @@ fn coarsening_writes_csv() {
     assert!(lines.len() >= 2, "expected at least header + 1 data row");
 
     let _ = std::fs::remove_dir_all(&tmp);
+}
+
+// ---------------------------------------------------------------------------
+// heisenberg_fss binary
+// ---------------------------------------------------------------------------
+
+#[test]
+fn heisenberg_fss_smoke() {
+    let outdir = "/tmp/heis_test_fss";
+    let status = cargo_bin("heisenberg_fss")
+        .args([
+            "--sizes",
+            "4",
+            "--tmin",
+            "1.0",
+            "--tmax",
+            "2.0",
+            "--steps",
+            "3",
+            "--warmup",
+            "20",
+            "--samples",
+            "40",
+            "--outdir",
+            outdir,
+        ])
+        .status()
+        .expect("failed to run heisenberg_fss");
+    assert!(
+        status.success(),
+        "heisenberg_fss exited with non-zero status"
+    );
+
+    let csv = std::fs::read_to_string(format!("{outdir}/heisenberg_fss_N4.csv"))
+        .expect("CSV not written");
+    let rows: Vec<&str> = csv.lines().collect();
+    assert_eq!(
+        rows.len(),
+        4,
+        "expected header + 3 data rows, got {}",
+        rows.len()
+    );
+    assert!(
+        rows[0].contains("E_err"),
+        "CSV header missing error columns"
+    );
+    assert!(!csv.contains("NaN"), "CSV contains NaN values");
+}
+
+// ---------------------------------------------------------------------------
+// heisenberg_jfit binary
+// ---------------------------------------------------------------------------
+
+#[test]
+fn heisenberg_jfit_smoke() {
+    let outdir = "/tmp/heis_test_jfit";
+    let status = cargo_bin("heisenberg_jfit")
+        .args([
+            "--graph",
+            "analysis/graphs/bcc_N4.json",
+            "--tmin",
+            "5.0",
+            "--tmax",
+            "8.0",
+            "--steps",
+            "3",
+            "--warmup",
+            "20",
+            "--samples",
+            "40",
+            "--outdir",
+            outdir,
+        ])
+        .status()
+        .expect("failed to run heisenberg_jfit");
+    assert!(
+        status.success(),
+        "heisenberg_jfit exited with non-zero status"
+    );
+
+    let csv = std::fs::read_to_string(format!("{outdir}/heisenberg_jfit_bcc_N4.csv"))
+        .expect("CSV not written");
+    let rows: Vec<&str> = csv.lines().collect();
+    assert_eq!(
+        rows.len(),
+        4,
+        "expected header + 3 data rows, got {}",
+        rows.len()
+    );
+    assert!(
+        rows[0].starts_with("T,E,"),
+        "unexpected CSV header: {}",
+        rows[0]
+    );
+    assert!(!csv.contains("NaN"), "CSV contains NaN values");
+}
+
+// ---------------------------------------------------------------------------
+// xy_fss binary
+// ---------------------------------------------------------------------------
+
+#[test]
+fn xy_fss_smoke() {
+    let outdir = "/tmp/xy_test_fss";
+    let status = cargo_bin("xy_fss")
+        .args([
+            "--sizes",
+            "4",
+            "--tmin",
+            "1.0",
+            "--tmax",
+            "2.0",
+            "--steps",
+            "5",
+            "--warmup",
+            "50",
+            "--samples",
+            "100",
+            "--seed",
+            "1",
+            "--outdir",
+            outdir,
+        ])
+        .status()
+        .expect("failed to run xy_fss");
+    assert!(status.success(), "xy_fss exited with non-zero status");
+
+    let csv = std::fs::read_to_string(format!("{outdir}/xy_fss_N4.csv")).expect("CSV not written");
+    let rows: Vec<&str> = csv.lines().collect();
+    assert_eq!(
+        rows.len(),
+        6,
+        "expected header + 5 data rows, got {}",
+        rows.len()
+    );
+    assert_eq!(
+        rows[0], "T,E,E_err,M,M_err,M2,M2_err,M4,M4_err,Cv,Cv_err,chi,chi_err",
+        "unexpected CSV header: {}",
+        rows[0]
+    );
+    assert!(!csv.contains("NaN"), "CSV contains NaN values");
+}
+
+// ---------------------------------------------------------------------------
+// xy_jfit binary
+// ---------------------------------------------------------------------------
+
+#[test]
+fn xy_jfit_smoke() {
+    let outdir = "/tmp/xy_test_jfit";
+    let status = cargo_bin("xy_jfit")
+        .args([
+            "--graph",
+            "analysis/graphs/bcc_N4.json",
+            "--tmin",
+            "2.3",
+            "--tmax",
+            "3.5",
+            "--steps",
+            "5",
+            "--warmup",
+            "50",
+            "--samples",
+            "100",
+            "--seed",
+            "1",
+            "--outdir",
+            outdir,
+        ])
+        .status()
+        .expect("failed to run xy_jfit");
+    assert!(status.success(), "xy_jfit exited with non-zero status");
+
+    let csv =
+        std::fs::read_to_string(format!("{outdir}/xy_jfit_bcc_N4.csv")).expect("CSV not written");
+    let rows: Vec<&str> = csv.lines().collect();
+    assert_eq!(
+        rows.len(),
+        6,
+        "expected header + 5 data rows, got {}",
+        rows.len()
+    );
+    assert_eq!(
+        rows[0], "T,E,E_err,M,M_err,M2,M2_err,M4,M4_err,Cv,Cv_err,chi,chi_err",
+        "unexpected CSV header: {}",
+        rows[0]
+    );
+    assert!(!csv.contains("NaN"), "CSV contains NaN values");
+}
+
+// ---------------------------------------------------------------------------
+// gpu_fss binary (requires --features cuda and a GPU)
+// ---------------------------------------------------------------------------
+
+#[test]
+#[ignore] // Requires --features cuda and a GPU
+fn gpu_fss_ising_smoke() {
+    let dir = std::env::temp_dir().join("ising_test_gpu_fss");
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+
+    let status = std::process::Command::new("cargo")
+        .args([
+            "run",
+            "--release",
+            "--features",
+            "cuda",
+            "--bin",
+            "gpu_fss",
+            "--",
+            "--model",
+            "ising",
+            "--sizes",
+            "4",
+            "--tmin",
+            "4.4",
+            "--tmax",
+            "4.6",
+            "--replicas",
+            "4",
+            "--warmup",
+            "50",
+            "--samples",
+            "100",
+            "--exchange-every",
+            "10",
+            "--outdir",
+            dir.to_str().unwrap(),
+        ])
+        .status()
+        .expect("failed to run gpu_fss");
+    assert!(status.success());
+
+    let summary = dir.join("gpu_fss_ising_N4_summary.csv");
+    assert!(summary.exists(), "summary CSV missing");
+
+    let content = std::fs::read_to_string(&summary).unwrap();
+    let lines: Vec<&str> = content.lines().collect();
+    assert!(lines.len() >= 2, "summary CSV should have header + data");
+    assert!(lines[0].starts_with("T,E,"));
+
+    let ts = dir.join("gpu_fss_ising_N4_timeseries.csv");
+    assert!(ts.exists(), "timeseries CSV missing");
+
+    let _ = std::fs::remove_dir_all(&dir);
 }

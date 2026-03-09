@@ -203,7 +203,7 @@ At $L = 128$ with 10{,}000 Wolff measurements per temperature, the MC energy
 matches the exact curve to a mean deviation of $0.002\,J$ per spin across
 51 temperature points (Fig.~\ref{fig:val_onsager}).
 
-\begin{figure*}[!htbp]
+\begin{figure*}[t]
 \centering
 \includegraphics[width=0.85\textwidth]{val_2d_onsager.png}
 \caption{2D Ising validation against Onsager's exact solution. Left: energy
@@ -224,7 +224,7 @@ This provides a rigorous, approximation-free proof that the Hamiltonian
 evaluation, Boltzmann sampling, and observable computation are correctly
 implemented.
 
-\begin{figure*}[!htbp]
+\begin{figure*}[t]
 \centering
 \includegraphics[width=0.85\textwidth]{val_exact_enum.png}
 \caption{Exact enumeration vs.\ Monte Carlo for a $4 \times 4$ 2D Ising
@@ -282,7 +282,7 @@ for sizes $L = 16$--$48$, used for histogram reweighting and exponent extraction
 Figure~\ref{fig:observables} shows the four primary observables as a function of
 temperature for all lattice sizes.
 
-\begin{figure*}[!htbp]
+\begin{figure*}[t]
 \centering
 \includegraphics[width=0.85\textwidth]{fss_observables.png}
 \caption{Raw observables versus temperature for all lattice sizes $L = 8$--$48$.
@@ -319,7 +319,7 @@ We extract exponents using multiple methods to assess systematic uncertainties.
 Figure~\ref{fig:peak_scaling} shows the log-log peak scaling analysis and the
 Binder-slope method for extracting $\nu$.
 
-\begin{figure*}[!htbp]
+\begin{figure*}[t]
 \centering
 \includegraphics[width=0.85\textwidth]{fss_peak_scaling.png}
 \caption{Exponent extraction from FSS using histogram-reweighted data.
@@ -330,7 +330,7 @@ All sizes $L = 16$--$48$ with jackknife error bars.}
 \label{fig:peak_scaling}
 \end{figure*}
 
-\begin{table}[h]
+\begin{table}[t]
 \caption{Critical exponents from FSS analysis. Theory values are from the
 3D Ising universality class~\cite{Hasenbusch2010,ElShowk2014}. All exponents
 are extracted from histogram-reweighted data with jackknife error bars.}
@@ -353,7 +353,7 @@ connected susceptibility: $\chi L^{-\gamma/\nu}$ versus $(T - \Tc) L^{1/\nu}$
 produces a universal curve when $\nu$ is optimized (Fig.~\ref{fig:collapse}).
 With $\Tc$ fixed from the Binder analysis, we find $\nu = 0.667(37)$.
 
-\begin{figure}[!htbp]
+\begin{figure}[tp]
 \centering
 \includegraphics[width=\columnwidth]{fss_collapse_global.png}
 \caption{Global scaling collapse. Left: connected susceptibility
@@ -375,7 +375,7 @@ Figure~\ref{fig:reweighted} shows the reweighted observables with finely
 resolved critical peaks, and Fig.~\ref{fig:reweighted_scaling} shows the
 improved peak scaling fits using reweighted data.
 
-\begin{figure}[!htbp]
+\begin{figure}[tp]
 \centering
 \includegraphics[width=\columnwidth]{fss_reweighted.png}
 \caption{Histogram-reweighted observables near criticality. Connected
@@ -386,7 +386,7 @@ the coarse simulation grid misses for $L \geq 32$.}
 \label{fig:reweighted}
 \end{figure}
 
-\begin{figure}[!htbp]
+\begin{figure}[tp]
 \centering
 \includegraphics[width=\columnwidth]{fss_reweighted_scaling.png}
 \caption{Peak scaling from reweighted data. Log-log plots of
@@ -405,6 +405,7 @@ from high-statistics Binder crossings.
 The hyperscaling relation $2\beta/\nu + \gamma/\nu = d = 3$ is satisfied to 2.7\%,
 providing a self-consistency check.
 
+\clearpage
 \subsection{Exchange coupling fitting}
 \label{sec:jfit}
 
@@ -451,7 +452,7 @@ $p = 0, 0.10, 0.30, 0.50$, where $p$ is the fraction of removed bonds.
 Table~\ref{tab:dilution} shows the monotonic suppression of $\Tc$ with increasing
 disorder, consistent with the Harris criterion~\cite{Harris1974}.
 
-\begin{table}[h]
+\begin{table}[t]
 \caption{Effect of bond dilution on the critical temperature of the 3D cubic Ising
 model ($L=20$, $J=1$).}
 \label{tab:dilution}
@@ -494,7 +495,7 @@ We fit $\rho(\tau_Q)$ to the three-parameter model
 $\rho = A \tau_Q^{-\kappa} + \rho_{\mathrm{eq}}$ using nonlinear least squares.
 Results for GPU-accelerated runs with 50~trials per $\tau_Q$ value:
 
-\begin{table}[h]
+\begin{table}[t]
 \caption{Kibble--Zurek exponent $\kappa$ from snap-freeze quench simulations.
 Theory: $\kappa = 0.279$ for Metropolis $z \approx 2$.}
 \label{tab:kz}
@@ -525,6 +526,7 @@ theoretical prediction $\kappa = 0.279$ (dashed) with increasing system size.}
 \end{figure}
 
 %=============================================================================
+\clearpage
 \section{Discussion}
 \label{sec:discussion}
 %=============================================================================
