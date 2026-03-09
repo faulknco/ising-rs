@@ -93,12 +93,15 @@ extern "C" __global__ void msc_metropolis_kernel(
     unsigned int s2 = anti_ym ^ anti_zp ^ anti_zm;
     unsigned int c2 = (anti_ym & anti_zp) | (anti_ym & anti_zm) | (anti_zp & anti_zm);
 
-    unsigned int t0 = s1 ^ s2;
-    unsigned int t1 = s1 & s2;
-    unsigned int u0 = t0 ^ c1;
-    unsigned int u1a = t0 & c1;
-    unsigned int v1 = t1 ^ u1a ^ c2;
-    unsigned int v2 = (t1 & u1a) | (t1 & c2) | (u1a & c2);
+    // Combine the two 3-input sums into a single 3-bit count per bit position.
+    // (s1,c1) represents s1 + 2*c1, (s2,c2) represents s2 + 2*c2.
+    // bit 0 of total = s1 ^ s2
+    // bits 1-2: add the three weight-2 terms (t1, c1, c2)
+    unsigned int t0 = s1 ^ s2;        // bit 0 of s1+s2
+    unsigned int t1 = s1 & s2;        // carry from s1+s2 (weight 2)
+    unsigned int bit0 = t0;           // bit 0 of total count
+    unsigned int bit1 = t1 ^ c1 ^ c2; // bit 1: sum of three weight-2 terms
+    unsigned int bit2 = (t1 & c1) | (t1 & c2) | (c1 & c2); // bit 2: carry
 
     RngState local_rng = rng_states[tid];
     unsigned int flip_mask = 0;
@@ -109,18 +112,26 @@ extern "C" __global__ void msc_metropolis_kernel(
         unsigned int want_b1 = (n_anti >> 1) & 1 ? 0xFFFFFFFF : 0;
         unsigned int want_b0 = (n_anti >> 0) & 1 ? 0xFFFFFFFF : 0;
 
-        unsigned int has_count = ~(v2 ^ want_b2) & ~(v1 ^ want_b1) & ~(u0 ^ want_b0);
+        unsigned int has_count = ~(bit2 ^ want_b2) & ~(bit1 ^ want_b1) & ~(bit0 ^ want_b0);
         if (has_count == 0) continue;
 
-        float prob = boltz_probs[k + 3];
+        // delta_E = 4J(3 - n_anti).  boltz_probs indexed by n_anti.
+        float prob = boltz_probs[n_anti];
         if (prob >= 1.0f) {
             flip_mask |= has_count;
         } else if (prob > 0.0f) {
-            unsigned int rand_bits = curand(&local_rng);
-            unsigned int threshold = (unsigned int)(prob * 4294967296.0f);
-            if (rand_bits < threshold) {
-                flip_mask |= has_count;
+            // Per-bit independent acceptance: one random draw per candidate spin.
+            unsigned int accept_mask = 0;
+            unsigned int remaining = has_count;
+            while (remaining != 0) {
+                int bit = __ffs(remaining) - 1;
+                float u = curand_uniform(&local_rng);
+                if (u < prob) {
+                    accept_mask |= (1u << bit);
+                }
+                remaining &= remaining - 1;
             }
+            flip_mask |= accept_mask;
         }
     }
 
@@ -272,10 +283,9 @@ extern "C" __global__ void msc_batched_metropolis_kernel(
     unsigned int c2 = (anti_ym & anti_zp) | (anti_ym & anti_zm) | (anti_zp & anti_zm);
     unsigned int t0 = s1 ^ s2;
     unsigned int t1 = s1 & s2;
-    unsigned int u0 = t0 ^ c1;
-    unsigned int u1a = t0 & c1;
-    unsigned int v1 = t1 ^ u1a ^ c2;
-    unsigned int v2 = (t1 & u1a) | (t1 & c2) | (u1a & c2);
+    unsigned int bit0 = t0;
+    unsigned int bit1 = t1 ^ c1 ^ c2;
+    unsigned int bit2 = (t1 & c1) | (t1 & c2) | (c1 & c2);
 
     RngState local_rng = rng_states[tid];
     unsigned int flip_mask = 0;
@@ -285,18 +295,26 @@ extern "C" __global__ void msc_batched_metropolis_kernel(
         unsigned int want_b2 = (n_anti >> 2) & 1 ? 0xFFFFFFFF : 0;
         unsigned int want_b1 = (n_anti >> 1) & 1 ? 0xFFFFFFFF : 0;
         unsigned int want_b0 = (n_anti >> 0) & 1 ? 0xFFFFFFFF : 0;
-        unsigned int has_count = ~(v2 ^ want_b2) & ~(v1 ^ want_b1) & ~(u0 ^ want_b0);
+        unsigned int has_count = ~(bit2 ^ want_b2) & ~(bit1 ^ want_b1) & ~(bit0 ^ want_b0);
         if (has_count == 0) continue;
 
-        float prob = boltz[k + 3];
+        // delta_E = 4J(3 - n_anti).  boltz indexed by n_anti.
+        float prob = boltz[n_anti];
         if (prob >= 1.0f) {
             flip_mask |= has_count;
         } else if (prob > 0.0f) {
-            unsigned int rand_bits = curand(&local_rng);
-            unsigned int threshold = (unsigned int)(prob * 4294967296.0f);
-            if (rand_bits < threshold) {
-                flip_mask |= has_count;
+            // Per-bit independent acceptance
+            unsigned int accept_mask = 0;
+            unsigned int remaining = has_count;
+            while (remaining != 0) {
+                int bit = __ffs(remaining) - 1;
+                float u = curand_uniform(&local_rng);
+                if (u < prob) {
+                    accept_mask |= (1u << bit);
+                }
+                remaining &= remaining - 1;
             }
+            flip_mask |= accept_mask;
         }
     }
 

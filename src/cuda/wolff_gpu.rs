@@ -47,8 +47,8 @@ impl WolffGpuLattice {
             .collect();
 
         let spins = device.htod_sync_copy(&host_spins)?;
-        // N^3 threads (full lattice, not checkerboard)
-        let rng_states = device.alloc_zeros::<u8>((n_sites as usize) * 16)?;
+        // sizeof(curandStatePhilox4_32_10) = 64 bytes per thread
+        let rng_states = device.alloc_zeros::<u8>((n_sites as usize) * 64)?;
         let bonds = device.alloc_zeros::<u8>((n_sites as usize) * 6)?;
         let labels = device.alloc_zeros::<u32>(n_sites as usize)?;
         let changed_flag = device.alloc_zeros::<i32>(1)?;
@@ -105,7 +105,11 @@ impl WolffGpuLattice {
             return Ok(0);
         }
 
-        let p_add = 1.0_f32 - (-2.0 * beta * j).exp();
+        // Each undirected bond (i,j) is proposed from both sides independently.
+        // If each side activates with probability q, the effective activation
+        // probability is 1-(1-q)^2. We want this to equal p = 1-exp(-2βJ).
+        // Solving: (1-q)^2 = exp(-2βJ), so q = 1 - exp(-βJ).
+        let p_add = 1.0_f32 - (-beta * j).exp();
         let n = self.n as i32;
         let grid = (self.n_sites + BLOCK_SIZE - 1) / BLOCK_SIZE;
 
@@ -154,7 +158,7 @@ impl WolffGpuLattice {
                         &self.bonds,
                         &mut self.labels,
                         &mut self.changed_flag,
-                        self.n_sites as i32,
+                        self.n as i32,
                     ),
                 )?;
             }
@@ -201,6 +205,10 @@ impl WolffGpuLattice {
             )?;
         }
 
+        // Copy the seed's cluster label back to host (scalar value needed by flip kernel)
+        let seed_label_host = self.device.dtoh_sync_copy(&self.seed_result)?;
+        let flip_label = seed_label_host[0];
+
         let f_flip = self
             .device
             .get_func("wolff", "wolff_flip_cluster_kernel")
@@ -215,7 +223,7 @@ impl WolffGpuLattice {
                 (
                     &mut self.spins,
                     &self.labels,
-                    &self.seed_result,
+                    flip_label,
                     self.n_sites as i32,
                 ),
             )?;

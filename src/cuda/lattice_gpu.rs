@@ -40,8 +40,8 @@ impl LatticeGpu {
             .collect();
 
         let spins = device.htod_sync_copy(&host_spins)?;
-        // 16 bytes per Philox RNG state
-        let rng_states = device.alloc_zeros::<u8>((n_threads as usize) * 16)?;
+        // sizeof(curandStatePhilox4_32_10) = 64 bytes per thread
+        let rng_states = device.alloc_zeros::<u8>((n_threads as usize) * 64)?;
 
         // Pre-allocate reduction buffers
         let n_blocks = ((size as u32) + 256 - 1) / 256;

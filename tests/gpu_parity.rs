@@ -13,9 +13,9 @@
 #[cfg(feature = "cuda")]
 mod gpu_parity_tests {
     use cudarc::driver::CudaDevice;
-    use ising_rs::cuda::lattice_gpu::LatticeGpu;
-    use ising_rs::cuda::msc_lattice::MscLattice;
-    use ising_rs::cuda::wolff_gpu::WolffGpuLattice;
+    use ising::cuda::lattice_gpu::LatticeGpu;
+    use ising::cuda::msc_lattice::MscLattice;
+    use ising::cuda::wolff_gpu::WolffGpuLattice;
     use rand::rngs::SmallRng;
     use rand::SeedableRng;
 
@@ -266,13 +266,13 @@ mod gpu_parity_tests {
         // init_spins sets all bits to 1 (all spins up) -- no randomisation
         let (e_per_spin, m_per_spin) = msc.measure_gpu(j).unwrap();
 
-        let e_tol = 1e-6;
+        let e_tol = 1e-6_f64;
         assert!(
-            (e_per_spin - (-3.0)).abs() < e_tol,
+            (e_per_spin - (-3.0_f64)).abs() < e_tol,
             "Ground state E/spin = {e_per_spin:.6}, expected -3.0"
         );
         assert!(
-            (m_per_spin - 1.0).abs() < e_tol,
+            (m_per_spin - 1.0_f64).abs() < e_tol,
             "Ground state |M|/spin = {m_per_spin:.6}, expected 1.0"
         );
     }

@@ -40,8 +40,8 @@ impl MscLattice {
         let n_blocks = (n_words + BLOCK_SIZE - 1) / BLOCK_SIZE;
 
         let spins_msc = device.alloc_zeros::<u32>(n_words as usize)?;
-        // Philox RNG: 16 bytes per thread, one thread per word
-        let rng_states = device.alloc_zeros::<u8>((n_words as usize) * 16)?;
+        // sizeof(curandStatePhilox4_32_10) = 64 bytes per thread
+        let rng_states = device.alloc_zeros::<u8>((n_words as usize) * 64)?;
         let partial_mag = device.alloc_zeros::<f32>(n_blocks as usize)?;
         let partial_energy = device.alloc_zeros::<f32>(n_blocks as usize)?;
         let boltz_probs = device.alloc_zeros::<f32>(7)?;
@@ -120,13 +120,15 @@ impl MscLattice {
         Ok(())
     }
 
-    /// Compute and upload the 7-element Boltzmann probability table for
-    /// neighbour-sum values k in -3..=3 (3D cubic lattice).
+    /// Compute and upload the 7-element Boltzmann probability table.
+    /// Index by n_anti (0..=6): delta_E = 4*J*(3 - n_anti).
+    /// n_anti=0: all neighbours aligned, flipping costs energy (12J).
+    /// n_anti=6: all neighbours anti-aligned, flipping lowers energy (-12J).
     pub fn set_temperature(&mut self, beta: f32, j: f32) -> anyhow::Result<()> {
         let mut probs = [0.0f32; 7];
-        for k in -3i32..=3 {
-            let delta_e = 4.0 * j * k as f32;
-            probs[(k + 3) as usize] = if delta_e <= 0.0 {
+        for n_anti in 0..=6i32 {
+            let delta_e = 4.0 * j * (3 - n_anti) as f32;
+            probs[n_anti as usize] = if delta_e <= 0.0 {
                 1.0
             } else {
                 (-beta * delta_e).exp().min(1.0)
@@ -155,12 +157,11 @@ impl MscLattice {
                     (
                         &mut self.spins_msc,
                         &mut self.rng_states,
-                        &self.boltz_probs,
                         n,
-                        self.n_words as i32,
                         beta,
                         j,
                         parity,
+                        &self.boltz_probs,
                     ),
                 )?;
             }
@@ -202,7 +203,6 @@ impl MscLattice {
                     &self.spins_msc,
                     &mut self.partial_energy,
                     self.n as i32,
-                    self.n_words as i32,
                     j,
                 ),
             )?;
@@ -230,7 +230,6 @@ impl MscLattice {
                     &self.spins_msc,
                     &mut self.partial_energy,
                     self.n as i32,
-                    self.n_words as i32,
                     j,
                 ),
             )?;
@@ -306,7 +305,8 @@ impl BatchedMscLattice {
 
         // Allocate concatenated buffers
         let spins_all = device.alloc_zeros::<u32>(total_words as usize)?;
-        let rng_states = device.alloc_zeros::<u8>((total_words as usize) * 16)?;
+        // sizeof(curandStatePhilox4_32_10) = 64 bytes per thread
+        let rng_states = device.alloc_zeros::<u8>((total_words as usize) * 64)?;
         let boltz_probs_all = device.alloc_zeros::<f32>(7 * n_replicas)?;
         let partial_mag = device.alloc_zeros::<f32>(n_blocks_per_replica as usize)?;
         let partial_energy = device.alloc_zeros::<f32>(n_blocks_per_replica as usize)?;
@@ -371,13 +371,15 @@ impl BatchedMscLattice {
 
     /// Compute and upload the Boltzmann probability tables for all replicas.
     /// `betas` must have length `n_replicas`.
+    /// Compute and upload Boltzmann probability tables for all replicas.
+    /// Index by n_anti (0..=6): delta_E = 4*J*(3 - n_anti).
     pub fn set_temperatures(&mut self, betas: &[f32], j: f32) -> anyhow::Result<()> {
         assert_eq!(betas.len(), self.n_replicas);
         let mut probs = vec![0.0f32; 7 * self.n_replicas];
         for (r, &beta) in betas.iter().enumerate() {
-            for k in -3i32..=3 {
-                let delta_e = 4.0 * j * k as f32;
-                probs[r * 7 + (k + 3) as usize] = if delta_e <= 0.0 {
+            for n_anti in 0..=6i32 {
+                let delta_e = 4.0 * j * (3 - n_anti) as f32;
+                probs[r * 7 + n_anti as usize] = if delta_e <= 0.0 {
                     1.0
                 } else {
                     (-beta * delta_e).exp().min(1.0)
