@@ -23,20 +23,18 @@ The current codebase includes:
 ### Validated baseline
 
 - 2D and 3D classical Ising model on CPU (Wolff + Metropolis)
-- 3D Heisenberg (O(3)) and XY (O(2)) models on CPU and GPU
-- cubic-lattice finite-size scaling with parallel tempering
+- CPU workflows for cubic lattices and loaded graph topologies
 - graph loading for BCC, FCC, diluted, and custom edge-list inputs
 - core observables: energy, magnetisation, Binder cumulant, heat capacity, susceptibility
 - CLI and library test coverage via `cargo test`
 
-### GPU pipeline (publication-ready)
+### GPU FSS workflow (current branch)
 
-- CUDA checkerboard Metropolis with parallel tempering for Ising, Heisenberg, XY
-- GPU-resident observable computation (energy + magnetisation reduction kernels)
-- Automated pipeline: build → validate → smoke test → publication run → analysis
-- Single-histogram reweighting for fine T-grid interpolation near Tc
-- 15 publication figures across 3 universality classes
-- Tc accuracy <0.05% for all models via Binder cumulant crossing
+- CUDA checkerboard Metropolis with parallel tempering for Ising, Heisenberg, and XY on 3D cubic lattices
+- GPU-side observable reduction kernels for the publication FSS path
+- scripted Windows pipeline: build -> validate -> smoke test -> publication run -> analysis
+- committed summary CSVs, analysis figures, and a reproduction guide for the current GPU branch
+- histogram reweighting support in `analysis/scripts/analyze_gpu_fss.py`
 
 ### Available but not yet fully packaged as reproducible research outputs
 
@@ -47,9 +45,9 @@ The current codebase includes:
 
 ### Current backend limits
 
-- CUDA support is for 3D cubic-lattice checkerboard Metropolis only
+- GPU support is currently focused on 3D cubic-lattice finite-size-scaling workflows
 - arbitrary graph workflows are CPU-first; not every analysis path is graph-native
-- GPU Wolff cluster not yet implemented (parallel tempering compensates)
+- GPU Wolff cluster updates are not implemented
 
 ## Repository Goals
 
@@ -60,10 +58,14 @@ The repo is moving toward three explicit guarantees:
 3. Physics credibility: validated benchmark physics is separated from exploratory workflows.
 
 See [reproducibility.md](/Users/faulknco/Projects/ising-rs/docs/reproducibility.md) and [physics-validation.md](/Users/faulknco/Projects/ising-rs/docs/physics-validation.md).
+Fresh-machine setup is documented in [setup.md](/Users/faulknco/Projects/ising-rs/docs/setup.md).
 
 ## Quick Start
 
 ```bash
+# Bootstrap the analysis environment and verify the baseline
+python scripts/bootstrap_analysis.py --verify
+
 # Build
 cargo build --release
 
@@ -95,8 +97,8 @@ cargo run --release --bin mesh_sweep -- \
   --graph analysis/graphs/bcc_N8.json \
   --tmin 5.0 --tmax 8.0 --steps 21
 
-# Rebuild the validation summary (quick mode)
-python analysis/scripts/reproduce_validation.py --quick
+# Rebuild the baseline validation pack (quick mode)
+python analysis/scripts/reproduce_classical_baseline.py --quick
 ```
 
 ### GPU-Accelerated FSS with Parallel Tempering
@@ -126,9 +128,10 @@ python analysis/scripts/analyze_gpu_fss.py
 ```
 
 GPU features: checkerboard Metropolis, parallel tempering (replica exchange),
-GPU-resident observable reduction (no host↔device spin transfer), pre-allocated
-buffers. Achieves ~30x speedup over naive GPU implementation. Full pipeline
-completes in ~4 hours on RTX 2060.
+GPU-side observable reduction for the FSS path, and pre-allocated buffers.
+Performance depends on model, size, and measurement cadence; use
+`analysis/REPRODUCIBILITY.md` for the current benchmark workflow and committed
+example outputs.
 
 See [analysis/REPRODUCIBILITY.md](analysis/REPRODUCIBILITY.md) for detailed
 reproduction steps, parameters, and expected results.
@@ -183,6 +186,12 @@ The current scripted validation entrypoint is:
 
 ```bash
 python analysis/scripts/reproduce_validation.py --quick
+```
+
+For a fresh-machine baseline rebuild, use the single entrypoint instead:
+
+```bash
+python analysis/scripts/reproduce_classical_baseline.py --quick
 ```
 
 That workflow now writes:

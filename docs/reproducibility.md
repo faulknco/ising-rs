@@ -133,6 +133,28 @@ Every paper figure should be attributable to:
 4. Generate figures into `analysis/figures/generated/<run-set>/`.
 5. Promote stable outputs into `results/published/<pack-name>/`.
 
+## Fresh-Machine Entry Point
+
+For the baseline CPU validation story, the repo now provides a single cross-platform command:
+
+```bash
+python analysis/scripts/reproduce_classical_baseline.py --quick
+```
+
+The recommended first step on a new machine is still the bootstrap script documented in
+[setup.md](/Users/faulknco/Projects/ising-rs/docs/setup.md):
+
+```bash
+python scripts/bootstrap_analysis.py --verify
+```
+
+That command:
+
+1. runs the scripted validation workflow
+2. regenerates the comparison tables and figures
+3. emits a validation manifest
+4. promotes the result into a versioned pack unless `--skip-promotion` is used
+
 ## Current Status
 
 The GPU FSS pipeline is the first fully scripted, reproducible workflow:
@@ -142,6 +164,4 @@ The GPU FSS pipeline is the first fully scripted, reproducible workflow:
 - **Data**: summary CSVs committed, timeseries regenerable via pipeline (~4 hours on RTX 2060)
 - **Guide**: `analysis/REPRODUCIBILITY.md` with exact parameters and expected results
 
-Historical notebook-driven results still exist for CPU workflows. The target state is scripted and manifest-backed for all workflows.
-
-The cleanup plan is tracked in [2026-03-08-reproducibility-and-physics-roadmap.md](/Users/faulknco/Projects/ising-rs/docs/plans/2026-03-08-reproducibility-and-physics-roadmap.md).
+The repo is still in transition overall. Historical notebook-driven CPU results still exist, but the target state is scripted and manifest-backed across all workflows.

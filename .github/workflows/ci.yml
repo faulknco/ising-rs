@@ -58,7 +58,7 @@ jobs:
       - name: Check analysis scripts
         run: |
           python -m py_compile analysis/scripts/*.py
-          python analysis/scripts/reproduce_validation.py --quick --analysis-only
+          python analysis/scripts/reproduce_classical_baseline.py --quick --analysis-only --skip-promotion
 
       - name: Clippy
         run: cargo clippy -- -D warnings
