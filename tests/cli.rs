@@ -914,79 +914,81 @@ fn xy_jfit_supports_single_step() {
 #[test]
 fn mesh_sweep_independent_per_temperature() {
     // Verify that each temperature point is independently initialized.
-    // Oracle: run T=2.0 alone (--steps 1, tmin=tmax=2.0), then run a
-    // 3-step sweep containing T=2.0. If temperatures are independent,
-    // the T=2.0 row must be identical in both runs. An annealing
-    // implementation would carry state from T=3.0→T=2.0, producing
-    // different results than the isolated single-temperature run.
-    let tmp_single = std::env::temp_dir().join("ising_test_mesh_single");
-    let tmp_multi = std::env::temp_dir().join("ising_test_mesh_multi");
-    for tmp in [&tmp_single, &tmp_multi] {
+    // Oracle: run two sweeps with different temperature ranges that both
+    // start at T=2.0. Run A covers T=2.0..3.0 (2 steps), run B covers
+    // T=2.0..4.0 (3 steps). If temperatures are independently initialized,
+    // the T=2.0 row must be identical in both because neither run has a
+    // prior temperature that could carry state into T=2.0. But crucially,
+    // an annealing (high-to-low) implementation would process T=3.0 or
+    // T=4.0 first and carry that state into T=2.0, producing different
+    // results between the two runs since they visit different higher
+    // temperatures before reaching T=2.0.
+    let tmp_a = std::env::temp_dir().join("ising_test_mesh_indep_a");
+    let tmp_b = std::env::temp_dir().join("ising_test_mesh_indep_b");
+    for tmp in [&tmp_a, &tmp_b] {
         let _ = std::fs::remove_dir_all(tmp);
         std::fs::create_dir_all(tmp).unwrap();
     }
 
     let graph_json = r#"{"n_nodes": 4, "edges": [[0,1],[1,2],[2,3],[3,0]]}"#;
-    let graph_s = tmp_single.join("ring4.json");
-    let graph_m = tmp_multi.join("ring4.json");
-    std::fs::write(&graph_s, graph_json).unwrap();
-    std::fs::write(&graph_m, graph_json).unwrap();
+    let graph_a = tmp_a.join("ring4.json");
+    let graph_b = tmp_b.join("ring4.json");
+    std::fs::write(&graph_a, graph_json).unwrap();
+    std::fs::write(&graph_b, graph_json).unwrap();
 
-    // Run 1: single temperature T=2.0
-    let out_single = cargo_bin("mesh_sweep")
+    // Run A: T=2.0..3.0, 2 steps → temperatures [2.0, 3.0]
+    let out_a = cargo_bin("mesh_sweep")
         .args([
-            "--graph", graph_s.to_str().unwrap(),
+            "--graph", graph_a.to_str().unwrap(),
             "--tmin", "2.0", "--tmax", "3.0",
             "--steps", "2",
             "--warmup", "100", "--samples", "100",
             "--seed", "42",
-            "--outdir", tmp_single.to_str().unwrap(),
+            "--outdir", tmp_a.to_str().unwrap(),
             "--prefix", "ring4",
         ])
         .output()
-        .expect("failed to run mesh_sweep single");
-    assert!(out_single.status.success());
+        .expect("failed to run mesh_sweep A");
+    assert!(out_a.status.success());
 
-    // Run 2: three-step sweep that includes T=2.0
-    let out_multi = cargo_bin("mesh_sweep")
+    // Run B: T=2.0..4.0, 3 steps → temperatures [2.0, 3.0, 4.0]
+    let out_b = cargo_bin("mesh_sweep")
         .args([
-            "--graph", graph_m.to_str().unwrap(),
+            "--graph", graph_b.to_str().unwrap(),
             "--tmin", "2.0", "--tmax", "4.0",
             "--steps", "3",
             "--warmup", "100", "--samples", "100",
             "--seed", "42",
-            "--outdir", tmp_multi.to_str().unwrap(),
+            "--outdir", tmp_b.to_str().unwrap(),
             "--prefix", "ring4",
         ])
         .output()
-        .expect("failed to run mesh_sweep multi");
-    assert!(out_multi.status.success());
+        .expect("failed to run mesh_sweep B");
+    assert!(out_b.status.success());
 
-    let csv_single = std::fs::read_to_string(tmp_single.join("ring4_sweep.csv")).unwrap();
-    let csv_multi = std::fs::read_to_string(tmp_multi.join("ring4_sweep.csv")).unwrap();
+    let csv_a = std::fs::read_to_string(tmp_a.join("ring4_sweep.csv")).unwrap();
+    let csv_b = std::fs::read_to_string(tmp_b.join("ring4_sweep.csv")).unwrap();
 
-    // Extract T=2.0 row from each (first data row in both)
-    let row_single = csv_single.trim().lines().nth(1)
-        .expect("single CSV missing data row");
-    let row_multi = csv_multi.trim().lines().nth(1)
-        .expect("multi CSV missing data row");
+    // Extract the T=2.0 row from each (first data row in both)
+    let row_a = csv_a.trim().lines().nth(1).expect("CSV A missing data row");
+    let row_b = csv_b.trim().lines().nth(1).expect("CSV B missing data row");
 
-    // Both should start with T=2.0
-    let t_single: f64 = row_single.split(',').next().unwrap().parse().unwrap();
-    let t_multi: f64 = row_multi.split(',').next().unwrap().parse().unwrap();
-    assert!((t_single - 2.0).abs() < 0.01, "single run T mismatch");
-    assert!((t_multi - 2.0).abs() < 0.01, "multi run T mismatch");
+    let t_a: f64 = row_a.split(',').next().unwrap().parse().unwrap();
+    let t_b: f64 = row_b.split(',').next().unwrap().parse().unwrap();
+    assert!((t_a - 2.0).abs() < 0.01, "run A first T mismatch");
+    assert!((t_b - 2.0).abs() < 0.01, "run B first T mismatch");
 
-    // The T=2.0 rows must be identical — proving each temperature is
-    // independently initialized rather than carrying state from prior temps.
+    // The T=2.0 rows must be identical. An annealing implementation
+    // would anneal from T=3.0→2.0 in run A but T=4.0→3.0→2.0 in run B,
+    // producing different T=2.0 measurements due to different prior state.
     assert_eq!(
-        row_single, row_multi,
-        "T=2.0 row differs between isolated and multi-step runs, \
+        row_a, row_b,
+        "T=2.0 row differs between runs with different temperature ranges, \
          suggesting temperatures are not independently initialized.\n\
-         single: {row_single}\n\
-         multi:  {row_multi}"
+         run A (2.0..3.0): {row_a}\n\
+         run B (2.0..4.0): {row_b}"
     );
 
-    let _ = std::fs::remove_dir_all(&tmp_single);
-    let _ = std::fs::remove_dir_all(&tmp_multi);
+    let _ = std::fs::remove_dir_all(&tmp_a);
+    let _ = std::fs::remove_dir_all(&tmp_b);
 }
