@@ -1,4 +1,3 @@
-use ising::cli::{get_arg, parse_arg, validate_samples, validate_t_steps, validate_temp_range};
 use ising::heisenberg::fss::{run_heisenberg_fss, HeisFssConfig};
 /// CLI: run Heisenberg FSS for multiple lattice sizes.
 ///
@@ -7,10 +6,31 @@ use ising::heisenberg::fss::{run_heisenberg_fss, HeisFssConfig};
 ///   cargo run --release --bin heisenberg_fss -- --sizes 8,12,16,20 --outdir analysis/data
 ///
 /// Output: one CSV per size at <outdir>/heisenberg_fss_N<n>.csv
-/// Columns: T,E,E_err,M,M_err,M2,M2_err,M4,M4_err,Cv,Cv_err,chi,chi_err
+/// Columns: T,E,E_err,M,M_err,M2,M2_err,M4,M4_err,Cv,Cv_err,chi,chi_err,Mz,Mz_err,Mz2,Mz2_err,Mz4,Mz4_err,chi_z,chi_z_err,Mxy,Mxy_err,Mxy2,Mxy2_err,Mxy4,Mxy4_err,chi_xy,chi_xy_err
 use std::env;
 use std::fs;
 use std::path::Path;
+
+fn get_arg(args: &[String], i: usize, flag: &str) -> String {
+    if i + 1 >= args.len() {
+        eprintln!("Error: {flag} requires a value");
+        std::process::exit(1);
+    }
+    args[i + 1].clone()
+}
+
+fn parse_flag<T: std::str::FromStr>(args: &[String], i: usize, flag: &str) -> T
+where
+    T::Err: std::fmt::Display,
+{
+    match get_arg(args, i, flag).parse::<T>() {
+        Ok(v) => v,
+        Err(e) => {
+            eprintln!("Error: invalid value for {flag}: {e}");
+            std::process::exit(1);
+        }
+    }
+}
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -33,39 +53,43 @@ fn main() {
                 i += 2;
             }
             "--tmin" => {
-                config.t_min = parse_arg::<f64>(&args, i, "--tmin");
+                config.t_min = parse_flag::<f64>(&args, i, "--tmin");
                 i += 2;
             }
             "--tmax" => {
-                config.t_max = parse_arg::<f64>(&args, i, "--tmax");
+                config.t_max = parse_flag::<f64>(&args, i, "--tmax");
                 i += 2;
             }
             "--steps" => {
-                config.t_steps = parse_arg::<usize>(&args, i, "--steps");
+                config.t_steps = parse_flag::<usize>(&args, i, "--steps");
                 i += 2;
             }
             "--warmup" => {
-                config.warmup_sweeps = parse_arg::<usize>(&args, i, "--warmup");
+                config.warmup_sweeps = parse_flag::<usize>(&args, i, "--warmup");
                 i += 2;
             }
             "--samples" => {
-                config.sample_sweeps = parse_arg::<usize>(&args, i, "--samples");
+                config.sample_sweeps = parse_flag::<usize>(&args, i, "--samples");
                 i += 2;
             }
             "--overrelax" => {
-                config.n_overrelax = parse_arg::<usize>(&args, i, "--overrelax");
+                config.n_overrelax = parse_flag::<usize>(&args, i, "--overrelax");
                 i += 2;
             }
             "--delta" => {
-                config.delta = parse_arg::<f64>(&args, i, "--delta");
+                config.delta = parse_flag::<f64>(&args, i, "--delta");
                 i += 2;
             }
             "--seed" => {
-                config.seed = parse_arg::<u64>(&args, i, "--seed");
+                config.seed = parse_flag::<u64>(&args, i, "--seed");
                 i += 2;
             }
             "--j" => {
-                config.j = parse_arg::<f64>(&args, i, "--j");
+                config.j = parse_flag::<f64>(&args, i, "--j");
+                i += 2;
+            }
+            "--anisotropy-d" => {
+                config.d = parse_flag::<f64>(&args, i, "--anisotropy-d");
                 i += 2;
             }
             "--outdir" => {
@@ -78,21 +102,18 @@ fn main() {
         }
     }
 
-    validate_t_steps(config.t_steps);
-    validate_temp_range(config.t_min, config.t_max);
-    validate_samples(config.warmup_sweeps, "--warmup");
-    validate_samples(config.sample_sweeps, "--samples");
-
     fs::create_dir_all(&outdir).expect("failed to create outdir");
 
     let results = run_heisenberg_fss(&config);
 
     for (n, obs_list) in &results {
         let path = Path::new(&outdir).join(format!("heisenberg_fss_N{n}.csv"));
-        let mut csv = String::from("T,E,E_err,M,M_err,M2,M2_err,M4,M4_err,Cv,Cv_err,chi,chi_err\n");
+        let mut csv = String::from(
+            "T,E,E_err,M,M_err,M2,M2_err,M4,M4_err,Cv,Cv_err,chi,chi_err,Mz,Mz_err,Mz2,Mz2_err,Mz4,Mz4_err,chi_z,chi_z_err,Mxy,Mxy_err,Mxy2,Mxy2_err,Mxy4,Mxy4_err,chi_xy,chi_xy_err\n",
+        );
         for o in obs_list {
             csv.push_str(&format!(
-                "{:.4},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6}\n",
+                "{:.4},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6}\n",
                 o.temperature,
                 o.energy,
                 o.energy_err,
@@ -106,6 +127,22 @@ fn main() {
                 o.heat_capacity_err,
                 o.susceptibility,
                 o.susceptibility_err,
+                o.mz,
+                o.mz_err,
+                o.mz2,
+                o.mz2_err,
+                o.mz4,
+                o.mz4_err,
+                o.chi_z,
+                o.chi_z_err,
+                o.mxy,
+                o.mxy_err,
+                o.mxy2,
+                o.mxy2_err,
+                o.mxy4,
+                o.mxy4_err,
+                o.chi_xy,
+                o.chi_xy_err,
             ));
         }
         fs::write(&path, &csv).expect("failed to write CSV");

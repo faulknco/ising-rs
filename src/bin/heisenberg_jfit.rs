@@ -1,4 +1,3 @@
-use ising::cli::{get_arg, parse_arg, validate_samples, validate_t_steps, validate_temp_range};
 use ising::graph::GraphDef;
 use ising::heisenberg::{observables::measure, HeisenbergLattice};
 use rand::SeedableRng;
@@ -13,10 +12,31 @@ use rand_xoshiro::Xoshiro256PlusPlus;
 ///     --outdir analysis/data
 ///
 /// Output: <outdir>/heisenberg_jfit_<graphname>.csv
-/// Columns: T,E,E_err,M,M_err,M2,M2_err,M4,M4_err,Cv,Cv_err,chi,chi_err
+/// Columns: T,E,E_err,M,M_err,M2,M2_err,M4,M4_err,Cv,Cv_err,chi,chi_err,Mz,Mz_err,Mz2,Mz2_err,Mz4,Mz4_err,chi_z,chi_z_err,Mxy,Mxy_err,Mxy2,Mxy2_err,Mxy4,Mxy4_err,chi_xy,chi_xy_err
 use std::env;
 use std::fs;
 use std::path::Path;
+
+fn get_arg(args: &[String], i: usize, flag: &str) -> String {
+    if i + 1 >= args.len() {
+        eprintln!("Error: {flag} requires a value");
+        std::process::exit(1);
+    }
+    args[i + 1].clone()
+}
+
+fn parse_flag<T: std::str::FromStr>(args: &[String], i: usize, flag: &str) -> T
+where
+    T::Err: std::fmt::Display,
+{
+    match get_arg(args, i, flag).parse::<T>() {
+        Ok(v) => v,
+        Err(e) => {
+            eprintln!("Error: invalid value for {flag}: {e}");
+            std::process::exit(1);
+        }
+    }
+}
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -31,6 +51,7 @@ fn main() {
     let mut n_overrelax = 5usize;
     let mut delta = 0.5_f64;
     let mut j = 1.0_f64;
+    let mut d = 0.0_f64;
     let mut seed = 42u64;
 
     let mut i = 1;
@@ -45,39 +66,43 @@ fn main() {
                 i += 2;
             }
             "--tmin" => {
-                t_min = parse_arg::<f64>(&args, i, "--tmin");
+                t_min = parse_flag::<f64>(&args, i, "--tmin");
                 i += 2;
             }
             "--tmax" => {
-                t_max = parse_arg::<f64>(&args, i, "--tmax");
+                t_max = parse_flag::<f64>(&args, i, "--tmax");
                 i += 2;
             }
             "--steps" => {
-                t_steps = parse_arg::<usize>(&args, i, "--steps");
+                t_steps = parse_flag::<usize>(&args, i, "--steps");
                 i += 2;
             }
             "--warmup" => {
-                warmup = parse_arg::<usize>(&args, i, "--warmup");
+                warmup = parse_flag::<usize>(&args, i, "--warmup");
                 i += 2;
             }
             "--samples" => {
-                samples = parse_arg::<usize>(&args, i, "--samples");
+                samples = parse_flag::<usize>(&args, i, "--samples");
                 i += 2;
             }
             "--overrelax" => {
-                n_overrelax = parse_arg::<usize>(&args, i, "--overrelax");
+                n_overrelax = parse_flag::<usize>(&args, i, "--overrelax");
                 i += 2;
             }
             "--delta" => {
-                delta = parse_arg::<f64>(&args, i, "--delta");
+                delta = parse_flag::<f64>(&args, i, "--delta");
                 i += 2;
             }
             "--j" => {
-                j = parse_arg::<f64>(&args, i, "--j");
+                j = parse_flag::<f64>(&args, i, "--j");
+                i += 2;
+            }
+            "--anisotropy-d" => {
+                d = parse_flag::<f64>(&args, i, "--anisotropy-d");
                 i += 2;
             }
             "--seed" => {
-                seed = parse_arg::<u64>(&args, i, "--seed");
+                seed = parse_flag::<u64>(&args, i, "--seed");
                 i += 2;
             }
             _ => {
@@ -90,11 +115,6 @@ fn main() {
         eprintln!("Error: --graph <path.json> is required");
         std::process::exit(1);
     }
-
-    validate_t_steps(t_steps);
-    validate_temp_range(t_min, t_max);
-    validate_samples(warmup, "--warmup");
-    validate_samples(samples, "--samples");
 
     let content = fs::read_to_string(&graph_path).unwrap_or_else(|e| {
         eprintln!("Error: failed to read graph file {graph_path}: {e}");
@@ -130,7 +150,9 @@ fn main() {
     fs::create_dir_all(&outdir).expect("failed to create outdir");
 
     let path = Path::new(&outdir).join(format!("heisenberg_jfit_{graph_name}.csv"));
-    let mut csv = String::from("T,E,E_err,M,M_err,M2,M2_err,M4,M4_err,Cv,Cv_err,chi,chi_err\n");
+    let mut csv = String::from(
+        "T,E,E_err,M,M_err,M2,M2_err,M4,M4_err,Cv,Cv_err,chi,chi_err,Mz,Mz_err,Mz2,Mz2_err,Mz4,Mz4_err,chi_z,chi_z_err,Mxy,Mxy_err,Mxy2,Mxy2_err,Mxy4,Mxy4_err,chi_xy,chi_xy_err\n",
+    );
 
     for step in 0..t_steps {
         let t = t_min + (t_max - t_min) * step as f64 / (t_steps - 1) as f64;
@@ -139,6 +161,7 @@ fn main() {
             &mut lat,
             beta,
             j,
+            d,
             delta,
             n_overrelax,
             warmup,
@@ -146,7 +169,7 @@ fn main() {
             &mut rng,
         );
         csv.push_str(&format!(
-            "{:.4},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6}\n",
+            "{:.4},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6}\n",
             obs.temperature,
             obs.energy,
             obs.energy_err,
@@ -160,6 +183,22 @@ fn main() {
             obs.heat_capacity_err,
             obs.susceptibility,
             obs.susceptibility_err,
+            obs.mz,
+            obs.mz_err,
+            obs.mz2,
+            obs.mz2_err,
+            obs.mz4,
+            obs.mz4_err,
+            obs.chi_z,
+            obs.chi_z_err,
+            obs.mxy,
+            obs.mxy_err,
+            obs.mxy2,
+            obs.mxy2_err,
+            obs.mxy4,
+            obs.mxy4_err,
+            obs.chi_xy,
+            obs.chi_xy_err,
         ));
         eprintln!(
             "  T={t:.3} M={:.4}±{:.4}",
