@@ -56,20 +56,61 @@ fn main() {
     let mut i = 1;
     while i < args.len() {
         match args[i].as_str() {
-            "--model"          => { model        = get_arg(&args, i, "--model"); i += 2; }
-            "--sizes"          => { sizes_str    = get_arg(&args, i, "--sizes"); i += 2; }
-            "--tmin"           => { t_min        = parse_flag(&args, i, "--tmin"); i += 2; }
-            "--tmax"           => { t_max        = parse_flag(&args, i, "--tmax"); i += 2; }
-            "--replicas"       => { n_replicas   = parse_flag(&args, i, "--replicas"); i += 2; }
-            "--warmup"         => { warmup       = parse_flag(&args, i, "--warmup"); i += 2; }
-            "--samples"        => { samples      = parse_flag(&args, i, "--samples"); i += 2; }
-            "--exchange-every" => { exchange_every = parse_flag(&args, i, "--exchange-every"); i += 2; }
-            "--seed"           => { seed         = parse_flag(&args, i, "--seed"); i += 2; }
-            "--outdir"         => { outdir       = get_arg(&args, i, "--outdir"); i += 2; }
-            "--delta"          => { delta        = parse_flag(&args, i, "--delta"); i += 2; }
-            "--overrelax"      => { n_overrelax  = parse_flag(&args, i, "--overrelax"); i += 2; }
-            "--measure-every"  => { measure_every = parse_flag(&args, i, "--measure-every"); i += 2; }
-            _ => { i += 1; }
+            "--model" => {
+                model = get_arg(&args, i, "--model");
+                i += 2;
+            }
+            "--sizes" => {
+                sizes_str = get_arg(&args, i, "--sizes");
+                i += 2;
+            }
+            "--tmin" => {
+                t_min = parse_flag(&args, i, "--tmin");
+                i += 2;
+            }
+            "--tmax" => {
+                t_max = parse_flag(&args, i, "--tmax");
+                i += 2;
+            }
+            "--replicas" => {
+                n_replicas = parse_flag(&args, i, "--replicas");
+                i += 2;
+            }
+            "--warmup" => {
+                warmup = parse_flag(&args, i, "--warmup");
+                i += 2;
+            }
+            "--samples" => {
+                samples = parse_flag(&args, i, "--samples");
+                i += 2;
+            }
+            "--exchange-every" => {
+                exchange_every = parse_flag(&args, i, "--exchange-every");
+                i += 2;
+            }
+            "--seed" => {
+                seed = parse_flag(&args, i, "--seed");
+                i += 2;
+            }
+            "--outdir" => {
+                outdir = get_arg(&args, i, "--outdir");
+                i += 2;
+            }
+            "--delta" => {
+                delta = parse_flag(&args, i, "--delta");
+                i += 2;
+            }
+            "--overrelax" => {
+                n_overrelax = parse_flag(&args, i, "--overrelax");
+                i += 2;
+            }
+            "--measure-every" => {
+                measure_every = parse_flag(&args, i, "--measure-every");
+                i += 2;
+            }
+            _ => {
+                i += 1;
+            }
         }
     }
 
@@ -88,9 +129,48 @@ fn main() {
     eprintln!("GPU FSS: model={model}, sizes={sizes:?}, T={t_min}..{t_max}, replicas={n_replicas}");
 
     match model.as_str() {
-        "ising"      => run_ising_fss(&sizes, t_min, t_max, n_replicas, warmup, samples, exchange_every, seed, &outdir, measure_every),
-        "xy"         => run_continuous_fss(&sizes, 2, t_min, t_max, n_replicas, warmup, samples, exchange_every, seed, &outdir, delta as f32, n_overrelax, measure_every),
-        "heisenberg" => run_continuous_fss(&sizes, 3, t_min, t_max, n_replicas, warmup, samples, exchange_every, seed, &outdir, delta as f32, n_overrelax, measure_every),
+        "ising" => run_ising_fss(
+            &sizes,
+            t_min,
+            t_max,
+            n_replicas,
+            warmup,
+            samples,
+            exchange_every,
+            seed,
+            &outdir,
+            measure_every,
+        ),
+        "xy" => run_continuous_fss(
+            &sizes,
+            2,
+            t_min,
+            t_max,
+            n_replicas,
+            warmup,
+            samples,
+            exchange_every,
+            seed,
+            &outdir,
+            delta as f32,
+            n_overrelax,
+            measure_every,
+        ),
+        "heisenberg" => run_continuous_fss(
+            &sizes,
+            3,
+            t_min,
+            t_max,
+            n_replicas,
+            warmup,
+            samples,
+            exchange_every,
+            seed,
+            &outdir,
+            delta as f32,
+            n_overrelax,
+            measure_every,
+        ),
         _ => {
             eprintln!("Error: --model must be ising, xy, or heisenberg");
             std::process::exit(1);
@@ -100,8 +180,15 @@ fn main() {
 
 #[cfg(feature = "cuda")]
 fn run_ising_fss(
-    sizes: &[usize], t_min: f64, t_max: f64, n_replicas: usize,
-    warmup: usize, samples: usize, exchange_every: usize, seed: u64, outdir: &str,
+    sizes: &[usize],
+    t_min: f64,
+    t_max: f64,
+    n_replicas: usize,
+    warmup: usize,
+    samples: usize,
+    exchange_every: usize,
+    seed: u64,
+    outdir: &str,
     measure_every: usize,
 ) {
     use ising::cuda::lattice_gpu::LatticeGpu;
@@ -115,8 +202,10 @@ fn run_ising_fss(
     for &n in sizes {
         eprintln!("  N={n}: creating {n_replicas} replicas...");
         let mut replicas: Vec<LatticeGpu> = (0..n_replicas)
-            .map(|r| LatticeGpu::new(n, seed.wrapping_add(r as u64 * 1000 + n as u64))
-                .expect("failed to create GPU lattice"))
+            .map(|r| {
+                LatticeGpu::new(n, seed.wrapping_add(r as u64 * 1000 + n as u64))
+                    .expect("failed to create GPU lattice")
+            })
             .collect();
 
         let mut replica_to_temp: Vec<usize> = (0..n_replicas).collect();
@@ -144,12 +233,12 @@ fn run_ising_fss(
         writeln!(ts_writer, "temp_idx,E,M").expect("write header failed");
 
         // Sampling with parallel tempering
-        let mut sum_e    = vec![0.0_f64; n_replicas];
-        let mut sum_e2   = vec![0.0_f64; n_replicas];
-        let mut sum_m    = vec![0.0_f64; n_replicas];
-        let mut sum_m2   = vec![0.0_f64; n_replicas];
-        let mut sum_m4   = vec![0.0_f64; n_replicas];
-        let mut count    = vec![0usize; n_replicas];
+        let mut sum_e = vec![0.0_f64; n_replicas];
+        let mut sum_e2 = vec![0.0_f64; n_replicas];
+        let mut sum_m = vec![0.0_f64; n_replicas];
+        let mut sum_m2 = vec![0.0_f64; n_replicas];
+        let mut sum_m4 = vec![0.0_f64; n_replicas];
+        let mut count = vec![0usize; n_replicas];
         // Keep ts_data in memory for jackknife at the end
         let mut ts_data: Vec<Vec<(f64, f64)>> = (0..n_replicas)
             .map(|_| Vec::with_capacity(samples / measure_every + 1))
@@ -178,12 +267,12 @@ fn run_ising_fss(
                     energies[r] = e_per * n3;
 
                     if do_measure {
-                        sum_e[t_idx]  += e_per;
+                        sum_e[t_idx] += e_per;
                         sum_e2[t_idx] += e_per * e_per;
-                        sum_m[t_idx]  += m_per;
+                        sum_m[t_idx] += m_per;
                         sum_m2[t_idx] += m_per * m_per;
                         sum_m4[t_idx] += m_per.powi(4);
-                        count[t_idx]  += 1;
+                        count[t_idx] += 1;
 
                         ts_data[t_idx].push((e_per, m_per));
 
@@ -197,9 +286,12 @@ fn run_ising_fss(
             // Replica exchange
             if do_exchange {
                 replica_exchange(
-                    &temperatures, &energies,
-                    &mut replica_to_temp, &mut temp_to_replica,
-                    &mut rng, sweep / exchange_every,
+                    &temperatures,
+                    &energies,
+                    &mut replica_to_temp,
+                    &mut temp_to_replica,
+                    &mut rng,
+                    sweep / exchange_every,
                 );
             }
 
@@ -218,15 +310,27 @@ fn run_ising_fss(
         let summary_path = Path::new(outdir).join(format!("gpu_fss_{model_name}_N{n}_summary.csv"));
         let mut csv = String::from("T,E,E_err,M,M_err,M2,M2_err,M4,M4_err,Cv,Cv_err,chi,chi_err\n");
         for t_idx in 0..n_replicas {
-            if ts_data[t_idx].is_empty() { continue; }
+            if ts_data[t_idx].is_empty() {
+                continue;
+            }
             let t = temperatures[t_idx];
             let beta = 1.0 / t;
             let n_blocks = 20.min(ts_data[t_idx].len());
             let obs = jackknife_observables(&ts_data[t_idx], beta, n3, n_blocks);
             csv.push_str(&format!(
                 "{t:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6}\n",
-                obs[0], obs[1], obs[2], obs[3], obs[4], obs[5],
-                obs[6], obs[7], obs[8], obs[9], obs[10], obs[11],
+                obs[0],
+                obs[1],
+                obs[2],
+                obs[3],
+                obs[4],
+                obs[5],
+                obs[6],
+                obs[7],
+                obs[8],
+                obs[9],
+                obs[10],
+                obs[11],
             ));
         }
         fs::write(&summary_path, &csv).expect("write summary failed");
@@ -277,7 +381,9 @@ fn jackknife_observables(ts: &[(f64, f64)], beta: f64, n3: f64, n_blocks: usize)
         let mut bm2 = 0.0;
         let mut bm4 = 0.0;
         for i in 0..n_used {
-            if i >= start && i < end { continue; }
+            if i >= start && i < end {
+                continue;
+            }
             let (e, m) = ts[i];
             be += e;
             be2 += e * e;
@@ -306,12 +412,18 @@ fn jackknife_observables(ts: &[(f64, f64)], beta: f64, n3: f64, n_blocks: usize)
     };
 
     [
-        avg_e, jk_err(avg_e, &jk_e),
-        avg_m, jk_err(avg_m, &jk_m),
-        avg_m2, jk_err(avg_m2, &jk_m2),
-        avg_m4, jk_err(avg_m4, &jk_m4),
-        cv, jk_err(cv, &jk_cv),
-        chi, jk_err(chi, &jk_chi),
+        avg_e,
+        jk_err(avg_e, &jk_e),
+        avg_m,
+        jk_err(avg_m, &jk_m),
+        avg_m2,
+        jk_err(avg_m2, &jk_m2),
+        avg_m4,
+        jk_err(avg_m4, &jk_m4),
+        cv,
+        jk_err(cv, &jk_cv),
+        chi,
+        jk_err(chi, &jk_chi),
     ]
 }
 
@@ -340,14 +452,23 @@ fn ising_e_m_host(spins: &[i8], n: usize) -> (f64, f64) {
 
 #[cfg(feature = "cuda")]
 fn run_continuous_fss(
-    sizes: &[usize], n_comp: usize, t_min: f64, t_max: f64,
-    n_replicas: usize, warmup: usize, samples: usize,
-    exchange_every: usize, seed: u64, outdir: &str,
-    delta: f32, n_overrelax: usize, measure_every: usize,
+    sizes: &[usize],
+    n_comp: usize,
+    t_min: f64,
+    t_max: f64,
+    n_replicas: usize,
+    warmup: usize,
+    samples: usize,
+    exchange_every: usize,
+    seed: u64,
+    outdir: &str,
+    delta: f32,
+    n_overrelax: usize,
+    measure_every: usize,
 ) {
+    use cudarc::driver::CudaDevice;
     use ising::cuda::gpu_lattice_continuous::ContinuousGpuLattice;
     use ising::cuda::parallel_tempering::{linspace_temperatures, replica_exchange};
-    use cudarc::driver::CudaDevice;
     use rand::SeedableRng;
     use rand_xoshiro::Xoshiro256PlusPlus;
     use std::io::{BufWriter, Write as IoWrite};
@@ -361,10 +482,12 @@ fn run_continuous_fss(
         let mut replicas: Vec<ContinuousGpuLattice> = (0..n_replicas)
             .map(|r| {
                 ContinuousGpuLattice::new(
-                    n, n_comp,
+                    n,
+                    n_comp,
                     seed.wrapping_add(r as u64 * 1000 + n as u64),
                     device.clone(),
-                ).expect("failed to create continuous GPU lattice")
+                )
+                .expect("failed to create continuous GPU lattice")
             })
             .collect();
 
@@ -380,7 +503,8 @@ fn run_continuous_fss(
             for (r, lat) in replicas.iter_mut().enumerate() {
                 let t_idx = replica_to_temp[r];
                 let beta = (1.0 / temperatures[t_idx]) as f32;
-                lat.sweep(beta, 1.0, delta, n_overrelax).expect("sweep failed");
+                lat.sweep(beta, 1.0, delta, n_overrelax)
+                    .expect("sweep failed");
             }
             if (w + 1) % 1000 == 0 {
                 eprintln!("    warmup {}/{warmup}", w + 1);
@@ -394,12 +518,12 @@ fn run_continuous_fss(
         writeln!(ts_writer, "temp_idx,E,M").expect("write header failed");
 
         // Accumulators
-        let mut sum_e  = vec![0.0_f64; n_replicas];
+        let mut sum_e = vec![0.0_f64; n_replicas];
         let mut sum_e2 = vec![0.0_f64; n_replicas];
-        let mut sum_m  = vec![0.0_f64; n_replicas];
+        let mut sum_m = vec![0.0_f64; n_replicas];
         let mut sum_m2 = vec![0.0_f64; n_replicas];
         let mut sum_m4 = vec![0.0_f64; n_replicas];
-        let mut count  = vec![0usize; n_replicas];
+        let mut count = vec![0usize; n_replicas];
         let mut ts_data: Vec<Vec<(f64, f64)>> = (0..n_replicas)
             .map(|_| Vec::with_capacity(samples / measure_every + 1))
             .collect();
@@ -411,7 +535,8 @@ fn run_continuous_fss(
             for (r, lat) in replicas.iter_mut().enumerate() {
                 let t_idx = replica_to_temp[r];
                 let beta = (1.0 / temperatures[t_idx]) as f32;
-                lat.sweep(beta, 1.0, delta, n_overrelax).expect("sweep failed");
+                lat.sweep(beta, 1.0, delta, n_overrelax)
+                    .expect("sweep failed");
             }
 
             let do_measure = (sweep + 1) % measure_every == 0;
@@ -426,12 +551,12 @@ fn run_continuous_fss(
                     energies[r] = e;
 
                     if do_measure {
-                        sum_e[t_idx]  += e_per;
+                        sum_e[t_idx] += e_per;
                         sum_e2[t_idx] += e_per * e_per;
-                        sum_m[t_idx]  += m_abs;
+                        sum_m[t_idx] += m_abs;
                         sum_m2[t_idx] += m_abs * m_abs;
                         sum_m4[t_idx] += m_abs.powi(4);
-                        count[t_idx]  += 1;
+                        count[t_idx] += 1;
 
                         ts_data[t_idx].push((e_per, m_abs));
 
@@ -444,9 +569,12 @@ fn run_continuous_fss(
 
             if do_exchange {
                 replica_exchange(
-                    &temperatures, &energies,
-                    &mut replica_to_temp, &mut temp_to_replica,
-                    &mut rng, sweep / exchange_every,
+                    &temperatures,
+                    &energies,
+                    &mut replica_to_temp,
+                    &mut temp_to_replica,
+                    &mut rng,
+                    sweep / exchange_every,
                 );
             }
 
@@ -464,15 +592,27 @@ fn run_continuous_fss(
         let summary_path = Path::new(outdir).join(format!("gpu_fss_{model_name}_N{n}_summary.csv"));
         let mut csv = String::from("T,E,E_err,M,M_err,M2,M2_err,M4,M4_err,Cv,Cv_err,chi,chi_err\n");
         for t_idx in 0..n_replicas {
-            if ts_data[t_idx].is_empty() { continue; }
+            if ts_data[t_idx].is_empty() {
+                continue;
+            }
             let t = temperatures[t_idx];
             let beta = 1.0 / t;
             let n_blocks = 20.min(ts_data[t_idx].len());
             let obs = jackknife_observables(&ts_data[t_idx], beta, n3, n_blocks);
             csv.push_str(&format!(
                 "{t:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6}\n",
-                obs[0], obs[1], obs[2], obs[3], obs[4], obs[5],
-                obs[6], obs[7], obs[8], obs[9], obs[10], obs[11],
+                obs[0],
+                obs[1],
+                obs[2],
+                obs[3],
+                obs[4],
+                obs[5],
+                obs[6],
+                obs[7],
+                obs[8],
+                obs[9],
+                obs[10],
+                obs[11],
             ));
         }
         fs::write(&summary_path, &csv).expect("write summary failed");
@@ -481,13 +621,38 @@ fn run_continuous_fss(
 }
 
 #[cfg(not(feature = "cuda"))]
-fn run_ising_fss(_: &[usize], _: f64, _: f64, _: usize, _: usize, _: usize, _: usize, _: u64, _: &str, _: usize) {
+fn run_ising_fss(
+    _: &[usize],
+    _: f64,
+    _: f64,
+    _: usize,
+    _: usize,
+    _: usize,
+    _: usize,
+    _: u64,
+    _: &str,
+    _: usize,
+) {
     eprintln!("Error: gpu_fss requires --features cuda");
     std::process::exit(1);
 }
 
 #[cfg(not(feature = "cuda"))]
-fn run_continuous_fss(_: &[usize], _: usize, _: f64, _: f64, _: usize, _: usize, _: usize, _: usize, _: u64, _: &str, _: f32, _: usize, _: usize) {
+fn run_continuous_fss(
+    _: &[usize],
+    _: usize,
+    _: f64,
+    _: f64,
+    _: usize,
+    _: usize,
+    _: usize,
+    _: usize,
+    _: u64,
+    _: &str,
+    _: f32,
+    _: usize,
+    _: usize,
+) {
     eprintln!("Error: gpu_fss requires --features cuda");
     std::process::exit(1);
 }

@@ -135,7 +135,10 @@ impl LatticeGpu {
         let total_mag: f64 = mag_host.iter().map(|&x| x as f64).sum();
 
         // Energy
-        let f_energy = self.device.get_func("reduce", "reduce_energy_ising").unwrap();
+        let f_energy = self
+            .device
+            .get_func("reduce", "reduce_energy_ising")
+            .unwrap();
         unsafe {
             f_energy.launch(
                 LaunchConfig {
@@ -158,7 +161,10 @@ impl LatticeGpu {
         let n_blocks = ((n_sites as u32) + BLOCK_SIZE - 1) / BLOCK_SIZE;
         let shared = BLOCK_SIZE as u32 * 4;
 
-        let f_energy = self.device.get_func("reduce", "reduce_energy_ising").unwrap();
+        let f_energy = self
+            .device
+            .get_func("reduce", "reduce_energy_ising")
+            .unwrap();
         unsafe {
             f_energy.launch(
                 LaunchConfig {
