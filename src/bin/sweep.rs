@@ -45,8 +45,20 @@ OPTIONS:
     --help, -h           Show this help message";
 
 const KNOWN_FLAGS: &[&str] = &[
-    "--n", "--geometry", "--j", "--h", "--tmin", "--tmax", "--steps", "--warmup", "--samples",
-    "--seed", "--wolff", "--outdir", "--save-snapshots", "--help",
+    "--n",
+    "--geometry",
+    "--j",
+    "--h",
+    "--tmin",
+    "--tmax",
+    "--steps",
+    "--warmup",
+    "--samples",
+    "--seed",
+    "--wolff",
+    "--outdir",
+    "--save-snapshots",
+    "--help",
 ];
 
 fn main() {

@@ -32,6 +32,11 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
       - name: Cache cargo
         uses: actions/cache@v4
         with:
@@ -46,6 +51,13 @@ jobs:
 
       - name: Run tests
         run: cargo test
+
+      - name: Install analysis dependencies
+        run: python -m pip install -r analysis/requirements-ci.txt
+
+      - name: Check analysis scripts
+        shell: bash
+        run: python -m py_compile analysis/scripts/*.py
 
       - name: Clippy
         run: cargo clippy -- -D warnings

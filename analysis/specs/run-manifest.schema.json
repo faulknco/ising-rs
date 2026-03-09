@@ -1,0 +1,147 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/faulknco/ising-rs/blob/main/analysis/specs/run-manifest.schema.json",
+  "title": "ising-rs run manifest",
+  "description": "Metadata emitted for a simulation or analysis run so outputs can be traced back to code, inputs, and environment.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "run_id",
+    "created_at",
+    "git_commit",
+    "kind",
+    "binary",
+    "subcommand_args",
+    "backend",
+    "model",
+    "geometry",
+    "input_files",
+    "output_files",
+    "environment"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string"
+    },
+    "run_id": {
+      "type": "string"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "git_commit": {
+      "type": "string"
+    },
+    "kind": {
+      "type": "string",
+      "enum": [
+        "simulation",
+        "analysis",
+        "figure",
+        "result_pack"
+      ]
+    },
+    "binary": {
+      "type": "string"
+    },
+    "subcommand_args": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "backend": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "family",
+        "algorithm"
+      ],
+      "properties": {
+        "family": {
+          "type": "string",
+          "enum": [
+            "cpu",
+            "cuda"
+          ]
+        },
+        "algorithm": {
+          "type": "string"
+        },
+        "notes": {
+          "type": "string"
+        }
+      }
+    },
+    "model": {
+      "type": "string",
+      "enum": [
+        "ising",
+        "heisenberg"
+      ]
+    },
+    "geometry": {
+      "type": "string"
+    },
+    "rng": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "seed": {
+          "type": "integer"
+        },
+        "seed_policy": {
+          "type": "string"
+        }
+      }
+    },
+    "parameters": {
+      "type": "object"
+    },
+    "input_files": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "output_files": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "environment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "os",
+        "rust_version"
+      ],
+      "properties": {
+        "os": {
+          "type": "string"
+        },
+        "hostname": {
+          "type": "string"
+        },
+        "rust_version": {
+          "type": "string"
+        },
+        "cuda_version": {
+          "type": "string"
+        }
+      }
+    },
+    "parent_runs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "notes": {
+      "type": "string"
+    }
+  }
+}

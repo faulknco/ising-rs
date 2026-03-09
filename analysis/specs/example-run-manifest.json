@@ -1,0 +1,58 @@
+{
+  "schema_version": "1.0.0",
+  "run_id": "fss-cubic-cpu-2026-03-08-n8-24",
+  "created_at": "2026-03-08T12:00:00Z",
+  "git_commit": "REPLACE_WITH_GIT_COMMIT",
+  "kind": "simulation",
+  "binary": "fss",
+  "subcommand_args": [
+    "--wolff",
+    "--sizes",
+    "8,12,16,20,24",
+    "--tmin",
+    "3.5",
+    "--tmax",
+    "5.5",
+    "--steps",
+    "41"
+  ],
+  "backend": {
+    "family": "cpu",
+    "algorithm": "wolff",
+    "notes": "Publication baseline for cubic FSS"
+  },
+  "model": "ising",
+  "geometry": "cubic",
+  "rng": {
+    "seed": 42,
+    "seed_policy": "base seed with size-dependent offset"
+  },
+  "parameters": {
+    "j": 1.0,
+    "warmup_sweeps": 2000,
+    "sample_sweeps": 2000,
+    "t_min": 3.5,
+    "t_max": 5.5,
+    "t_steps": 41,
+    "sizes": [
+      8,
+      12,
+      16,
+      20,
+      24
+    ]
+  },
+  "input_files": [],
+  "output_files": [
+    "analysis/data/raw/fss-cubic-cpu-2026-03-08/fss_N8.csv",
+    "analysis/data/raw/fss-cubic-cpu-2026-03-08/fss_N12.csv"
+  ],
+  "environment": {
+    "os": "macOS",
+    "hostname": "REPLACE_WITH_HOSTNAME",
+    "rust_version": "1.94.0",
+    "cuda_version": ""
+  },
+  "parent_runs": [],
+  "notes": "Example manifest only. Replace placeholder values in real runs."
+}

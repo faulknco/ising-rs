@@ -1,4 +1,7 @@
 /target
+.DS_Store
+tmp/
+run_*.log
 
 # wasm-pack build artefacts are committed so GitHub Pages can serve them
 # but we exclude the Node-style package.json from pkg
@@ -10,11 +13,22 @@ analysis/data/archive_*/
 analysis/data/hires/
 analysis/data/jfit/
 analysis/data/val_*/
+analysis/data/raw/*
+!analysis/data/raw/README.md
+analysis/data/derived/*
+!analysis/data/derived/README.md
+analysis/data/manifests/*
+!analysis/data/manifests/README.md
+analysis/figures/generated/*
+!analysis/figures/generated/README.md
 
 # Python / Jupyter artifacts
 analysis/__pycache__/
+analysis/**/__pycache__/
 analysis/.ipynb_checkpoints/
 analysis/*_executed.ipynb
+analysis/figures/heisenberg_*.png
+analysis/figures/ising_vs_heisenberg_*.png
 
 # LaTeX build artifacts
 paper/*.aux
@@ -32,3 +46,8 @@ paper/*Notes.bib
 *~
 .DS_Store
 Thumbs.db
+
+# Figures copied by build.sh (duplicates of paper/figures/)
+paper/fss_*.png
+paper/val_*.png
+paper/kz_*.png

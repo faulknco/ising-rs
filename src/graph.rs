@@ -1,4 +1,5 @@
 use crate::lattice::Lattice;
+use serde_json::Value;
 
 /// A graph definition as a node count + edge list.
 pub struct GraphDef {
@@ -41,88 +42,38 @@ impl GraphDef {
     /// Load from JSON adjacency list.
     ///
     /// Format: {"n_nodes": 1000, "edges": [[0,1],[0,2],[1,3],...]}
-    ///
-    /// Uses hand-rolled parsing to avoid adding serde as a dependency.
     pub fn from_json(content: &str) -> anyhow::Result<Self> {
-        let n_nodes: usize = {
-            let key = "\"n_nodes\"";
-            let pos = content
-                .find(key)
-                .ok_or_else(|| anyhow::anyhow!("missing n_nodes"))?;
-            let after = &content[pos + key.len()..];
-            let colon = after
-                .find(':')
-                .ok_or_else(|| anyhow::anyhow!("missing : after n_nodes"))?;
-            let num_str = after[colon + 1..].trim_start();
-            let end = num_str
-                .find(|c: char| !c.is_ascii_digit())
-                .unwrap_or(num_str.len());
-            num_str[..end].parse()?
-        };
+        let root: Value = serde_json::from_str(content)?;
+        let n_nodes = root
+            .get("n_nodes")
+            .and_then(Value::as_u64)
+            .ok_or_else(|| anyhow::anyhow!("missing n_nodes"))? as usize;
 
-        let edges_key = "\"edges\"";
-        let pos = content
-            .find(edges_key)
+        let edge_values = root
+            .get("edges")
+            .and_then(Value::as_array)
             .ok_or_else(|| anyhow::anyhow!("missing edges"))?;
-        let after = &content[pos + edges_key.len()..];
-        let bracket = after
-            .find('[')
-            .ok_or_else(|| anyhow::anyhow!("missing [ after edges"))?;
-        let array_str = &after[bracket..];
-        let close = Self::find_matching_bracket(array_str)?;
-        let inner = &array_str[1..close];
 
-        let mut edges = Vec::new();
-        let mut chars = inner.chars().peekable();
-        loop {
-            while chars.peek().is_some_and(|&c| c != '[') {
-                chars.next();
+        let mut edges = Vec::with_capacity(edge_values.len());
+        for edge in edge_values {
+            let pair = edge
+                .as_array()
+                .ok_or_else(|| anyhow::anyhow!("edge entry is not a 2-element array"))?;
+            if pair.len() != 2 {
+                anyhow::bail!("edge entry must have exactly 2 indices");
             }
-            if chars.next().is_none() {
-                break;
-            }
-            let i_str: String = chars.by_ref().take_while(|c| c.is_ascii_digit()).collect();
-            if i_str.is_empty() {
-                break;
-            }
-            while chars
-                .peek()
-                .is_some_and(|&c| c != ',' && !c.is_ascii_digit())
-            {
-                chars.next();
-            }
-            if chars.peek() == Some(&',') {
-                chars.next();
-            }
-            let j_str: String = chars
-                .by_ref()
-                .skip_while(|c| !c.is_ascii_digit())
-                .take_while(|c| c.is_ascii_digit())
-                .collect();
-            if j_str.is_empty() {
-                break;
-            }
-            edges.push((i_str.parse::<usize>()?, j_str.parse::<usize>()?));
+            let i = pair[0]
+                .as_u64()
+                .ok_or_else(|| anyhow::anyhow!("edge index is not an integer"))?
+                as usize;
+            let j = pair[1]
+                .as_u64()
+                .ok_or_else(|| anyhow::anyhow!("edge index is not an integer"))?
+                as usize;
+            edges.push((i, j));
         }
 
         Ok(Self { n_nodes, edges })
-    }
-
-    fn find_matching_bracket(s: &str) -> anyhow::Result<usize> {
-        let mut depth = 0i32;
-        for (i, c) in s.chars().enumerate() {
-            match c {
-                '[' => depth += 1,
-                ']' => {
-                    depth -= 1;
-                    if depth == 0 {
-                        return Ok(i);
-                    }
-                }
-                _ => {}
-            }
-        }
-        anyhow::bail!("unmatched bracket")
     }
 
     /// Convert to Lattice for simulation.
@@ -159,6 +110,27 @@ mod tests {
         assert_eq!(g.n_nodes, 4);
         assert_eq!(g.edges.len(), 4);
         assert!(g.edges.contains(&(2, 3)));
+    }
+
+    #[test]
+    fn parse_json_graph_with_metadata_and_whitespace() {
+        let json = r#"{
+  "edges": [
+    [0, 1],
+    [1, 2],
+    [2, 3],
+    [3, 0]
+  ],
+  "metadata": {
+    "generator": "test",
+    "realization": 0
+  },
+  "n_nodes": 4
+}"#;
+        let g = GraphDef::from_json(json).unwrap();
+        assert_eq!(g.n_nodes, 4);
+        assert_eq!(g.edges.len(), 4);
+        assert!(g.edges.contains(&(3, 0)));
     }
 
     #[test]
