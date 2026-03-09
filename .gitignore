@@ -22,6 +22,10 @@ analysis/data/manifests/*
 analysis/figures/generated/*
 !analysis/figures/generated/README.md
 
+# Python virtual environments
+.venv/
+analysis/.venv/
+
 # Python / Jupyter artifacts
 analysis/__pycache__/
 analysis/**/__pycache__/
