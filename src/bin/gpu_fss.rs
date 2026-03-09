@@ -15,26 +15,7 @@ use std::env;
 use std::fs;
 use std::path::Path;
 
-fn get_arg(args: &[String], i: usize, flag: &str) -> String {
-    if i + 1 >= args.len() {
-        eprintln!("Error: {flag} requires a value");
-        std::process::exit(1);
-    }
-    args[i + 1].clone()
-}
-
-fn parse_flag<T: std::str::FromStr>(args: &[String], i: usize, flag: &str) -> T
-where
-    T::Err: std::fmt::Display,
-{
-    match get_arg(args, i, flag).parse::<T>() {
-        Ok(v) => v,
-        Err(e) => {
-            eprintln!("Error: invalid value for {flag}: {e}");
-            std::process::exit(1);
-        }
-    }
-}
+use ising::cli::{get_arg, parse_arg, validate_samples, validate_temp_range};
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -65,31 +46,31 @@ fn main() {
                 i += 2;
             }
             "--tmin" => {
-                t_min = parse_flag(&args, i, "--tmin");
+                t_min = parse_arg(&args, i, "--tmin");
                 i += 2;
             }
             "--tmax" => {
-                t_max = parse_flag(&args, i, "--tmax");
+                t_max = parse_arg(&args, i, "--tmax");
                 i += 2;
             }
             "--replicas" => {
-                n_replicas = parse_flag(&args, i, "--replicas");
+                n_replicas = parse_arg(&args, i, "--replicas");
                 i += 2;
             }
             "--warmup" => {
-                warmup = parse_flag(&args, i, "--warmup");
+                warmup = parse_arg(&args, i, "--warmup");
                 i += 2;
             }
             "--samples" => {
-                samples = parse_flag(&args, i, "--samples");
+                samples = parse_arg(&args, i, "--samples");
                 i += 2;
             }
             "--exchange-every" => {
-                exchange_every = parse_flag(&args, i, "--exchange-every");
+                exchange_every = parse_arg(&args, i, "--exchange-every");
                 i += 2;
             }
             "--seed" => {
-                seed = parse_flag(&args, i, "--seed");
+                seed = parse_arg(&args, i, "--seed");
                 i += 2;
             }
             "--outdir" => {
@@ -97,15 +78,15 @@ fn main() {
                 i += 2;
             }
             "--delta" => {
-                delta = parse_flag(&args, i, "--delta");
+                delta = parse_arg(&args, i, "--delta");
                 i += 2;
             }
             "--overrelax" => {
-                n_overrelax = parse_flag(&args, i, "--overrelax");
+                n_overrelax = parse_arg(&args, i, "--overrelax");
                 i += 2;
             }
             "--measure-every" => {
-                measure_every = parse_flag(&args, i, "--measure-every");
+                measure_every = parse_arg(&args, i, "--measure-every");
                 i += 2;
             }
             _ => {
@@ -119,6 +100,9 @@ fn main() {
         .filter_map(|s| s.trim().parse().ok())
         .collect();
 
+    validate_temp_range(t_min, t_max);
+    validate_samples(samples, "--samples");
+    validate_samples(warmup, "--warmup");
     if measure_every == 0 {
         eprintln!("Error: --measure-every must be at least 1");
         std::process::exit(1);
@@ -425,29 +409,6 @@ fn jackknife_observables(ts: &[(f64, f64)], beta: f64, n3: f64, n_blocks: usize)
         chi,
         jk_err(chi, &jk_chi),
     ]
-}
-
-fn ising_e_m_host(spins: &[i8], n: usize) -> (f64, f64) {
-    let mut e = 0.0_f64;
-    let mut m = 0.0_f64;
-    for iz in 0..n {
-        for iy in 0..n {
-            for ix in 0..n {
-                let idx = iz * n * n + iy * n + ix;
-                let s = spins[idx] as f64;
-                let fwd = [
-                    iz * n * n + iy * n + (ix + 1) % n,
-                    iz * n * n + ((iy + 1) % n) * n + ix,
-                    ((iz + 1) % n) * n * n + iy * n + ix,
-                ];
-                for &nb in &fwd {
-                    e -= s * spins[nb] as f64;
-                }
-                m += s;
-            }
-        }
-    }
-    (e, m)
 }
 
 #[cfg(feature = "cuda")]

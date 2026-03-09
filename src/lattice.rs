@@ -29,7 +29,7 @@ impl Lattice {
             _ => n * n,
         };
 
-        // Random initialisation: all +1 (ordered start, faster convergence at low T)
+        // Ordered start: all +1 (faster convergence at low T; call randomise() for hot start)
         let spins = vec![1i8; size];
 
         let neighbours = match geometry {

@@ -15,29 +15,9 @@ use std::env;
 use std::fs;
 use std::path::Path;
 
+use ising::cli::{get_arg, parse_arg, validate_samples, validate_temp_range};
 use ising::graph::GraphDef;
 use ising::parallel_tempering::{linspace_temperatures, replica_exchange};
-
-fn get_arg(args: &[String], i: usize, flag: &str) -> String {
-    if i + 1 >= args.len() {
-        eprintln!("Error: {flag} requires a value");
-        std::process::exit(1);
-    }
-    args[i + 1].clone()
-}
-
-fn parse_flag<T: std::str::FromStr>(args: &[String], i: usize, flag: &str) -> T
-where
-    T::Err: std::fmt::Display,
-{
-    match get_arg(args, i, flag).parse::<T>() {
-        Ok(v) => v,
-        Err(e) => {
-            eprintln!("Error: invalid value for {flag}: {e}");
-            std::process::exit(1);
-        }
-    }
-}
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -70,35 +50,35 @@ fn main() {
                 i += 2;
             }
             "--tmin" => {
-                t_min = parse_flag(&args, i, "--tmin");
+                t_min = parse_arg(&args, i, "--tmin");
                 i += 2;
             }
             "--tmax" => {
-                t_max = parse_flag(&args, i, "--tmax");
+                t_max = parse_arg(&args, i, "--tmax");
                 i += 2;
             }
             "--replicas" => {
-                n_replicas = parse_flag(&args, i, "--replicas");
+                n_replicas = parse_arg(&args, i, "--replicas");
                 i += 2;
             }
             "--warmup" => {
-                warmup = parse_flag(&args, i, "--warmup");
+                warmup = parse_arg(&args, i, "--warmup");
                 i += 2;
             }
             "--samples" => {
-                samples = parse_flag(&args, i, "--samples");
+                samples = parse_arg(&args, i, "--samples");
                 i += 2;
             }
             "--exchange-every" => {
-                exchange_every = parse_flag(&args, i, "--exchange-every");
+                exchange_every = parse_arg(&args, i, "--exchange-every");
                 i += 2;
             }
             "--seed" => {
-                seed = parse_flag(&args, i, "--seed");
+                seed = parse_arg(&args, i, "--seed");
                 i += 2;
             }
             "--j" => {
-                j = parse_flag(&args, i, "--j");
+                j = parse_arg(&args, i, "--j");
                 i += 2;
             }
             _ => {
@@ -111,6 +91,10 @@ fn main() {
         eprintln!("Error: --graph <path.json> is required");
         std::process::exit(1);
     }
+
+    validate_temp_range(t_min, t_max);
+    validate_samples(warmup, "--warmup");
+    validate_samples(samples, "--samples");
 
     let content = fs::read_to_string(&graph_path).unwrap_or_else(|e| {
         eprintln!("Error: failed to read graph file {graph_path}: {e}");
@@ -184,6 +168,7 @@ fn main() {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn run_ising_jfit(
     neighbours: &[Vec<usize>],
     graph_name: &str,
@@ -215,7 +200,7 @@ fn run_ising_jfit(
                 n: n_nodes,
                 spins: vec![1i8; n_nodes],
                 neighbours: neighbours.to_vec(),
-                geometry: Geometry::Cubic3D,
+                geometry: Geometry::Mesh,
             };
             lat.randomise(&mut rng);
             lat
@@ -224,6 +209,10 @@ fn run_ising_jfit(
 
     let mut replica_to_temp: Vec<usize> = (0..n_replicas).collect();
     let mut temp_to_replica: Vec<usize> = (0..n_replicas).collect();
+    // Note: all replicas share a single RNG for exchange decisions and sweeps.
+    // This introduces weak inter-replica correlations but is acceptable for the
+    // small crystal graphs (N=4..12) used in J-fitting, where the statistical
+    // bottleneck is the number of temperature points, not per-replica independence.
     let mut rng = Xoshiro256PlusPlus::seed_from_u64(seed);
 
     // Warmup
@@ -306,6 +295,7 @@ fn run_ising_jfit(
     eprintln!("Wrote {}", path.display());
 }
 
+#[allow(clippy::too_many_arguments)]
 fn run_xy_jfit(
     neighbours: &[Vec<usize>],
     graph_name: &str,
@@ -419,6 +409,7 @@ fn run_xy_jfit(
     eprintln!("Wrote {}", path.display());
 }
 
+#[allow(clippy::too_many_arguments)]
 fn run_heisenberg_jfit(
     neighbours: &[Vec<usize>],
     graph_name: &str,

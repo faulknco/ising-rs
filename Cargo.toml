@@ -19,6 +19,14 @@ name = "kz"
 path = "src/bin/kz.rs"
 
 [[bin]]
+name = "fss"
+path = "src/bin/fss.rs"
+
+[[bin]]
+name = "coarsening"
+path = "src/bin/coarsening.rs"
+
+[[bin]]
 name = "mesh_sweep"
 path = "src/bin/mesh_sweep.rs"
 

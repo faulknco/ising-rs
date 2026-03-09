@@ -1,3 +1,4 @@
+use ising::cli::{get_arg, parse_arg, validate_samples, validate_t_steps, validate_temp_range};
 use ising::heisenberg::fss::{run_heisenberg_fss, HeisFssConfig};
 /// CLI: run Heisenberg FSS for multiple lattice sizes.
 ///
@@ -10,27 +11,6 @@ use ising::heisenberg::fss::{run_heisenberg_fss, HeisFssConfig};
 use std::env;
 use std::fs;
 use std::path::Path;
-
-fn get_arg(args: &[String], i: usize, flag: &str) -> String {
-    if i + 1 >= args.len() {
-        eprintln!("Error: {flag} requires a value");
-        std::process::exit(1);
-    }
-    args[i + 1].clone()
-}
-
-fn parse_flag<T: std::str::FromStr>(args: &[String], i: usize, flag: &str) -> T
-where
-    T::Err: std::fmt::Display,
-{
-    match get_arg(args, i, flag).parse::<T>() {
-        Ok(v) => v,
-        Err(e) => {
-            eprintln!("Error: invalid value for {flag}: {e}");
-            std::process::exit(1);
-        }
-    }
-}
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -53,39 +33,39 @@ fn main() {
                 i += 2;
             }
             "--tmin" => {
-                config.t_min = parse_flag::<f64>(&args, i, "--tmin");
+                config.t_min = parse_arg::<f64>(&args, i, "--tmin");
                 i += 2;
             }
             "--tmax" => {
-                config.t_max = parse_flag::<f64>(&args, i, "--tmax");
+                config.t_max = parse_arg::<f64>(&args, i, "--tmax");
                 i += 2;
             }
             "--steps" => {
-                config.t_steps = parse_flag::<usize>(&args, i, "--steps");
+                config.t_steps = parse_arg::<usize>(&args, i, "--steps");
                 i += 2;
             }
             "--warmup" => {
-                config.warmup_sweeps = parse_flag::<usize>(&args, i, "--warmup");
+                config.warmup_sweeps = parse_arg::<usize>(&args, i, "--warmup");
                 i += 2;
             }
             "--samples" => {
-                config.sample_sweeps = parse_flag::<usize>(&args, i, "--samples");
+                config.sample_sweeps = parse_arg::<usize>(&args, i, "--samples");
                 i += 2;
             }
             "--overrelax" => {
-                config.n_overrelax = parse_flag::<usize>(&args, i, "--overrelax");
+                config.n_overrelax = parse_arg::<usize>(&args, i, "--overrelax");
                 i += 2;
             }
             "--delta" => {
-                config.delta = parse_flag::<f64>(&args, i, "--delta");
+                config.delta = parse_arg::<f64>(&args, i, "--delta");
                 i += 2;
             }
             "--seed" => {
-                config.seed = parse_flag::<u64>(&args, i, "--seed");
+                config.seed = parse_arg::<u64>(&args, i, "--seed");
                 i += 2;
             }
             "--j" => {
-                config.j = parse_flag::<f64>(&args, i, "--j");
+                config.j = parse_arg::<f64>(&args, i, "--j");
                 i += 2;
             }
             "--outdir" => {
@@ -97,6 +77,11 @@ fn main() {
             }
         }
     }
+
+    validate_t_steps(config.t_steps);
+    validate_temp_range(config.t_min, config.t_max);
+    validate_samples(config.warmup_sweeps, "--warmup");
+    validate_samples(config.sample_sweeps, "--samples");
 
     fs::create_dir_all(&outdir).expect("failed to create outdir");
 

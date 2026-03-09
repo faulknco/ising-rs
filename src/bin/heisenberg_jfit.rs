@@ -1,3 +1,4 @@
+use ising::cli::{get_arg, parse_arg, validate_samples, validate_t_steps, validate_temp_range};
 use ising::graph::GraphDef;
 use ising::heisenberg::{observables::measure, HeisenbergLattice};
 use rand::SeedableRng;
@@ -16,27 +17,6 @@ use rand_xoshiro::Xoshiro256PlusPlus;
 use std::env;
 use std::fs;
 use std::path::Path;
-
-fn get_arg(args: &[String], i: usize, flag: &str) -> String {
-    if i + 1 >= args.len() {
-        eprintln!("Error: {flag} requires a value");
-        std::process::exit(1);
-    }
-    args[i + 1].clone()
-}
-
-fn parse_flag<T: std::str::FromStr>(args: &[String], i: usize, flag: &str) -> T
-where
-    T::Err: std::fmt::Display,
-{
-    match get_arg(args, i, flag).parse::<T>() {
-        Ok(v) => v,
-        Err(e) => {
-            eprintln!("Error: invalid value for {flag}: {e}");
-            std::process::exit(1);
-        }
-    }
-}
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -65,39 +45,39 @@ fn main() {
                 i += 2;
             }
             "--tmin" => {
-                t_min = parse_flag::<f64>(&args, i, "--tmin");
+                t_min = parse_arg::<f64>(&args, i, "--tmin");
                 i += 2;
             }
             "--tmax" => {
-                t_max = parse_flag::<f64>(&args, i, "--tmax");
+                t_max = parse_arg::<f64>(&args, i, "--tmax");
                 i += 2;
             }
             "--steps" => {
-                t_steps = parse_flag::<usize>(&args, i, "--steps");
+                t_steps = parse_arg::<usize>(&args, i, "--steps");
                 i += 2;
             }
             "--warmup" => {
-                warmup = parse_flag::<usize>(&args, i, "--warmup");
+                warmup = parse_arg::<usize>(&args, i, "--warmup");
                 i += 2;
             }
             "--samples" => {
-                samples = parse_flag::<usize>(&args, i, "--samples");
+                samples = parse_arg::<usize>(&args, i, "--samples");
                 i += 2;
             }
             "--overrelax" => {
-                n_overrelax = parse_flag::<usize>(&args, i, "--overrelax");
+                n_overrelax = parse_arg::<usize>(&args, i, "--overrelax");
                 i += 2;
             }
             "--delta" => {
-                delta = parse_flag::<f64>(&args, i, "--delta");
+                delta = parse_arg::<f64>(&args, i, "--delta");
                 i += 2;
             }
             "--j" => {
-                j = parse_flag::<f64>(&args, i, "--j");
+                j = parse_arg::<f64>(&args, i, "--j");
                 i += 2;
             }
             "--seed" => {
-                seed = parse_flag::<u64>(&args, i, "--seed");
+                seed = parse_arg::<u64>(&args, i, "--seed");
                 i += 2;
             }
             _ => {
@@ -110,6 +90,11 @@ fn main() {
         eprintln!("Error: --graph <path.json> is required");
         std::process::exit(1);
     }
+
+    validate_t_steps(t_steps);
+    validate_temp_range(t_min, t_max);
+    validate_samples(warmup, "--warmup");
+    validate_samples(samples, "--samples");
 
     let content = fs::read_to_string(&graph_path).unwrap_or_else(|e| {
         eprintln!("Error: failed to read graph file {graph_path}: {e}");

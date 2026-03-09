@@ -22,6 +22,10 @@ analysis/data/manifests/*
 analysis/figures/generated/*
 !analysis/figures/generated/README.md
 
+# Python virtual environments
+.venv/
+analysis/.venv/
+
 # Python / Jupyter artifacts
 analysis/__pycache__/
 analysis/**/__pycache__/
@@ -37,6 +41,15 @@ paper/*.blg
 paper/*.log
 paper/*.out
 paper/*Notes.bib
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
 
 # Figures copied by build.sh (duplicates of paper/figures/)
 paper/fss_*.png
