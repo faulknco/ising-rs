@@ -764,7 +764,16 @@ fn sweep_rejects_zero_samples() {
     assert_rejects(
         "sweep",
         &[
-            "--n", "4", "--tmin", "3.0", "--tmax", "5.0", "--steps", "2", "--samples", "0",
+            "--n",
+            "4",
+            "--tmin",
+            "3.0",
+            "--tmax",
+            "5.0",
+            "--steps",
+            "2",
+            "--samples",
+            "0",
         ],
         "--samples must be at least 1",
     );
@@ -774,9 +783,7 @@ fn sweep_rejects_zero_samples() {
 fn sweep_rejects_inverted_temp_range() {
     assert_rejects(
         "sweep",
-        &[
-            "--n", "4", "--tmin", "5.0", "--tmax", "3.0", "--steps", "2",
-        ],
+        &["--n", "4", "--tmin", "5.0", "--tmax", "3.0", "--steps", "2"],
         "--tmin",
     );
 }
@@ -806,7 +813,14 @@ fn heisenberg_fss_rejects_zero_samples() {
     assert_rejects(
         "heisenberg_fss",
         &[
-            "--tmin", "1.0", "--tmax", "2.0", "--steps", "2", "--samples", "0",
+            "--tmin",
+            "1.0",
+            "--tmax",
+            "2.0",
+            "--steps",
+            "2",
+            "--samples",
+            "0",
         ],
         "--samples must be at least 1",
     );
@@ -849,7 +863,16 @@ fn kz_rejects_zero_trials() {
     assert_rejects(
         "kz",
         &[
-            "--n", "4", "--tau-min", "10", "--tau-max", "100", "--tau-steps", "2", "--trials", "0",
+            "--n",
+            "4",
+            "--tau-min",
+            "10",
+            "--tau-max",
+            "100",
+            "--tau-steps",
+            "2",
+            "--trials",
+            "0",
         ],
         "--trials must be at least 1",
     );
@@ -939,13 +962,24 @@ fn mesh_sweep_independent_per_temperature() {
     // Run A: T=2.0..3.0, 2 steps → temperatures [2.0, 3.0]
     let out_a = cargo_bin("mesh_sweep")
         .args([
-            "--graph", graph_a.to_str().unwrap(),
-            "--tmin", "2.0", "--tmax", "3.0",
-            "--steps", "2",
-            "--warmup", "100", "--samples", "100",
-            "--seed", "42",
-            "--outdir", tmp_a.to_str().unwrap(),
-            "--prefix", "ring4",
+            "--graph",
+            graph_a.to_str().unwrap(),
+            "--tmin",
+            "2.0",
+            "--tmax",
+            "3.0",
+            "--steps",
+            "2",
+            "--warmup",
+            "100",
+            "--samples",
+            "100",
+            "--seed",
+            "42",
+            "--outdir",
+            tmp_a.to_str().unwrap(),
+            "--prefix",
+            "ring4",
         ])
         .output()
         .expect("failed to run mesh_sweep A");
@@ -954,13 +988,24 @@ fn mesh_sweep_independent_per_temperature() {
     // Run B: T=2.0..4.0, 3 steps → temperatures [2.0, 3.0, 4.0]
     let out_b = cargo_bin("mesh_sweep")
         .args([
-            "--graph", graph_b.to_str().unwrap(),
-            "--tmin", "2.0", "--tmax", "4.0",
-            "--steps", "3",
-            "--warmup", "100", "--samples", "100",
-            "--seed", "42",
-            "--outdir", tmp_b.to_str().unwrap(),
-            "--prefix", "ring4",
+            "--graph",
+            graph_b.to_str().unwrap(),
+            "--tmin",
+            "2.0",
+            "--tmax",
+            "4.0",
+            "--steps",
+            "3",
+            "--warmup",
+            "100",
+            "--samples",
+            "100",
+            "--seed",
+            "42",
+            "--outdir",
+            tmp_b.to_str().unwrap(),
+            "--prefix",
+            "ring4",
         ])
         .output()
         .expect("failed to run mesh_sweep B");
