@@ -1,0 +1,1353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ising-rs — A Billion Tiny Magnets</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0a0a14;
+      --bg-card: #0d0d1a;
+      --bg-card-alt: #111827;
+      --border: #1f2937;
+      --text: #e5e7eb;
+      --text-muted: #9ca3af;
+      --text-dim: #6b7280;
+      --accent: #60a5fa;
+      --accent-warm: #fbbf24;
+      --green: #34d399;
+      --red: #ef4444;
+      --purple: #c084fc;
+      --orange: #fb923c;
+      --pink: #f472b6;
+      --font: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --mono: "JetBrains Mono", "Fira Code", "Courier New", monospace;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: var(--font);
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.7;
+      overflow-x: hidden;
+    }
+
+    /* ── Navigation ── */
+    nav {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 100;
+      background: rgba(10, 10, 20, 0.85);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+      padding: 0 24px;
+    }
+
+    nav .inner {
+      max-width: 1100px;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      height: 52px;
+      gap: 32px;
+    }
+
+    nav .logo {
+      font-family: var(--mono);
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--accent);
+      letter-spacing: 0.05em;
+      text-decoration: none;
+    }
+
+    nav .links {
+      display: flex;
+      gap: 24px;
+      list-style: none;
+    }
+
+    nav .links a {
+      font-size: 13px;
+      color: var(--text-dim);
+      text-decoration: none;
+      transition: color 0.2s;
+    }
+
+    nav .links a:hover { color: var(--text); }
+
+    nav .github {
+      margin-left: auto;
+      font-size: 13px;
+      color: var(--text-dim);
+      text-decoration: none;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    nav .github:hover { color: var(--text); }
+
+    /* ── Sections ── */
+    section {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 80px 24px;
+    }
+
+    section:first-of-type { padding-top: 120px; }
+
+    .section-label {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--accent);
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      margin-bottom: 12px;
+    }
+
+    h1 {
+      font-size: clamp(36px, 5vw, 56px);
+      font-weight: 800;
+      line-height: 1.1;
+      letter-spacing: -0.02em;
+      margin-bottom: 24px;
+    }
+
+    h1 .thin { font-weight: 300; color: var(--text-muted); }
+
+    h2 {
+      font-size: 28px;
+      font-weight: 700;
+      margin-bottom: 16px;
+      letter-spacing: -0.01em;
+    }
+
+    h3 {
+      font-size: 20px;
+      font-weight: 600;
+      margin-bottom: 12px;
+    }
+
+    p { margin-bottom: 16px; color: var(--text-muted); }
+    p strong { color: var(--text); font-weight: 600; }
+
+    .lead {
+      font-size: 20px;
+      line-height: 1.6;
+      color: var(--text-muted);
+      max-width: 680px;
+    }
+
+    .divider {
+      width: 60px;
+      height: 2px;
+      background: var(--border);
+      margin: 64px 0;
+    }
+
+    /* ── Hero ── */
+    #hero {
+      min-height: 80vh;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+
+    .hero-stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 16px;
+      margin-top: 48px;
+    }
+
+    .stat-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 20px;
+    }
+
+    .stat-card .number {
+      font-family: var(--mono);
+      font-size: 28px;
+      font-weight: 700;
+      color: var(--accent);
+    }
+
+    .stat-card .label {
+      font-size: 13px;
+      color: var(--text-dim);
+      margin-top: 4px;
+    }
+
+    /* ── Interactive Simulation ── */
+    #sim-section {
+      max-width: 1100px;
+      padding-top: 40px;
+    }
+
+    .sim-intro {
+      max-width: 900px;
+      margin: 0 auto 32px;
+    }
+
+    .sim-container {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+
+    .sim-layout {
+      display: grid;
+      grid-template-columns: 1fr 280px;
+      min-height: 520px;
+    }
+
+    .sim-viewport {
+      position: relative;
+      background: #070710;
+      min-height: 400px;
+    }
+
+    .sim-viewport canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+
+    .sim-viewport .sim-overlay {
+      position: absolute;
+      top: 16px;
+      left: 16px;
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--text-dim);
+      pointer-events: none;
+    }
+
+    .sim-viewport .sim-overlay .mag-value {
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--text);
+      display: block;
+      margin-top: 4px;
+    }
+
+    .sim-controls {
+      padding: 20px;
+      border-left: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      overflow-y: auto;
+    }
+
+    .ctrl-group-label {
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 4px;
+      margin-bottom: 4px;
+    }
+
+    .ctrl-group { display: flex; flex-direction: column; gap: 10px; }
+
+    .slider-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .slider-row label {
+      font-size: 13px;
+      color: var(--text-muted);
+      width: 80px;
+      flex-shrink: 0;
+    }
+
+    .slider-row input[type=range] {
+      flex: 1;
+      accent-color: var(--accent);
+      height: 4px;
+    }
+
+    .slider-row .val {
+      font-family: var(--mono);
+      font-size: 13px;
+      color: var(--text);
+      width: 44px;
+      text-align: right;
+    }
+
+    .sim-btn {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-family: var(--font);
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s;
+      background: var(--bg-card-alt);
+      color: var(--text-muted);
+    }
+
+    .sim-btn:hover {
+      border-color: var(--accent);
+      color: var(--text);
+    }
+
+    .sim-btn.primary {
+      background: #1a3a2a;
+      border-color: #166534;
+      color: var(--green);
+    }
+
+    .sim-btn.primary:hover {
+      background: #166534;
+      color: #fff;
+    }
+
+    .sim-btn.primary.running {
+      background: #3a1a1a;
+      border-color: #7f1d1d;
+      color: var(--red);
+    }
+
+    .sim-btn.sweep-btn {
+      background: #1a2a3a;
+      border-color: #1e3a5f;
+      color: var(--accent);
+    }
+
+    .sim-btn.sweep-btn:hover {
+      background: #1e3a5f;
+      color: #fff;
+    }
+
+    .sim-btn:disabled { opacity: 0.4; cursor: default; }
+
+    .sim-callout {
+      background: var(--bg-card-alt);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px;
+      font-size: 13px;
+      color: var(--text-dim);
+      line-height: 1.5;
+    }
+
+    .sim-callout .highlight { color: var(--accent-warm); font-weight: 600; }
+
+    .sim-legend {
+      display: flex;
+      gap: 16px;
+      font-size: 12px;
+      color: var(--text-dim);
+      align-items: center;
+    }
+
+    .sim-legend .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      display: inline-block;
+      margin-right: 4px;
+    }
+
+    /* sweep charts */
+    .sweep-charts {
+      display: none;
+      border-top: 1px solid var(--border);
+      padding: 20px;
+    }
+
+    .sweep-charts.visible { display: block; }
+
+    .sweep-charts h3 {
+      font-size: 14px;
+      margin-bottom: 16px;
+      color: var(--text-muted);
+    }
+
+    .charts-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+
+    .chart-card {
+      background: var(--bg-card-alt);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px;
+      min-height: 180px;
+    }
+
+    /* ── Explanation Cards ── */
+    .explanation-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 20px;
+      margin-top: 32px;
+    }
+
+    .explain-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 24px;
+    }
+
+    .explain-card h3 { font-size: 16px; margin-bottom: 8px; }
+    .explain-card p { font-size: 14px; margin-bottom: 0; }
+    .explain-card .icon {
+      font-size: 28px;
+      margin-bottom: 12px;
+      display: block;
+    }
+
+    /* ── Results Table ── */
+    .results-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 24px;
+      font-size: 14px;
+    }
+
+    .results-table th {
+      text-align: left;
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .results-table td {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+      color: var(--text-muted);
+    }
+
+    .results-table tr:hover td { background: var(--bg-card); }
+
+    .results-table .value {
+      font-family: var(--mono);
+      color: var(--text);
+      font-weight: 600;
+    }
+
+    .results-table .error {
+      font-family: var(--mono);
+      font-weight: 600;
+    }
+
+    .error.excellent { color: var(--green); }
+    .error.good { color: var(--accent-warm); }
+    .error.fair { color: var(--orange); }
+
+    /* ── Figure Gallery ── */
+    .gallery-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+      gap: 20px;
+      margin-top: 24px;
+    }
+
+    .gallery-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+      transition: border-color 0.2s;
+    }
+
+    .gallery-card:hover { border-color: #374151; }
+
+    .gallery-card img {
+      width: 100%;
+      display: block;
+      background: #1a1a2e;
+    }
+
+    .gallery-card .caption {
+      padding: 16px;
+      font-size: 13px;
+      color: var(--text-dim);
+      line-height: 1.5;
+    }
+
+    .gallery-card .caption strong {
+      color: var(--text);
+      display: block;
+      margin-bottom: 4px;
+      font-size: 14px;
+    }
+
+    /* ── Universality tabs ── */
+    .uni-tabs {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 20px;
+    }
+
+    .uni-tab {
+      padding: 8px 20px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--bg-card);
+      color: var(--text-dim);
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .uni-tab:hover { border-color: #374151; color: var(--text); }
+    .uni-tab.active { background: var(--accent); border-color: var(--accent); color: #000; }
+
+    .uni-panel { display: none; }
+    .uni-panel.active { display: grid; }
+
+    /* ── Footer ── */
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 40px 24px;
+      text-align: center;
+      font-size: 13px;
+      color: var(--text-dim);
+    }
+
+    footer a { color: var(--accent); text-decoration: none; }
+    footer a:hover { text-decoration: underline; }
+
+    /* ── Responsive ── */
+    @media (max-width: 768px) {
+      .sim-layout { grid-template-columns: 1fr; }
+      .sim-controls { border-left: none; border-top: 1px solid var(--border); }
+      .sim-viewport { min-height: 300px; }
+      .charts-grid { grid-template-columns: 1fr; }
+      nav .links { display: none; }
+      .hero-stats { grid-template-columns: 1fr 1fr; }
+      .gallery-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- Navigation -->
+<nav>
+  <div class="inner">
+    <a class="logo" href="#">ising-rs</a>
+    <ul class="links">
+      <li><a href="#sim">Live Demo</a></li>
+      <li><a href="#how-it-works">How It Works</a></li>
+      <li><a href="#results">Results</a></li>
+      <li><a href="#gallery">Gallery</a></li>
+    </ul>
+    <a class="github" href="https://github.com/faulknco/ising-rs">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+      Source
+    </a>
+  </div>
+</nav>
+
+<!-- Hero -->
+<section id="hero">
+  <div class="section-label">Monte Carlo Simulation</div>
+  <h1>A Billion Tiny Magnets<br><span class="thin">simulated atom by atom</span></h1>
+  <p class="lead">
+    Every fridge magnet is a small miracle: billions of atoms agreeing to point the same direction.
+    Heat it up and they lose coordination. The magnet stops being a magnet.
+    <strong>This project simulates that process</strong> &mdash; atom by atom, flip by flip &mdash;
+    using Rust, CUDA, and a model from statistical physics called the Ising model.
+  </p>
+  <div class="hero-stats">
+    <div class="stat-card">
+      <div class="number">0.01%</div>
+      <div class="label">Error on critical temperature</div>
+    </div>
+    <div class="stat-card">
+      <div class="number">3</div>
+      <div class="label">Universality classes tested</div>
+    </div>
+    <div class="stat-card">
+      <div class="number">2</div>
+      <div class="label">Real metals simulated</div>
+    </div>
+    <div class="stat-card">
+      <div class="number">10<sup>5</sup>+</div>
+      <div class="label">Spins per simulation</div>
+    </div>
+  </div>
+</section>
+
+<!-- Interactive Simulation -->
+<section id="sim" class="sim-intro">
+  <div class="section-label">Try It Yourself</div>
+  <h2>Live Simulation</h2>
+  <p>
+    This is a real Ising model simulation running in your browser via WebAssembly.
+    Each sphere is an atom &mdash; <span style="color:var(--accent)">blue</span> for spin up,
+    <span style="color:var(--red)">red</span> for spin down.
+    Drag the temperature slider to watch order emerge from chaos.
+  </p>
+</section>
+
+<section id="sim-section" style="padding-top: 0;">
+  <div class="sim-container">
+    <div class="sim-layout">
+      <div class="sim-viewport" id="sim-viewport">
+        <canvas id="sim-canvas"></canvas>
+        <div class="sim-overlay">
+          <span>|M|</span>
+          <span class="mag-value" id="hud-mag">--</span>
+        </div>
+      </div>
+      <div class="sim-controls">
+        <div class="ctrl-group">
+          <div class="ctrl-group-label">Temperature</div>
+          <div class="slider-row">
+            <label>T / J</label>
+            <input type="range" id="ctrl-t" min="0.1" max="8" step="0.05" value="2.0" />
+            <span class="val" id="val-t">2.00</span>
+          </div>
+          <div class="sim-callout" id="temp-hint">
+            Below <span class="highlight">Tc = 4.51</span>: atoms align, forming a magnet.
+            Drag the slider above Tc to watch order melt away.
+          </div>
+        </div>
+        <div class="ctrl-group">
+          <div class="ctrl-group-label">Lattice</div>
+          <div class="slider-row">
+            <label>Size (N)</label>
+            <input type="range" id="ctrl-n" min="5" max="22" step="1" value="12" />
+            <span class="val" id="val-n">12</span>
+          </div>
+        </div>
+        <div class="ctrl-group">
+          <div class="ctrl-group-label">Controls</div>
+          <button class="sim-btn primary" id="btn-run">Run Simulation</button>
+          <button class="sim-btn" id="btn-reset">Randomise Spins</button>
+          <button class="sim-btn sweep-btn" id="btn-sweep">Run Temperature Sweep</button>
+        </div>
+        <div class="sim-legend">
+          <span><span class="dot" style="background:var(--accent)"></span> spin +1</span>
+          <span><span class="dot" style="background:var(--red)"></span> spin -1</span>
+        </div>
+        <div class="sim-callout" style="font-size:12px;">
+          Drag to rotate. Scroll to zoom. The simulation runs entirely in your browser
+          &mdash; no server, no GPU required. Compiled from the same Rust code used
+          for the research results below.
+        </div>
+      </div>
+    </div>
+    <div class="sweep-charts" id="sweep-charts">
+      <h3>Temperature Sweep Results</h3>
+      <div class="charts-grid" id="charts-grid"></div>
+    </div>
+  </div>
+</section>
+
+<!-- How It Works -->
+<section id="how-it-works">
+  <div class="section-label">The Physics</div>
+  <h2>How It Works</h2>
+  <p>
+    The Ising model is one of the simplest models in physics that produces a
+    <strong>phase transition</strong> &mdash; a sudden, dramatic change in behavior at a
+    specific temperature, much like water freezing into ice.
+  </p>
+
+  <div class="explanation-grid">
+    <div class="explain-card">
+      <span class="icon" aria-hidden="true">&#x1F9ED;</span>
+      <h3>Tiny Compass Needles</h3>
+      <p>
+        Each atom is modeled as a tiny magnet that can only point up (+1) or down (-1).
+        Neighbors prefer to align. That is the entire model &mdash; one rule,
+        endlessly rich behavior.
+      </p>
+    </div>
+    <div class="explain-card">
+      <span class="icon" aria-hidden="true">&#x1F321;&#xFE0F;</span>
+      <h3>Temperature = Chaos</h3>
+      <p>
+        Temperature controls how much random jiggling each atom feels.
+        Cold: atoms stay aligned, the material is magnetic.
+        Hot: randomness wins, magnetism vanishes.
+      </p>
+    </div>
+    <div class="explain-card">
+      <span class="icon" aria-hidden="true">&#x2728;</span>
+      <h3>The Critical Point</h3>
+      <p>
+        At one exact temperature, the system is poised between order and chaos.
+        Fluctuations appear at every scale &mdash; tiny clusters and huge domains coexist.
+        This is where the most interesting physics happens.
+      </p>
+    </div>
+    <div class="explain-card">
+      <span class="icon" aria-hidden="true">&#x1F4CF;</span>
+      <h3>Finite-Size Scaling</h3>
+      <p>
+        Real magnets have 10<sup>23</sup> atoms. We simulate thousands.
+        By running at multiple sizes and extrapolating, we recover the behavior
+        of an infinite system &mdash; and measure critical exponents.
+      </p>
+    </div>
+    <div class="explain-card">
+      <span class="icon" aria-hidden="true">&#x2744;&#xFE0F;</span>
+      <h3>Kibble-Zurek Mechanism</h3>
+      <p>
+        Cool a magnet through Tc quickly and defects freeze in &mdash; patches that
+        chose different alignments. The number of defects follows a universal power law.
+        The same physics governs defects in the early universe.
+      </p>
+    </div>
+    <div class="explain-card">
+      <span class="icon" aria-hidden="true">&#x1F9F2;</span>
+      <h3>Real Materials</h3>
+      <p>
+        By tuning one parameter (coupling strength J) on the right crystal lattice,
+        the simulation reproduces the Curie temperatures of real iron (1043 K)
+        and nickel (631 K).
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- Results -->
+<section id="results">
+  <div class="section-label">What We Found</div>
+  <h2>Accuracy at a Glance</h2>
+  <p>
+    The simulator has been validated against exact solutions, experimental measurements,
+    and theoretical predictions. Here are the headline numbers.
+  </p>
+
+  <table class="results-table">
+    <thead>
+      <tr>
+        <th>Quantity</th>
+        <th>Our Value</th>
+        <th>Reference</th>
+        <th>Error</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>3D critical temperature</td>
+        <td class="value">4.512(4) J/k<sub>B</sub></td>
+        <td>4.5115 (Hasenbusch 2010)</td>
+        <td class="error excellent">0.01%</td>
+      </tr>
+      <tr>
+        <td>2D Ising vs Onsager exact</td>
+        <td class="value">2.269 J/k<sub>B</sub></td>
+        <td>2.2692 (exact)</td>
+        <td class="error excellent">&lt;0.02%</td>
+      </tr>
+      <tr>
+        <td>Susceptibility exponent &gamma;/&nu;</td>
+        <td class="value">1.933(30)</td>
+        <td>1.964 (theory)</td>
+        <td class="error excellent">1.6%</td>
+      </tr>
+      <tr>
+        <td>Correlation length exponent &nu;</td>
+        <td class="value">0.667(37)</td>
+        <td>0.6301 (theory)</td>
+        <td class="error good">5.9%</td>
+      </tr>
+      <tr>
+        <td>Iron Curie temperature</td>
+        <td class="value">1043 K</td>
+        <td>1043 K (experiment)</td>
+        <td class="error excellent">&lt;1%</td>
+      </tr>
+      <tr>
+        <td>Nickel Curie temperature</td>
+        <td class="value">~631 K</td>
+        <td>~627 K (experiment)</td>
+        <td class="error excellent">~1%</td>
+      </tr>
+      <tr>
+        <td>Kibble-Zurek exponent &kappa;</td>
+        <td class="value">0.258(15)</td>
+        <td>0.279 (theory)</td>
+        <td class="error good">7.4%</td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- Gallery -->
+<section id="gallery">
+  <div class="section-label">Key Figures</div>
+  <h2>Phase Transition &mdash; The Main Event</h2>
+  <p>
+    These figures show how thermodynamic quantities change as temperature sweeps through
+    the critical point. The sharp peaks and crossings are how physicists pin down
+    the exact transition temperature and measure critical exponents.
+  </p>
+
+  <div class="gallery-grid">
+    <div class="gallery-card">
+      <img src="../paper/figures/fss_observables.png" alt="Thermodynamic observables vs temperature" loading="lazy" />
+      <div class="caption">
+        <strong>Thermodynamic observables</strong>
+        Energy, magnetization, heat capacity, and susceptibility for lattice sizes L=8 to L=48.
+        The phase transition appears as features that sharpen with increasing system size.
+      </div>
+    </div>
+    <div class="gallery-card">
+      <img src="../paper/figures/fss_binder.png" alt="Binder cumulant crossing" loading="lazy" />
+      <div class="caption">
+        <strong>Binder cumulant crossing</strong>
+        All lattice sizes cross at the same temperature &mdash; that is Tc.
+        This method pins down the critical temperature to 4.512(4) J/k<sub>B</sub>.
+      </div>
+    </div>
+    <div class="gallery-card">
+      <img src="../paper/figures/fss_collapse.png" alt="Scaling collapse" loading="lazy" />
+      <div class="caption">
+        <strong>Scaling collapse</strong>
+        When axes are rescaled using critical exponents, data from all lattice sizes
+        falls onto one universal curve. This is the signature of a continuous phase transition.
+      </div>
+    </div>
+    <div class="gallery-card">
+      <img src="../paper/figures/fss_peak_scaling.png" alt="Peak scaling" loading="lazy" />
+      <div class="caption">
+        <strong>Peak scaling</strong>
+        Log-log plots of peak heights vs system size. The slopes give the
+        critical exponent ratios &gamma;/&nu; and &beta;/&nu;.
+      </div>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <h2>Three Universality Classes on GPU</h2>
+  <p>
+    The same code, run on an NVIDIA RTX 2060, simulates three fundamentally different
+    types of magnetism. Despite different microscopic rules, each shows the same
+    universal scaling behavior &mdash; with its own set of critical exponents.
+  </p>
+
+  <div class="uni-tabs">
+    <button class="uni-tab active" data-model="ising">Ising</button>
+    <button class="uni-tab" data-model="heisenberg">Heisenberg</button>
+    <button class="uni-tab" data-model="xy">XY</button>
+  </div>
+
+  <div class="uni-panel active gallery-grid" data-model="ising">
+    <div class="gallery-card">
+      <img src="../analysis/figures/gpu_fss/ising_observables.png" alt="Ising observables" loading="lazy" />
+      <div class="caption"><strong>Ising observables</strong> Discrete up/down spins. Sharp transition at Tc = 4.51.</div>
+    </div>
+    <div class="gallery-card">
+      <img src="../analysis/figures/gpu_fss/ising_binder.png" alt="Ising Binder crossing" loading="lazy" />
+      <div class="caption"><strong>Binder crossing</strong> Clean crossing locates Tc to 0.02% accuracy.</div>
+    </div>
+    <div class="gallery-card">
+      <img src="../analysis/figures/gpu_fss/ising_collapse.png" alt="Ising scaling collapse" loading="lazy" />
+      <div class="caption"><strong>Scaling collapse</strong> Ising universality class exponents confirmed.</div>
+    </div>
+  </div>
+
+  <div class="uni-panel gallery-grid" data-model="heisenberg">
+    <div class="gallery-card">
+      <img src="../analysis/figures/gpu_fss/heisenberg_observables.png" alt="Heisenberg observables" loading="lazy" />
+      <div class="caption"><strong>Heisenberg observables</strong> 3-component continuous spins. Different exponents than Ising.</div>
+    </div>
+    <div class="gallery-card">
+      <img src="../analysis/figures/gpu_fss/heisenberg_binder.png" alt="Heisenberg Binder crossing" loading="lazy" />
+      <div class="caption"><strong>Binder crossing</strong> Heisenberg Tc located to 0.04% accuracy.</div>
+    </div>
+    <div class="gallery-card">
+      <img src="../analysis/figures/gpu_fss/heisenberg_collapse.png" alt="Heisenberg scaling collapse" loading="lazy" />
+      <div class="caption"><strong>Scaling collapse</strong> O(3) universality class confirmed.</div>
+    </div>
+  </div>
+
+  <div class="uni-panel gallery-grid" data-model="xy">
+    <div class="gallery-card">
+      <img src="../analysis/figures/gpu_fss/xy_observables.png" alt="XY observables" loading="lazy" />
+      <div class="caption"><strong>XY observables</strong> 2-component planar spins. Most precise Tc of the three.</div>
+    </div>
+    <div class="gallery-card">
+      <img src="../analysis/figures/gpu_fss/xy_binder.png" alt="XY Binder crossing" loading="lazy" />
+      <div class="caption"><strong>Binder crossing</strong> XY Tc nailed to 0.001% &mdash; the best of all three models.</div>
+    </div>
+    <div class="gallery-card">
+      <img src="../analysis/figures/gpu_fss/xy_collapse.png" alt="XY scaling collapse" loading="lazy" />
+      <div class="caption"><strong>Scaling collapse</strong> O(2) universality class confirmed.</div>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <h2>Validation</h2>
+  <p>
+    Five independent tests confirm the simulator gives correct answers before we trust
+    any new results.
+  </p>
+
+  <div class="gallery-grid">
+    <div class="gallery-card">
+      <img src="../analysis/figures/generated/validation/onsager_comparison.png" alt="Monte Carlo vs Onsager exact solution" loading="lazy" />
+      <div class="caption">
+        <strong>Onsager exact solution</strong>
+        The gold standard: our 2D Monte Carlo results land right on Onsager's 1944 analytical curve.
+      </div>
+    </div>
+    <div class="gallery-card">
+      <img src="../analysis/figures/generated/validation/exact_enumeration.png" alt="Exact enumeration comparison" loading="lazy" />
+      <div class="caption">
+        <strong>Exact enumeration</strong>
+        For a tiny 4x4 lattice, we can check every possible configuration. Monte Carlo agrees perfectly.
+      </div>
+    </div>
+    <div class="gallery-card">
+      <img src="../analysis/figures/generated/validation/known_limits.png" alt="Known limits check" loading="lazy" />
+      <div class="caption">
+        <strong>Known limits</strong>
+        At T=0, full order. At T=infinity, full disorder. Both limits reproduced exactly.
+      </div>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <h2>Beyond Equilibrium</h2>
+  <p>
+    The simulator also probes dynamic phenomena &mdash; what happens when you cool a magnet
+    through the phase transition, or remove random bonds from the crystal.
+  </p>
+
+  <div class="gallery-grid">
+    <div class="gallery-card">
+      <img src="../analysis/figures/generated/kz/kz_fit.png" alt="Kibble-Zurek power-law fit" loading="lazy" />
+      <div class="caption">
+        <strong>Kibble-Zurek mechanism</strong>
+        Defect density vs cooling rate follows a power law. Our exponent (0.258) matches
+        the theoretical prediction (0.279) to within 7%.
+      </div>
+    </div>
+    <div class="gallery-card">
+      <img src="../analysis/figures/generated/dilution/dilution_tc_summary.png" alt="Bond dilution Tc shift" loading="lazy" />
+      <div class="caption">
+        <strong>Bond dilution</strong>
+        Randomly removing bonds weakens the magnet and lowers Tc &mdash; smoothly
+        and predictably, matching theoretical expectations.
+      </div>
+    </div>
+    <div class="gallery-card">
+      <img src="../analysis/coarsening_fit.png" alt="Domain coarsening dynamics" loading="lazy" />
+      <div class="caption">
+        <strong>Domain coarsening</strong>
+        After a quench, magnetic domains grow as t<sup>1/2</sup>,
+        confirming Allen-Cahn dynamics.
+      </div>
+    </div>
+    <div class="gallery-card">
+      <img src="../analysis/data/ml_phase_boundary.png" alt="ML phase boundary detection" loading="lazy" />
+      <div class="caption">
+        <strong>Machine learning</strong>
+        A neural network, given raw spin snapshots with no physics knowledge, independently
+        discovers the phase transition temperature.
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Footer -->
+<footer>
+  <p>
+    <strong>ising-rs</strong> &mdash; Rust + CUDA Monte Carlo toolkit for classical spin models
+    <br>
+    <a href="./index.html">Full 3D Demo</a>
+    &middot; <a href="./ELI5.md">Explain Like I'm Five</a>
+    &middot; <a href="./gallery.md">Complete Figure Gallery</a>
+    &middot; <a href="https://github.com/faulknco/ising-rs">GitHub</a>
+  </p>
+  <p style="margin-top: 12px;">Targeting publication in Physical Review E</p>
+</footer>
+
+<!-- ── Scripts ── -->
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.167.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.167.0/examples/jsm/"
+  }
+}
+</script>
+<script type="module">
+import * as THREE from "three";
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+
+// ── State ──
+const state = {
+  n: 12, j: 1.0, h: 0.0, temperature: 2.0,
+  running: false, step: 0, mag: 0,
+};
+
+// ── Worker (reuse existing) ──
+const worker = new Worker("./worker.js", { type: "module" });
+
+worker.onmessage = (e) => {
+  const msg = e.data;
+  if (msg.type === "ready") {
+    document.getElementById("btn-run").disabled = false;
+    document.getElementById("btn-sweep").disabled = false;
+  } else if (msg.type === "frame") {
+    updateMeshes(msg.spins);
+    state.step = msg.step;
+    state.mag = msg.magnetisation;
+    document.getElementById("hud-mag").textContent = state.mag.toFixed(3);
+  } else if (msg.type === "sweep_done") {
+    renderSweepCharts(msg.csv);
+    document.getElementById("btn-sweep").disabled = false;
+    document.getElementById("btn-run").disabled = false;
+  }
+};
+
+function send(msg) { worker.postMessage(msg); }
+
+// ── Three.js ──
+const canvas = document.getElementById("sim-canvas");
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setClearColor(0x070710);
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 500);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+
+scene.add(new THREE.AmbientLight(0xffffff, 0.5));
+const dir = new THREE.DirectionalLight(0xffffff, 1.2);
+dir.position.set(1, 2, 3);
+scene.add(dir);
+const back = new THREE.DirectionalLight(0x4466ff, 0.4);
+back.position.set(-2, -1, -2);
+scene.add(back);
+
+const GEO = new THREE.SphereGeometry(0.42, 10, 8);
+const MAT_UP = new THREE.MeshPhongMaterial({ color: 0x3b82f6, shininess: 80 });
+const MAT_DOWN = new THREE.MeshPhongMaterial({ color: 0xef4444, shininess: 80 });
+
+let meshUp = null, meshDown = null, positions = [];
+
+function buildPositions(n) {
+  positions = [];
+  const off = -(n - 1) / 2;
+  for (let i = 0; i < n; i++)
+    for (let j = 0; j < n; j++)
+      for (let k = 0; k < n; k++)
+        positions.push(new THREE.Vector3(i + off, j + off, k + off));
+}
+
+function initMeshes(n) {
+  if (meshUp) scene.remove(meshUp);
+  if (meshDown) scene.remove(meshDown);
+  const size = n * n * n;
+  meshUp = new THREE.InstancedMesh(GEO, MAT_UP, size);
+  meshDown = new THREE.InstancedMesh(GEO, MAT_DOWN, size);
+  meshUp.count = 0;
+  meshDown.count = 0;
+  scene.add(meshUp);
+  scene.add(meshDown);
+  const dist = n * 1.5;
+  camera.position.set(dist, dist * 0.7, dist);
+  controls.target.set(0, 0, 0);
+  controls.update();
+}
+
+const _d = new THREE.Object3D();
+
+function updateMeshes(spins) {
+  if (!meshUp || !meshDown) return;
+  let u = 0, d = 0;
+  for (let i = 0; i < spins.length; i++) {
+    _d.position.copy(positions[i]);
+    _d.updateMatrix();
+    if (spins[i] > 0) meshUp.setMatrixAt(u++, _d.matrix);
+    else meshDown.setMatrixAt(d++, _d.matrix);
+  }
+  meshUp.count = u;
+  meshDown.count = d;
+  meshUp.instanceMatrix.needsUpdate = true;
+  meshDown.instanceMatrix.needsUpdate = true;
+}
+
+// ── Sweep Charts (SVG) ──
+const CHART_DEFS = [
+  { key: "E", label: "Energy per spin", color: "#60a5fa" },
+  { key: "M", label: "Magnetization", color: "#34d399" },
+  { key: "Cv", label: "Heat Capacity", color: "#fb923c" },
+  { key: "chi", label: "Susceptibility", color: "#e879f9" },
+];
+
+function renderSweepCharts(csv) {
+  const rows = csv.trim().split("\n").slice(1).map(line => {
+    const [T, E, M, Cv, chi] = line.split(",").map(Number);
+    return { T, E, M, Cv, chi };
+  });
+
+  const container = document.getElementById("charts-grid");
+  container.replaceChildren();
+
+  for (const { key, label, color } of CHART_DEFS) {
+    const card = document.createElement("div");
+    card.className = "chart-card";
+    card.appendChild(buildSVG(rows, key, label, color));
+    container.appendChild(card);
+  }
+
+  const section = document.getElementById("sweep-charts");
+  section.classList.add("visible");
+}
+
+function buildSVG(rows, key, label, color) {
+  const W = 320, H = 180;
+  const P = { t: 18, r: 12, b: 30, l: 48 };
+  const pw = W - P.l - P.r, ph = H - P.t - P.b;
+
+  const xs = rows.map(r => r.T);
+  const ys = rows.map(r => r[key]);
+  const x0 = Math.min(...xs), x1 = Math.max(...xs);
+  const y0 = Math.min(...ys), y1 = Math.max(...ys);
+  const ry = y1 - y0 || 1;
+  const sx = x => P.l + (x - x0) / (x1 - x0) * pw;
+  const sy = y => P.t + ph - (y - y0) / ry * ph;
+
+  const NS = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(NS, "svg");
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  svg.setAttribute("width", "100%");
+
+  // Axes
+  for (const [x1v, y1v, x2v, y2v] of [
+    [P.l, P.t, P.l, P.t + ph],
+    [P.l, P.t + ph, P.l + pw, P.t + ph]
+  ]) {
+    const l = document.createElementNS(NS, "line");
+    l.setAttribute("x1", x1v); l.setAttribute("y1", y1v);
+    l.setAttribute("x2", x2v); l.setAttribute("y2", y2v);
+    l.setAttribute("stroke", "#374151"); l.setAttribute("stroke-width", "1");
+    svg.appendChild(l);
+  }
+
+  // Y ticks
+  for (const v of [y0, y0 + ry / 2, y1]) {
+    const t = document.createElementNS(NS, "text");
+    t.setAttribute("x", P.l - 5);
+    t.setAttribute("y", sy(v) + 3);
+    t.setAttribute("text-anchor", "end");
+    t.setAttribute("font-size", "9");
+    t.setAttribute("fill", "#6b7280");
+    t.setAttribute("font-family", "monospace");
+    t.textContent = v.toFixed(2);
+    svg.appendChild(t);
+  }
+
+  // X ticks
+  for (const v of [x0, (x0 + x1) / 2, x1]) {
+    const t = document.createElementNS(NS, "text");
+    t.setAttribute("x", sx(v));
+    t.setAttribute("y", P.t + ph + 14);
+    t.setAttribute("text-anchor", "middle");
+    t.setAttribute("font-size", "9");
+    t.setAttribute("fill", "#6b7280");
+    t.setAttribute("font-family", "monospace");
+    t.textContent = v.toFixed(1);
+    svg.appendChild(t);
+  }
+
+  // X label
+  const xlabel = document.createElementNS(NS, "text");
+  xlabel.setAttribute("x", P.l + pw / 2);
+  xlabel.setAttribute("y", P.t + ph + 26);
+  xlabel.setAttribute("text-anchor", "middle");
+  xlabel.setAttribute("font-size", "9");
+  xlabel.setAttribute("fill", "#4b5563");
+  xlabel.textContent = "T / J";
+  svg.appendChild(xlabel);
+
+  // Data path
+  const path = rows.map((r, i) =>
+    `${i ? "L" : "M"}${sx(r.T).toFixed(1)},${sy(r[key]).toFixed(1)}`).join(" ");
+  const p = document.createElementNS(NS, "path");
+  p.setAttribute("d", path);
+  p.setAttribute("fill", "none");
+  p.setAttribute("stroke", color);
+  p.setAttribute("stroke-width", "2");
+  p.setAttribute("stroke-linejoin", "round");
+  svg.appendChild(p);
+
+  // Title
+  const title = document.createElementNS(NS, "text");
+  title.setAttribute("x", P.l + 6);
+  title.setAttribute("y", P.t + 12);
+  title.setAttribute("font-size", "11");
+  title.setAttribute("fill", color);
+  title.setAttribute("font-weight", "600");
+  title.textContent = label;
+  svg.appendChild(title);
+
+  return svg;
+}
+
+// ── Render loop ──
+function animate() {
+  requestAnimationFrame(animate);
+  controls.update();
+  renderer.render(scene, camera);
+}
+
+function onResize() {
+  const el = document.getElementById("sim-viewport");
+  const w = el.clientWidth || 400;
+  const h = el.clientHeight || 400;
+  if (w === 0 || h === 0) return;
+  renderer.setSize(w, h, false);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+}
+
+window.addEventListener("resize", onResize);
+new ResizeObserver(onResize).observe(document.getElementById("sim-viewport"));
+
+// ── Temperature hint updates ──
+const TEMP_HINTS = [
+  { max: 3.5, text: "Well below Tc. Spins are strongly ordered \u2014 a solid magnet." },
+  { max: 4.2, text: "Approaching Tc = 4.51. Fluctuations are growing. Watch for clusters." },
+  { max: 4.8, text: "Near Tc = 4.51. The critical region \u2014 order and chaos coexist at every scale." },
+  { max: 5.5, text: "Just above Tc. Magnetism is fading. Short-range order lingers briefly." },
+  { max: Infinity, text: "High temperature. Complete disorder \u2014 the magnet is gone." },
+];
+
+function updateTempHint(t) {
+  const hint = document.getElementById("temp-hint");
+  for (const h of TEMP_HINTS) {
+    if (t < h.max) {
+      hint.textContent = h.text;
+      return;
+    }
+  }
+}
+
+// ── Controls ──
+function initSim() {
+  state.n = parseInt(document.getElementById("ctrl-n").value);
+  state.temperature = parseFloat(document.getElementById("ctrl-t").value);
+  buildPositions(state.n);
+  initMeshes(state.n);
+  send({
+    type: "init", n: state.n, geometry: 2,
+    j: state.j, h: state.h,
+    temperature: state.temperature, seed: Date.now(),
+  });
+}
+
+// Temperature slider
+const tEl = document.getElementById("ctrl-t");
+const tLbl = document.getElementById("val-t");
+tEl.addEventListener("input", () => {
+  const v = parseFloat(tEl.value);
+  state.temperature = v;
+  tLbl.textContent = v.toFixed(2);
+  send({ type: "set", temperature: v, j: state.j, h: state.h });
+  updateTempHint(v);
+});
+
+// Size slider
+const nEl = document.getElementById("ctrl-n");
+const nLbl = document.getElementById("val-n");
+nEl.addEventListener("change", () => {
+  nLbl.textContent = nEl.value;
+  if (state.running) {
+    send({ type: "pause" });
+    state.running = false;
+    document.getElementById("btn-run").textContent = "Run Simulation";
+    document.getElementById("btn-run").classList.remove("running");
+  }
+  initSim();
+});
+
+// Run/Pause
+document.getElementById("btn-run").addEventListener("click", () => {
+  state.running = !state.running;
+  const btn = document.getElementById("btn-run");
+  if (state.running) {
+    send({ type: "start" });
+    btn.textContent = "Pause";
+    btn.classList.add("running");
+  } else {
+    send({ type: "pause" });
+    btn.textContent = "Run Simulation";
+    btn.classList.remove("running");
+  }
+});
+
+// Reset
+document.getElementById("btn-reset").addEventListener("click", () => {
+  send({ type: "reset" });
+  state.step = 0;
+  document.getElementById("hud-mag").textContent = "--";
+});
+
+// Sweep
+document.getElementById("btn-sweep").addEventListener("click", () => {
+  if (state.running) {
+    send({ type: "pause" });
+    state.running = false;
+    const btn = document.getElementById("btn-run");
+    btn.textContent = "Run Simulation";
+    btn.classList.remove("running");
+  }
+  document.getElementById("btn-sweep").disabled = true;
+  document.getElementById("btn-run").disabled = true;
+  send({ type: "sweep", tMin: 0.5, tMax: 8.0, steps: 50, warmup: 300, samples: 150 });
+});
+
+// ── Universality tabs ──
+document.querySelectorAll(".uni-tab").forEach(tab => {
+  tab.addEventListener("click", () => {
+    const model = tab.dataset.model;
+    document.querySelectorAll(".uni-tab").forEach(t => t.classList.toggle("active", t === tab));
+    document.querySelectorAll(".uni-panel").forEach(p =>
+      p.classList.toggle("active", p.dataset.model === model));
+  });
+});
+
+// ── Boot ──
+animate();
+requestAnimationFrame(() => requestAnimationFrame(() => {
+  onResize();
+  initSim();
+}));
+</script>
+
+</body>
+</html>
