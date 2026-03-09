@@ -153,16 +153,16 @@ Philox passes BigCrush. Standard RNG for GPU Monte Carlo (MILC, lattice QCD). No
 
 ## 5. Testing & Correctness
 
-Every optimization must pass a parity test before merging.
+Every optimization must pass a statistical parity test before merging. **Bitwise identity is NOT required** for MSC vs single-spin — different data layouts and RNG consumption patterns make exact match unrealistic and the wrong gate. The correct gate is: same detailed-balance target distribution → same equilibrium observables within statistical error.
 
 | Test | Method | Tolerance |
 |------|--------|-----------|
-| MSC vs single-spin Metropolis | Same seed/T/N, compare spin states after 1000 sweeps | Bitwise identical |
-| Batched vs unbatched (single replica) | Same seed → compare spins | Bitwise identical |
-| GPU Wolff vs CPU Wolff | 10k sweeps, compare <E>, <\|M\|> | Within 2 sigma |
-| Philox vs curandState | Same kernel, different RNG → statistical comparison | <E>, <\|M\|> within 2 sigma |
+| MSC vs single-spin Metropolis | Same T/N, 10k+ sweeps, compare <E>, <\|M\|>, Cv, χ | Within 2σ jackknife error |
+| Batched vs unbatched (single replica) | Same seed → compare spins | Bitwise identical (same kernel logic) |
+| GPU Wolff vs CPU Wolff | 10k sweeps, compare <E>, <\|M\|> + report τ_int | Within 2σ; τ_int comparable |
+| Philox vs curandState | Same kernel, different RNG → statistical comparison | <E>, <\|M\|> within 2σ |
 
-Performance validation: wall-clock benchmark at N=64, 32 replicas, 10k sweeps comparing old vs new paths.
+Performance validation: benchmark matrix across three temperature regimes (low T, near Tc, high T) at N=32,64,128. Report ESS/sec (effective samples per second = N_samples / τ_int / wall_clock), not just raw sweeps/sec.
 
 ---
 
@@ -194,11 +194,17 @@ Performance validation: wall-clock benchmark at N=64, 32 replicas, 10k sweeps co
 
 ## 7. Expected Combined Impact
 
-| Optimization | Speedup | VRAM Effect |
-|---|---|---|
-| MSC (32 sites/word) | ~20-30x | 32x less spin memory |
-| Batched replicas | ~3x | Neutral |
-| GPU Wolff (near Tc) | ~5-10x effective | +70 MB labels/bonds |
-| Philox RNG | ~1.2x | 3x less RNG memory |
-| **Combined (Metropolis path)** | **~60-100x** | Fits N=256+ in 6 GB |
-| **Combined (Wolff near Tc)** | **~15-30x + no critical slowing** | |
+Speedups are not cleanly multiplicative — memory bandwidth, occupancy, reductions, and host-side I/O will limit real gains. Conservative and stretch targets:
+
+| Optimization | Conservative | Stretch | VRAM Effect |
+|---|---|---|---|
+| MSC (32 sites/word) | ~10-15x | ~20-30x | 32x less spin memory |
+| Batched replicas | ~1.5-2x | ~3x | Neutral |
+| GPU Wolff (near Tc) | Uncertain | ~5-10x effective | +70 MB labels/bonds |
+| Philox RNG | ~1.1x | ~1.2x | 3x less RNG memory |
+| **Combined (Metropolis)** | **~15-30x** | **~30-60x** | Fits N=256+ in 6 GB |
+| **Combined (Wolff near Tc)** | **Prototype first** | **~15-30x + no critical slowing** | |
+
+GPU Wolff is a promising but unproven path. If it underperforms, keep CPU Wolff + GPU Metropolis split.
+
+The correct performance metric is **effective samples per second** (ESS/sec = N_samples / τ_int / wall_clock), not raw sweeps/sec.
