@@ -1,0 +1,5 @@
+geometry,n,expected_low_temp_energy,low_temp_energy,low_temp_magnetisation,high_temp_energy,high_temp_magnetisation
+2d,16,-2.0,-2.0,1.0,-0.027537,0.049341
+2d,32,-2.0,-2.0,1.0,-0.055501,0.03047
+3d,8,-3.0,-3.0,1.0,-0.039467,0.033559
+3d,16,-3.0,-3.0,1.0,-0.053064,0.013064

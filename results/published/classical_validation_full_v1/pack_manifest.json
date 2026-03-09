@@ -1,0 +1,85 @@
+{
+  "created_at": "2026-03-09T11:01:17.992456+00:00",
+  "files": [
+    {
+      "relative_path": "analysis/data/derived/validation/autocorrelation_summary.csv",
+      "sha256": "da7031156838081d5b94d15400bbabff76e96f94c722c9ad3146608928724e65",
+      "size_bytes": 161
+    },
+    {
+      "relative_path": "analysis/data/derived/validation/exact_enumeration_comparison.csv",
+      "sha256": "e888d1ef5738ef2b431ffa56f83389b374f1786554fc77426c2663794fc60abf",
+      "size_bytes": 9452
+    },
+    {
+      "relative_path": "analysis/data/derived/validation/fluctuation_dissipation.csv",
+      "sha256": "4db95b842cb9c8fd0fb077da4c5eb8d3987e3df5358097defcacbd7a6ff6908c",
+      "size_bytes": 5174
+    },
+    {
+      "relative_path": "analysis/data/derived/validation/known_limits_summary.csv",
+      "sha256": "0c8ac737625e524499d1f031dec95eec4d88a54a366c4daca681f5b7943e9fda",
+      "size_bytes": 270
+    },
+    {
+      "relative_path": "analysis/data/derived/validation/onsager_comparison.csv",
+      "sha256": "897e5bd22c28d1bb6a1e9859e063e57077aea04730b4bd3edb67de33ed1635e8",
+      "size_bytes": 26943
+    },
+    {
+      "relative_path": "analysis/data/derived/validation/validation_metrics.csv",
+      "sha256": "7d81e079e584382979c928c5ca52431bb792d8885715a40882f7baf7941dfc1c",
+      "size_bytes": 1545
+    },
+    {
+      "relative_path": "analysis/data/derived/validation/validation_overview.csv",
+      "sha256": "68c45f92ed16156f7c04e06249aef4a84294ec7595287804a8229be1ba83b83a",
+      "size_bytes": 198
+    },
+    {
+      "relative_path": "analysis/data/derived/validation/validation_summary.json",
+      "sha256": "1810db7a6307d00fdaa9c938914a743a53c7116cfac4479c70ad76f671197586",
+      "size_bytes": 3893
+    },
+    {
+      "relative_path": "analysis/data/manifests/validation/validation_full.json",
+      "sha256": "94132d9a138864eb0c96ea420b653424e815854213fa5944f5d8bf8b2ea65af1",
+      "size_bytes": 3069
+    },
+    {
+      "relative_path": "analysis/data/manifests/validation/validation_quick.json",
+      "sha256": "288d1baede83130d2e13f1b5faf0e309111f5fb59191bae8dd5e4db8b068c6cd",
+      "size_bytes": 2593
+    },
+    {
+      "relative_path": "analysis/figures/generated/validation/autocorrelation_scaling.png",
+      "sha256": "83c765e1d6fcb3791c470478678bf09d355d2c5d90b6bec07c3f683f018fb2c0",
+      "size_bytes": 42076
+    },
+    {
+      "relative_path": "analysis/figures/generated/validation/exact_enumeration.png",
+      "sha256": "32b62cb35f1fbc7df3aa7fac3e75580d95104fb6f78498389a931c1e188415f9",
+      "size_bytes": 147223
+    },
+    {
+      "relative_path": "analysis/figures/generated/validation/fluctuation_dissipation.png",
+      "sha256": "2813a986cafde1eda51db7930225669e963a6149cee29f7ca0b6dbf921356fa6",
+      "size_bytes": 99496
+    },
+    {
+      "relative_path": "analysis/figures/generated/validation/known_limits.png",
+      "sha256": "1be8a5de0933a0635c070eb8131c5ddec8ec609162cf8993d1b6ce63d2dc90bf",
+      "size_bytes": 55941
+    },
+    {
+      "relative_path": "analysis/figures/generated/validation/onsager_comparison.png",
+      "sha256": "7ecff1e02d61ab3bf546dd78234e9ac53a0c96949955edf692ff6ea0c3aa6af8",
+      "size_bytes": 143844
+    }
+  ],
+  "includes_raw": false,
+  "pack_root": "/Users/faulknco/Projects/ising-rs/results/published/classical_validation_full_v1",
+  "readme": "README.md",
+  "schema_version": "0.1.0",
+  "source_git_commit": "8421e956598cf0001355ac94fb3455811b53abd2"
+}
