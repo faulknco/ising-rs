@@ -1,6 +1,8 @@
 #include <curand_kernel.h>
 #include <math.h>
 
+typedef curandStatePhilox4_32_10 RngState;
+
 // Continuous-spin checkerboard Metropolis for O(n) models.
 // n_comp = 2 (XY) or 3 (Heisenberg).
 // spins: interleaved [s0_x, s0_y, (s0_z), s1_x, ...], n_comp floats per site.
@@ -8,7 +10,7 @@
 
 extern "C" __global__ void continuous_metropolis_kernel(
     float*       spins,
-    curandState* rng_states,
+    RngState*    rng_states,
     int          N,          // lattice side
     int          n_comp,     // 2 or 3
     float        beta,
@@ -56,7 +58,7 @@ extern "C" __global__ void continuous_metropolis_kernel(
     float e_old = -(sx * hx + sy * hy + sz * hz);
 
     // Propose: perturb current spin by small random rotation
-    curandState local_rng = rng_states[tid];
+    RngState local_rng = rng_states[tid];
     float dx = delta * (2.0f * curand_uniform(&local_rng) - 1.0f);
     float dy = delta * (2.0f * curand_uniform(&local_rng) - 1.0f);
     float dz = (n_comp == 3) ? delta * (2.0f * curand_uniform(&local_rng) - 1.0f) : 0.0f;
@@ -142,7 +144,7 @@ extern "C" __global__ void continuous_overrelax_kernel(
 }
 
 extern "C" __global__ void init_continuous_rng_kernel(
-    curandState* states,
+    RngState*    states,
     unsigned long long seed,
     int n
 ) {
