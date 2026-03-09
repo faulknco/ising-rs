@@ -51,6 +51,7 @@ fn main() {
     let mut outdir = String::from("analysis/data");
     let mut delta = 0.5_f64;
     let mut n_overrelax = 5usize;
+    let mut measure_every = 1usize;
 
     let mut i = 1;
     while i < args.len() {
@@ -103,6 +104,10 @@ fn main() {
                 n_overrelax = parse_flag(&args, i, "--overrelax");
                 i += 2;
             }
+            "--measure-every" => {
+                measure_every = parse_flag(&args, i, "--measure-every");
+                i += 2;
+            }
             _ => {
                 i += 1;
             }
@@ -113,6 +118,11 @@ fn main() {
         .split(',')
         .filter_map(|s| s.trim().parse().ok())
         .collect();
+
+    if measure_every == 0 {
+        eprintln!("Error: --measure-every must be at least 1");
+        std::process::exit(1);
+    }
 
     fs::create_dir_all(&outdir).expect("failed to create outdir");
 
@@ -129,6 +139,7 @@ fn main() {
             exchange_every,
             seed,
             &outdir,
+            measure_every,
         ),
         "xy" => run_continuous_fss(
             &sizes,
@@ -143,6 +154,7 @@ fn main() {
             &outdir,
             delta as f32,
             n_overrelax,
+            measure_every,
         ),
         "heisenberg" => run_continuous_fss(
             &sizes,
@@ -157,6 +169,7 @@ fn main() {
             &outdir,
             delta as f32,
             n_overrelax,
+            measure_every,
         ),
         _ => {
             eprintln!("Error: --model must be ising, xy, or heisenberg");
@@ -176,11 +189,13 @@ fn run_ising_fss(
     exchange_every: usize,
     seed: u64,
     outdir: &str,
+    measure_every: usize,
 ) {
     use ising::cuda::lattice_gpu::LatticeGpu;
     use ising::cuda::parallel_tempering::{linspace_temperatures, replica_exchange};
     use rand::SeedableRng;
     use rand_xoshiro::Xoshiro256PlusPlus;
+    use std::io::{BufWriter, Write as IoWrite};
 
     let temperatures = linspace_temperatures(t_min, t_max, n_replicas);
 
@@ -199,13 +214,23 @@ fn run_ising_fss(
 
         // Warmup
         eprintln!("  N={n}: warming up {warmup} sweeps...");
-        for _ in 0..warmup {
+        for w in 0..warmup {
             for (r, lat) in replicas.iter_mut().enumerate() {
                 let t_idx = replica_to_temp[r];
                 let beta = 1.0 / temperatures[t_idx];
                 lat.step(beta as f32, 1.0, 0.0).expect("GPU step failed");
             }
+            if (w + 1) % 1000 == 0 {
+                eprintln!("    warmup {}/{warmup}", w + 1);
+            }
         }
+
+        // Open timeseries file for streaming writes
+        let model_name = "ising";
+        let ts_path = Path::new(outdir).join(format!("gpu_fss_{model_name}_N{n}_timeseries.csv"));
+        let ts_file = fs::File::create(&ts_path).expect("create timeseries file failed");
+        let mut ts_writer = BufWriter::new(ts_file);
+        writeln!(ts_writer, "temp_idx,E,M").expect("write header failed");
 
         // Sampling with parallel tempering
         let mut sum_e = vec![0.0_f64; n_replicas];
@@ -214,7 +239,11 @@ fn run_ising_fss(
         let mut sum_m2 = vec![0.0_f64; n_replicas];
         let mut sum_m4 = vec![0.0_f64; n_replicas];
         let mut count = vec![0usize; n_replicas];
-        let mut ts_data: Vec<Vec<(f64, f64)>> = vec![vec![]; n_replicas];
+        // Keep ts_data in memory for jackknife at the end
+        let mut ts_data: Vec<Vec<(f64, f64)>> = (0..n_replicas)
+            .map(|_| Vec::with_capacity(samples / measure_every + 1))
+            .collect();
+        let mut energies = vec![0.0_f64; n_replicas]; // reused every sweep
 
         let n3 = (n * n * n) as f64;
 
@@ -227,28 +256,35 @@ fn run_ising_fss(
                 lat.step(beta as f32, 1.0, 0.0).expect("GPU step failed");
             }
 
-            // Measure and accumulate
-            let mut energies = vec![0.0_f64; n_replicas];
-            for (r, lat) in replicas.iter().enumerate() {
-                let t_idx = replica_to_temp[r];
-                let spins = lat.get_spins().expect("get_spins failed");
-                let (e, m) = ising_e_m_host(&spins, n);
-                let e_per = e / n3;
-                let m_per = (m / n3).abs();
-                energies[r] = e;
+            // Measure and accumulate (GPU-resident — no spin transfer)
+            let do_measure = (sweep + 1) % measure_every == 0;
+            let do_exchange = (sweep + 1) % exchange_every == 0;
 
-                sum_e[t_idx] += e_per;
-                sum_e2[t_idx] += e_per * e_per;
-                sum_m[t_idx] += m_per;
-                sum_m2[t_idx] += m_per * m_per;
-                sum_m4[t_idx] += m_per.powi(4);
-                count[t_idx] += 1;
+            if do_measure || do_exchange {
+                for (r, lat) in replicas.iter_mut().enumerate() {
+                    let t_idx = replica_to_temp[r];
+                    let (e_per, m_per) = lat.measure_gpu(1.0).expect("GPU measure failed");
+                    energies[r] = e_per * n3;
 
-                ts_data[t_idx].push((e_per, m_per));
+                    if do_measure {
+                        sum_e[t_idx] += e_per;
+                        sum_e2[t_idx] += e_per * e_per;
+                        sum_m[t_idx] += m_per;
+                        sum_m2[t_idx] += m_per * m_per;
+                        sum_m4[t_idx] += m_per.powi(4);
+                        count[t_idx] += 1;
+
+                        ts_data[t_idx].push((e_per, m_per));
+
+                        // Stream to disk immediately
+                        writeln!(ts_writer, "{t_idx},{e_per:.8},{m_per:.8}")
+                            .expect("write timeseries row failed");
+                    }
+                }
             }
 
             // Replica exchange
-            if (sweep + 1) % exchange_every == 0 {
+            if do_exchange {
                 replica_exchange(
                     &temperatures,
                     &energies,
@@ -258,43 +294,137 @@ fn run_ising_fss(
                     sweep / exchange_every,
                 );
             }
+
+            // Progress logging
+            if (sweep + 1) % 10000 == 0 {
+                eprintln!("    sweep {}/{samples}", sweep + 1);
+            }
         }
 
-        // Write summary CSV
-        let model_name = "ising";
+        // Flush timeseries
+        ts_writer.flush().expect("flush timeseries failed");
+        drop(ts_writer);
+        eprintln!("  Wrote {}", ts_path.display());
+
+        // Write summary CSV with jackknife error bars
         let summary_path = Path::new(outdir).join(format!("gpu_fss_{model_name}_N{n}_summary.csv"));
         let mut csv = String::from("T,E,E_err,M,M_err,M2,M2_err,M4,M4_err,Cv,Cv_err,chi,chi_err\n");
         for t_idx in 0..n_replicas {
-            let s = count[t_idx] as f64;
-            if s == 0.0 {
+            if ts_data[t_idx].is_empty() {
                 continue;
             }
             let t = temperatures[t_idx];
             let beta = 1.0 / t;
-            let avg_e = sum_e[t_idx] / s;
-            let avg_e2 = sum_e2[t_idx] / s;
-            let avg_m = sum_m[t_idx] / s;
-            let avg_m2 = sum_m2[t_idx] / s;
-            let avg_m4 = sum_m4[t_idx] / s;
-            let cv = beta * beta * (avg_e2 - avg_e * avg_e) * n3;
+            let n_blocks = 20.min(ts_data[t_idx].len());
+            let obs = jackknife_observables(&ts_data[t_idx], beta, n3, n_blocks);
             csv.push_str(&format!(
-                "{t:.6},{avg_e:.6},0.0,{avg_m:.6},0.0,{avg_m2:.6},0.0,{avg_m4:.6},0.0,{cv:.6},0.0,0.0,0.0\n"
+                "{t:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6}\n",
+                obs[0],
+                obs[1],
+                obs[2],
+                obs[3],
+                obs[4],
+                obs[5],
+                obs[6],
+                obs[7],
+                obs[8],
+                obs[9],
+                obs[10],
+                obs[11],
             ));
         }
         fs::write(&summary_path, &csv).expect("write summary failed");
         eprintln!("  Wrote {}", summary_path.display());
-
-        // Write time series CSV for reweighting
-        let ts_path = Path::new(outdir).join(format!("gpu_fss_{model_name}_N{n}_timeseries.csv"));
-        let mut ts_csv = String::from("temp_idx,E,M\n");
-        for (t_idx, data) in ts_data.iter().enumerate() {
-            for &(e, m) in data {
-                ts_csv.push_str(&format!("{t_idx},{e:.8},{m:.8}\n"));
-            }
-        }
-        fs::write(&ts_path, &ts_csv).expect("write timeseries failed");
-        eprintln!("  Wrote {}", ts_path.display());
     }
+}
+
+/// Jackknife analysis of time series data.
+/// Returns: (E, E_err, M, M_err, M2, M2_err, M4, M4_err, Cv, Cv_err, chi, chi_err)
+fn jackknife_observables(ts: &[(f64, f64)], beta: f64, n3: f64, n_blocks: usize) -> [f64; 12] {
+    let n = ts.len();
+    if n < n_blocks || n_blocks < 2 {
+        return [0.0; 12];
+    }
+    let block_size = n / n_blocks;
+    let n_used = block_size * n_blocks;
+
+    // Full-sample averages
+    let (sum_e, sum_e2, sum_m, sum_m2, sum_m4) = ts[..n_used].iter().fold(
+        (0.0, 0.0, 0.0, 0.0, 0.0),
+        |(se, se2, sm, sm2, sm4), &(e, m)| {
+            (se + e, se2 + e * e, sm + m, sm2 + m * m, sm4 + m.powi(4))
+        },
+    );
+    let s = n_used as f64;
+    let avg_e = sum_e / s;
+    let avg_e2 = sum_e2 / s;
+    let avg_m = sum_m / s;
+    let avg_m2 = sum_m2 / s;
+    let avg_m4 = sum_m4 / s;
+    let cv = beta * beta * (avg_e2 - avg_e * avg_e) * n3;
+    let chi = beta * (avg_m2 - avg_m * avg_m) * n3;
+
+    // Jackknife: leave-one-block-out
+    let mut jk_e = Vec::with_capacity(n_blocks);
+    let mut jk_m = Vec::with_capacity(n_blocks);
+    let mut jk_m2 = Vec::with_capacity(n_blocks);
+    let mut jk_m4 = Vec::with_capacity(n_blocks);
+    let mut jk_cv = Vec::with_capacity(n_blocks);
+    let mut jk_chi = Vec::with_capacity(n_blocks);
+
+    for b in 0..n_blocks {
+        let start = b * block_size;
+        let end = start + block_size;
+        let mut be = 0.0;
+        let mut be2 = 0.0;
+        let mut bm = 0.0;
+        let mut bm2 = 0.0;
+        let mut bm4 = 0.0;
+        for i in 0..n_used {
+            if i >= start && i < end {
+                continue;
+            }
+            let (e, m) = ts[i];
+            be += e;
+            be2 += e * e;
+            bm += m;
+            bm2 += m * m;
+            bm4 += m.powi(4);
+        }
+        let sj = (n_used - block_size) as f64;
+        let je = be / sj;
+        let je2 = be2 / sj;
+        let jm = bm / sj;
+        let jm2 = bm2 / sj;
+        let jm4 = bm4 / sj;
+        jk_e.push(je);
+        jk_m.push(jm);
+        jk_m2.push(jm2);
+        jk_m4.push(jm4);
+        jk_cv.push(beta * beta * (je2 - je * je) * n3);
+        jk_chi.push(beta * (jm2 - jm * jm) * n3);
+    }
+
+    let jk_err = |full: f64, jk: &[f64]| -> f64 {
+        let nb = jk.len() as f64;
+        let var: f64 = jk.iter().map(|&x| (x - full).powi(2)).sum::<f64>() * (nb - 1.0) / nb;
+        var.sqrt()
+    };
+
+    [
+        avg_e,
+        jk_err(avg_e, &jk_e),
+        avg_m,
+        jk_err(avg_m, &jk_m),
+        avg_m2,
+        jk_err(avg_m2, &jk_m2),
+        avg_m4,
+        jk_err(avg_m4, &jk_m4),
+        cv,
+        jk_err(cv, &jk_cv),
+        chi,
+        jk_err(chi, &jk_chi),
+    ]
 }
 
 fn ising_e_m_host(spins: &[i8], n: usize) -> (f64, f64) {
@@ -334,12 +464,14 @@ fn run_continuous_fss(
     outdir: &str,
     delta: f32,
     n_overrelax: usize,
+    measure_every: usize,
 ) {
     use cudarc::driver::CudaDevice;
     use ising::cuda::gpu_lattice_continuous::ContinuousGpuLattice;
     use ising::cuda::parallel_tempering::{linspace_temperatures, replica_exchange};
     use rand::SeedableRng;
     use rand_xoshiro::Xoshiro256PlusPlus;
+    use std::io::{BufWriter, Write as IoWrite};
 
     let model_name = if n_comp == 2 { "xy" } else { "heisenberg" };
     let temperatures = linspace_temperatures(t_min, t_max, n_replicas);
@@ -367,14 +499,23 @@ fn run_continuous_fss(
 
         // Warmup
         eprintln!("  N={n}: warming up {warmup} sweeps...");
-        for _ in 0..warmup {
+        for w in 0..warmup {
             for (r, lat) in replicas.iter_mut().enumerate() {
                 let t_idx = replica_to_temp[r];
                 let beta = (1.0 / temperatures[t_idx]) as f32;
                 lat.sweep(beta, 1.0, delta, n_overrelax)
                     .expect("sweep failed");
             }
+            if (w + 1) % 1000 == 0 {
+                eprintln!("    warmup {}/{warmup}", w + 1);
+            }
         }
+
+        // Open timeseries file for streaming writes
+        let ts_path = Path::new(outdir).join(format!("gpu_fss_{model_name}_N{n}_timeseries.csv"));
+        let ts_file = fs::File::create(&ts_path).expect("create timeseries file failed");
+        let mut ts_writer = BufWriter::new(ts_file);
+        writeln!(ts_writer, "temp_idx,E,M").expect("write header failed");
 
         // Accumulators
         let mut sum_e = vec![0.0_f64; n_replicas];
@@ -383,34 +524,50 @@ fn run_continuous_fss(
         let mut sum_m2 = vec![0.0_f64; n_replicas];
         let mut sum_m4 = vec![0.0_f64; n_replicas];
         let mut count = vec![0usize; n_replicas];
-        let mut ts_data: Vec<Vec<(f64, f64)>> = vec![vec![]; n_replicas];
+        let mut ts_data: Vec<Vec<(f64, f64)>> = (0..n_replicas)
+            .map(|_| Vec::with_capacity(samples / measure_every + 1))
+            .collect();
+        let mut energies = vec![0.0_f64; n_replicas]; // reused every sweep
 
-        eprintln!("  N={n}: sampling {samples} sweeps with PT...");
+        eprintln!("  N={n}: sampling {samples} sweeps with PT (measure every {measure_every})...");
         for sweep in 0..samples {
-            let mut energies = vec![0.0_f64; n_replicas];
-
+            // Sweep all replicas
             for (r, lat) in replicas.iter_mut().enumerate() {
                 let t_idx = replica_to_temp[r];
                 let beta = (1.0 / temperatures[t_idx]) as f32;
                 lat.sweep(beta, 1.0, delta, n_overrelax)
                     .expect("sweep failed");
-
-                let (e, mx, my, mz) = lat.measure_raw().expect("measure failed");
-                let e_per = e / n3;
-                let m_abs = ((mx * mx + my * my + mz * mz).sqrt()) / n3;
-                energies[r] = e;
-
-                sum_e[t_idx] += e_per;
-                sum_e2[t_idx] += e_per * e_per;
-                sum_m[t_idx] += m_abs;
-                sum_m2[t_idx] += m_abs * m_abs;
-                sum_m4[t_idx] += m_abs.powi(4);
-                count[t_idx] += 1;
-
-                ts_data[t_idx].push((e_per, m_abs));
             }
 
-            if (sweep + 1) % exchange_every == 0 {
+            let do_measure = (sweep + 1) % measure_every == 0;
+            let do_exchange = (sweep + 1) % exchange_every == 0;
+
+            if do_measure || do_exchange {
+                for (r, lat) in replicas.iter_mut().enumerate() {
+                    let t_idx = replica_to_temp[r];
+                    let (e, mx, my, mz) = lat.measure_gpu(1.0).expect("GPU measure failed");
+                    let e_per = e / n3;
+                    let m_abs = ((mx * mx + my * my + mz * mz).sqrt()) / n3;
+                    energies[r] = e;
+
+                    if do_measure {
+                        sum_e[t_idx] += e_per;
+                        sum_e2[t_idx] += e_per * e_per;
+                        sum_m[t_idx] += m_abs;
+                        sum_m2[t_idx] += m_abs * m_abs;
+                        sum_m4[t_idx] += m_abs.powi(4);
+                        count[t_idx] += 1;
+
+                        ts_data[t_idx].push((e_per, m_abs));
+
+                        // Stream to disk immediately
+                        writeln!(ts_writer, "{t_idx},{e_per:.8},{m_abs:.8}")
+                            .expect("write timeseries row failed");
+                    }
+                }
+            }
+
+            if do_exchange {
                 replica_exchange(
                     &temperatures,
                     &energies,
@@ -426,39 +583,40 @@ fn run_continuous_fss(
             }
         }
 
-        // Write summary CSV
+        // Flush timeseries
+        ts_writer.flush().expect("flush timeseries failed");
+        drop(ts_writer);
+        eprintln!("  Wrote {}", ts_path.display());
+
+        // Write summary CSV with jackknife error bars
         let summary_path = Path::new(outdir).join(format!("gpu_fss_{model_name}_N{n}_summary.csv"));
         let mut csv = String::from("T,E,E_err,M,M_err,M2,M2_err,M4,M4_err,Cv,Cv_err,chi,chi_err\n");
         for t_idx in 0..n_replicas {
-            let s = count[t_idx] as f64;
-            if s == 0.0 {
+            if ts_data[t_idx].is_empty() {
                 continue;
             }
             let t = temperatures[t_idx];
             let beta = 1.0 / t;
-            let avg_e = sum_e[t_idx] / s;
-            let avg_e2 = sum_e2[t_idx] / s;
-            let avg_m = sum_m[t_idx] / s;
-            let avg_m2 = sum_m2[t_idx] / s;
-            let avg_m4 = sum_m4[t_idx] / s;
-            let cv = beta * beta * (avg_e2 - avg_e * avg_e) * n3;
+            let n_blocks = 20.min(ts_data[t_idx].len());
+            let obs = jackknife_observables(&ts_data[t_idx], beta, n3, n_blocks);
             csv.push_str(&format!(
-                "{t:.6},{avg_e:.6},0.0,{avg_m:.6},0.0,{avg_m2:.6},0.0,{avg_m4:.6},0.0,{cv:.6},0.0,0.0,0.0\n"
+                "{t:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6}\n",
+                obs[0],
+                obs[1],
+                obs[2],
+                obs[3],
+                obs[4],
+                obs[5],
+                obs[6],
+                obs[7],
+                obs[8],
+                obs[9],
+                obs[10],
+                obs[11],
             ));
         }
         fs::write(&summary_path, &csv).expect("write summary failed");
         eprintln!("  Wrote {}", summary_path.display());
-
-        // Write time series
-        let ts_path = Path::new(outdir).join(format!("gpu_fss_{model_name}_N{n}_timeseries.csv"));
-        let mut ts_csv = String::from("temp_idx,E,M\n");
-        for (t_idx, data) in ts_data.iter().enumerate() {
-            for &(e, m) in data {
-                ts_csv.push_str(&format!("{t_idx},{e:.8},{m:.8}\n"));
-            }
-        }
-        fs::write(&ts_path, &ts_csv).expect("write timeseries failed");
-        eprintln!("  Wrote {}", ts_path.display());
     }
 }
 
@@ -473,6 +631,7 @@ fn run_ising_fss(
     _: usize,
     _: u64,
     _: &str,
+    _: usize,
 ) {
     eprintln!("Error: gpu_fss requires --features cuda");
     std::process::exit(1);
@@ -491,6 +650,7 @@ fn run_continuous_fss(
     _: u64,
     _: &str,
     _: f32,
+    _: usize,
     _: usize,
 ) {
     eprintln!("Error: gpu_fss requires --features cuda");
