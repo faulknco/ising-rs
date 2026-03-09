@@ -1,0 +1,19 @@
+model,quantity,measured,theory,abs_error,rel_error_pct,method,fit_sizes,status
+ising,Tc,4.51118,4.5115,0.00032,0.01,Binder crossing,all,OK
+ising,gamma/nu,2.014148,1.963498,0.05065,2.58,single reweighting,"8,16,32,64,128",OK
+ising,beta/nu,0.510533,0.518172,0.007638,1.47,single reweighting,"8,16,32,64,128",OK
+ising,beta/nu,0.492926,0.518172,0.025246,4.87,hyperscaling,d=3,OK
+ising,nu,0.624575,0.6301,0.005525,0.88,collapse,"8,16,32,64,128",OK
+ising,nu,0.63552,0.6301,0.00542,0.86,Binder slope,"8,16,32,64,128",OK
+heisenberg,Tc,1.443514,1.443,0.000514,0.04,Binder crossing,all,OK
+heisenberg,gamma/nu,2.016368,1.96288,0.053488,2.72,single reweighting,"8,16,32,64,128",OK
+heisenberg,beta/nu,0.514673,0.518701,0.004028,0.78,single reweighting,"8,16,32,64,128",OK
+heisenberg,beta/nu,0.491816,0.518701,0.026885,5.18,hyperscaling,d=3,WEAK
+heisenberg,nu,0.605552,0.7112,0.105648,14.85,collapse,"8,16,32,64,128",WEAK
+heisenberg,nu,0.61039,0.7112,0.10081,14.17,Binder slope,"8,16,32,64,128",WEAK
+xy,Tc,2.201914,2.2019,1.4e-05,0.0,Binder crossing,all,OK
+xy,gamma/nu,1.976744,1.961888,0.014856,0.76,single reweighting,"8,16,32,64,128",OK
+xy,beta/nu,0.524362,0.518982,0.00538,1.04,single reweighting,"8,16,32,64,128",OK
+xy,beta/nu,0.511628,0.518982,0.007354,1.42,hyperscaling,d=3,OK
+xy,nu,0.687157,0.6717,0.015457,2.3,collapse,"8,16,32,64,128",OK
+xy,nu,0.770632,0.6717,0.098932,14.73,Binder slope,"8,16,32,64,128",WEAK
