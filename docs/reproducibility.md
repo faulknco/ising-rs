@@ -135,6 +135,13 @@ Every paper figure should be attributable to:
 
 ## Current Status
 
-The repo is in transition. Historical notebook-driven results exist, but the target state is scripted and manifest-backed.
+The GPU FSS pipeline is the first fully scripted, reproducible workflow:
+
+- **Pipeline**: `scripts/run_gpu_windows_pipeline.py` (build → test → publication runs)
+- **Analysis**: `analysis/scripts/analyze_gpu_fss.py` (reweighting, Binder crossing, peak scaling, collapse)
+- **Data**: summary CSVs committed, timeseries regenerable via pipeline (~4 hours on RTX 2060)
+- **Guide**: `analysis/REPRODUCIBILITY.md` with exact parameters and expected results
+
+Historical notebook-driven results still exist for CPU workflows. The target state is scripted and manifest-backed for all workflows.
 
 The cleanup plan is tracked in [2026-03-08-reproducibility-and-physics-roadmap.md](/Users/faulknco/Projects/ising-rs/docs/plans/2026-03-08-reproducibility-and-physics-roadmap.md).
