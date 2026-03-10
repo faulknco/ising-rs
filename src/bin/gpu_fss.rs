@@ -35,6 +35,7 @@ fn main() {
     let mut n_overrelax = 5usize;
     let mut measure_every = 1usize;
     let mut wolff_every = 10usize;
+    let mut quantize = false;
 
     let mut i = 1;
     while i < args.len() {
@@ -99,6 +100,10 @@ fn main() {
                 wolff_every = parse_arg(&args, i, "--wolff-every");
                 i += 2;
             }
+            "--quantize" => {
+                quantize = true;
+                i += 1;
+            }
             _ => {
                 i += 1;
             }
@@ -151,6 +156,7 @@ fn main() {
             n_overrelax,
             measure_every,
             wolff_every,
+            quantize,
         ),
         "heisenberg" => run_continuous_fss(
             &sizes,
@@ -167,6 +173,7 @@ fn main() {
             n_overrelax,
             measure_every,
             wolff_every,
+            quantize,
         ),
         _ => {
             eprintln!("Error: --model must be ising, xy, or heisenberg");
@@ -803,9 +810,11 @@ fn run_continuous_fss(
     n_overrelax: usize,
     measure_every: usize,
     wolff_every: usize,
+    quantize: bool,
 ) {
     use cudarc::driver::CudaDevice;
     use ising::cuda::gpu_lattice_continuous::ContinuousGpuLattice;
+    use ising::cuda::gpu_lattice_quantized::{Fp16HeisenbergLattice, XyAngleLattice};
     use ising::cuda::parallel_tempering::{linspace_temperatures, replica_exchange};
     use rand::SeedableRng;
     use rand_xoshiro::Xoshiro256PlusPlus;
@@ -815,17 +824,63 @@ fn run_continuous_fss(
     let temperatures = linspace_temperatures(t_min, t_max, n_replicas);
     let device = CudaDevice::new(0).expect("failed to init CUDA device");
 
+    if quantize {
+        let bits = if n_comp == 3 { "48-bit (3×f16)" } else { "16-bit (angle f16)" };
+        eprintln!("  Quantized mode: {bits}");
+    }
+
     for &n in sizes {
         eprintln!("  N={n}: creating {n_replicas} {model_name} replicas...");
-        let mut replicas: Vec<ContinuousGpuLattice> = (0..n_replicas)
+
+        // --- Enum dispatch for lattice types ---
+        enum Lattice {
+            Fp32(ContinuousGpuLattice),
+            Fp16(Fp16HeisenbergLattice),
+            Angle(XyAngleLattice),
+        }
+        impl Lattice {
+            fn sweep(&mut self, beta: f32, j: f32, delta: f32, n_or: usize) -> anyhow::Result<()> {
+                match self {
+                    Lattice::Fp32(l) => l.sweep(beta, j, delta, n_or),
+                    Lattice::Fp16(l) => l.sweep(beta, j, delta, n_or),
+                    Lattice::Angle(l) => l.sweep(beta, j, delta, n_or),
+                }
+            }
+            fn measure_gpu(&mut self, j: f32) -> anyhow::Result<(f64, f64, f64, f64)> {
+                match self {
+                    Lattice::Fp32(l) => l.measure_gpu(j),
+                    Lattice::Fp16(l) => l.measure_gpu(j),
+                    Lattice::Angle(l) => l.measure_gpu(j),
+                }
+            }
+            fn wolff_step(&mut self, beta: f32, j: f32, rng: &mut Xoshiro256PlusPlus) -> anyhow::Result<()> {
+                match self {
+                    Lattice::Fp32(l) => l.wolff_step(beta, j, rng),
+                    Lattice::Fp16(l) => l.wolff_step(beta, j, rng),
+                    Lattice::Angle(l) => l.wolff_step(beta, j, rng),
+                }
+            }
+        }
+
+        let mut replicas: Vec<Lattice> = (0..n_replicas)
             .map(|r| {
-                ContinuousGpuLattice::new(
-                    n,
-                    n_comp,
-                    seed.wrapping_add(r as u64 * 1000 + n as u64),
-                    device.clone(),
-                )
-                .expect("failed to create continuous GPU lattice")
+                let s = seed.wrapping_add(r as u64 * 1000 + n as u64);
+                if quantize && n_comp == 3 {
+                    Lattice::Fp16(
+                        Fp16HeisenbergLattice::new(n, s, device.clone())
+                            .expect("failed to create FP16 Heisenberg lattice"),
+                    )
+                } else if quantize && n_comp == 2 {
+                    Lattice::Angle(
+                        XyAngleLattice::new(n, s, device.clone())
+                            .expect("failed to create XY angle lattice"),
+                    )
+                } else {
+                    Lattice::Fp32(
+                        ContinuousGpuLattice::new(n, n_comp, s, device.clone())
+                            .expect("failed to create continuous GPU lattice"),
+                    )
+                }
             })
             .collect();
 
@@ -865,14 +920,13 @@ fn run_continuous_fss(
         let mut ts_data: Vec<Vec<(f64, f64)>> = (0..n_replicas)
             .map(|_| Vec::with_capacity(samples / measure_every + 1))
             .collect();
-        let mut energies = vec![0.0_f64; n_replicas]; // reused every sweep
+        let mut energies = vec![0.0_f64; n_replicas];
 
         if wolff_every > 0 {
             eprintln!("  N={n}: Wolff embedding every {wolff_every} sweeps");
         }
         eprintln!("  N={n}: sampling {samples} sweeps with PT (measure every {measure_every})...");
         for sweep in 0..samples {
-            // Sweep all replicas (Metropolis + over-relaxation)
             for (r, lat) in replicas.iter_mut().enumerate() {
                 let t_idx = replica_to_temp[r];
                 let beta = (1.0 / temperatures[t_idx]) as f32;
@@ -880,7 +934,6 @@ fn run_continuous_fss(
                     .expect("sweep failed");
             }
 
-            // Wolff embedding cluster step for global decorrelation
             if wolff_every > 0 && (sweep + 1) % wolff_every == 0 {
                 for (r, lat) in replicas.iter_mut().enumerate() {
                     let t_idx = replica_to_temp[r];
@@ -1005,6 +1058,7 @@ fn run_continuous_fss(
     _: usize,
     _: usize,
     _: usize,
+    _: bool,
 ) {
     eprintln!("Error: gpu_fss requires --features cuda");
     std::process::exit(1);
