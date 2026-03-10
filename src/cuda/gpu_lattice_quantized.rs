@@ -1,10 +1,10 @@
 use cudarc::driver::{CudaDevice, CudaSlice, LaunchAsync, LaunchConfig};
 use half::f16;
 use rand::Rng;
-use std::collections::VecDeque;
 use std::sync::Arc;
 
 use crate::cuda::reduce_gpu;
+use crate::cuda::wolff::{wolff_cluster_flip_angle, wolff_cluster_flip_continuous};
 
 const CONTINUOUS_PTX: &str = include_str!(concat!(env!("OUT_DIR"), "/continuous_spin_kernel.ptx"));
 const BLOCK_SIZE: u32 = 256;
@@ -15,7 +15,7 @@ const BLOCK_SIZE: u32 = 256;
 
 pub struct Fp16HeisenbergLattice {
     pub n: usize,
-    device: Arc<CudaDevice>,
+    pub device: Arc<CudaDevice>,
     pub spins: CudaSlice<u16>, // __half stored as u16
     rng_states: CudaSlice<u8>,
     n_threads: u32,
@@ -219,84 +219,20 @@ impl Fp16HeisenbergLattice {
 
     /// Wolff embedding cluster step — copy to host as f32, BFS, copy back as f16.
     pub fn wolff_step<R: Rng>(&mut self, beta: f32, j: f32, rng: &mut R) -> anyhow::Result<()> {
-        let n = self.n;
-        let nc = 3;
-        let n_sites = n * n * n;
-
-        // Copy FP16 spins to host, convert to f32
         let spins_u16 = self.device.dtoh_sync_copy(&self.spins)?;
         let mut spins_f32: Vec<f32> = spins_u16
             .iter()
             .map(|&bits| f16::from_bits(bits).to_f32())
             .collect();
 
-        // Random reflection vector
-        let z_r: f32 = rng.gen_range(-1.0..1.0);
-        let phi_r: f32 = rng.gen_range(0.0..std::f32::consts::TAU);
-        let rho = (1.0 - z_r * z_r).sqrt();
-        let r = [rho * phi_r.cos(), rho * phi_r.sin(), z_r];
+        wolff_cluster_flip_continuous(&mut spins_f32, self.n, 3, beta, j, rng);
 
-        // Projected spins
-        let proj: Vec<f32> = (0..n_sites)
-            .map(|i| {
-                r[0] * spins_f32[i * nc]
-                    + r[1] * spins_f32[i * nc + 1]
-                    + r[2] * spins_f32[i * nc + 2]
-            })
-            .collect();
-
-        // BFS Wolff cluster
-        let seed_site: usize = rng.gen_range(0..n_sites);
-        let mut in_cluster = vec![false; n_sites];
-        let mut queue = VecDeque::new();
-        in_cluster[seed_site] = true;
-        queue.push_back(seed_site);
-
-        while let Some(site) = queue.pop_front() {
-            let iz = site / (n * n);
-            let iy = (site % (n * n)) / n;
-            let ix = site % n;
-            let neighbors = [
-                iz * n * n + iy * n + (ix + 1) % n,
-                iz * n * n + iy * n + (ix + n - 1) % n,
-                iz * n * n + ((iy + 1) % n) * n + ix,
-                iz * n * n + ((iy + n - 1) % n) * n + ix,
-                ((iz + 1) % n) * n * n + iy * n + ix,
-                ((iz + n - 1) % n) * n * n + iy * n + ix,
-            ];
-            for &nb in &neighbors {
-                if in_cluster[nb] {
-                    continue;
-                }
-                let bond = proj[site] * proj[nb];
-                if bond <= 0.0 {
-                    continue;
-                }
-                let p_add = 1.0 - (-2.0 * beta * j * bond).exp();
-                if rng.gen::<f32>() < p_add {
-                    in_cluster[nb] = true;
-                    queue.push_back(nb);
-                }
-            }
-        }
-
-        // Flip cluster
-        for i in 0..n_sites {
-            if in_cluster[i] {
-                for c in 0..nc {
-                    spins_f32[i * nc + c] -= 2.0 * proj[i] * r[c];
-                }
-            }
-        }
-
-        // Convert back to f16 and upload
         let spins_u16_out: Vec<u16> = spins_f32
             .iter()
             .map(|&v| f16::from_f32(v).to_bits())
             .collect();
         self.device
             .htod_sync_copy_into(&spins_u16_out, &mut self.spins)?;
-
         Ok(())
     }
 }
@@ -307,7 +243,7 @@ impl Fp16HeisenbergLattice {
 
 pub struct XyAngleLattice {
     pub n: usize,
-    device: Arc<CudaDevice>,
+    pub device: Arc<CudaDevice>,
     pub angles: CudaSlice<u16>, // __half angle per spin
     rng_states: CudaSlice<u8>,
     n_threads: u32,
@@ -503,75 +439,20 @@ impl XyAngleLattice {
 
     /// Wolff embedding for XY: project onto random axis, BFS, reflect angles.
     pub fn wolff_step<R: Rng>(&mut self, beta: f32, j: f32, rng: &mut R) -> anyhow::Result<()> {
-        let n = self.n;
-        let n_sites = n * n * n;
-
-        // Copy angles to host
         let angles_u16 = self.device.dtoh_sync_copy(&self.angles)?;
         let mut angles_f32: Vec<f32> = angles_u16
             .iter()
             .map(|&bits| f16::from_bits(bits).to_f32())
             .collect();
 
-        // Random reflection axis angle
-        let phi_r: f32 = rng.gen_range(0.0..std::f32::consts::TAU);
+        wolff_cluster_flip_angle(&mut angles_f32, self.n, beta, j, rng);
 
-        // Projected spins: sigma_i = cos(theta_i - phi_r)
-        let proj: Vec<f32> = angles_f32
-            .iter()
-            .map(|&theta| (theta - phi_r).cos())
-            .collect();
-
-        // BFS Wolff cluster
-        let seed_site: usize = rng.gen_range(0..n_sites);
-        let mut in_cluster = vec![false; n_sites];
-        let mut queue = VecDeque::new();
-        in_cluster[seed_site] = true;
-        queue.push_back(seed_site);
-
-        while let Some(site) = queue.pop_front() {
-            let iz = site / (n * n);
-            let iy = (site % (n * n)) / n;
-            let ix = site % n;
-            let neighbors = [
-                iz * n * n + iy * n + (ix + 1) % n,
-                iz * n * n + iy * n + (ix + n - 1) % n,
-                iz * n * n + ((iy + 1) % n) * n + ix,
-                iz * n * n + ((iy + n - 1) % n) * n + ix,
-                ((iz + 1) % n) * n * n + iy * n + ix,
-                ((iz + n - 1) % n) * n * n + iy * n + ix,
-            ];
-            for &nb in &neighbors {
-                if in_cluster[nb] {
-                    continue;
-                }
-                let bond = proj[site] * proj[nb];
-                if bond <= 0.0 {
-                    continue;
-                }
-                let p_add = 1.0 - (-2.0 * beta * j * bond).exp();
-                if rng.gen::<f32>() < p_add {
-                    in_cluster[nb] = true;
-                    queue.push_back(nb);
-                }
-            }
-        }
-
-        // Flip cluster: reflect angle through axis → θ_new = 2*φ_r - θ
-        for i in 0..n_sites {
-            if in_cluster[i] {
-                angles_f32[i] = 2.0 * phi_r - angles_f32[i];
-            }
-        }
-
-        // Convert back to f16 and upload
         let angles_u16_out: Vec<u16> = angles_f32
             .iter()
             .map(|&v| f16::from_f32(v).to_bits())
             .collect();
         self.device
             .htod_sync_copy_into(&angles_u16_out, &mut self.angles)?;
-
         Ok(())
     }
 }

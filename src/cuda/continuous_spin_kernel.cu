@@ -339,6 +339,9 @@ extern "C" __global__ void xy_angle_metropolis_kernel(
     float de = e_new - e_old;
 
     if (de < 0.0f || curand_uniform(&local_rng) < expf(-beta * de)) {
+        // Wrap to [0, 2π) to preserve FP16 precision
+        theta_new = fmodf(theta_new, 6.2831853f);
+        if (theta_new < 0.0f) theta_new += 6.2831853f;
         angles[idx] = __float2half(theta_new);
     }
 
@@ -387,5 +390,9 @@ extern "C" __global__ void xy_angle_overrelax_kernel(
     // Reflect through local field angle: θ_new = 2*φ_h - θ
     float phi_h = atan2f(hy, hx);
     float theta = __half2float(angles[idx]);
-    angles[idx] = __float2half(2.0f * phi_h - theta);
+    float theta_new = 2.0f * phi_h - theta;
+    // Wrap to [0, 2π) to preserve FP16 precision
+    theta_new = fmodf(theta_new, 6.2831853f);
+    if (theta_new < 0.0f) theta_new += 6.2831853f;
+    angles[idx] = __float2half(theta_new);
 }

@@ -1,9 +1,9 @@
 use cudarc::driver::{CudaDevice, CudaSlice, LaunchAsync, LaunchConfig};
 use rand::Rng;
-use std::collections::VecDeque;
 use std::sync::Arc;
 
 use crate::cuda::reduce_gpu;
+use crate::cuda::wolff::wolff_cluster_flip_continuous;
 
 const CONTINUOUS_PTX: &str = include_str!(concat!(env!("OUT_DIR"), "/continuous_spin_kernel.ptx"));
 const BLOCK_SIZE: u32 = 256;
@@ -11,7 +11,7 @@ const BLOCK_SIZE: u32 = 256;
 pub struct ContinuousGpuLattice {
     pub n: usize,
     pub n_comp: usize, // 2 = XY, 3 = Heisenberg
-    device: Arc<CudaDevice>,
+    pub device: Arc<CudaDevice>,
     pub spins: CudaSlice<f32>,
     rng_states: CudaSlice<u8>,
     n_threads: u32,
@@ -260,86 +260,9 @@ impl ContinuousGpuLattice {
     /// This dramatically reduces critical slowing down (z ≈ 0.1 vs z ≈ 2
     /// for Metropolis) at the cost of a GPU→CPU→GPU round-trip.
     pub fn wolff_step<R: Rng>(&mut self, beta: f32, j: f32, rng: &mut R) -> anyhow::Result<()> {
-        let n = self.n;
-        let nc = self.n_comp;
-        let n_sites = n * n * n;
-
-        // Copy spins from GPU to host
         let mut spins = self.device.dtoh_sync_copy(&self.spins)?;
-
-        // Choose random reflection vector r on unit sphere/circle
-        let r: Vec<f32> = if nc == 3 {
-            let z: f32 = rng.gen_range(-1.0..1.0);
-            let phi: f32 = rng.gen_range(0.0..std::f32::consts::TAU);
-            let rho = (1.0 - z * z).sqrt();
-            vec![rho * phi.cos(), rho * phi.sin(), z]
-        } else {
-            let angle: f32 = rng.gen_range(0.0..std::f32::consts::TAU);
-            vec![angle.cos(), angle.sin()]
-        };
-
-        // Compute projected spins: proj[i] = S_i · r
-        let proj: Vec<f32> = (0..n_sites)
-            .map(|i| {
-                let mut dot = 0.0f32;
-                for c in 0..nc {
-                    dot += spins[i * nc + c] * r[c];
-                }
-                dot
-            })
-            .collect();
-
-        // Pick random seed site
-        let seed_site: usize = rng.gen_range(0..n_sites);
-
-        // BFS Wolff cluster on projected spins
-        let mut in_cluster = vec![false; n_sites];
-        let mut queue = VecDeque::new();
-        in_cluster[seed_site] = true;
-        queue.push_back(seed_site);
-
-        while let Some(site) = queue.pop_front() {
-            let iz = site / (n * n);
-            let iy = (site % (n * n)) / n;
-            let ix = site % n;
-
-            let neighbors = [
-                iz * n * n + iy * n + (ix + 1) % n,
-                iz * n * n + iy * n + (ix + n - 1) % n,
-                iz * n * n + ((iy + 1) % n) * n + ix,
-                iz * n * n + ((iy + n - 1) % n) * n + ix,
-                ((iz + 1) % n) * n * n + iy * n + ix,
-                ((iz + n - 1) % n) * n * n + iy * n + ix,
-            ];
-
-            for &nb in &neighbors {
-                if in_cluster[nb] {
-                    continue;
-                }
-                let bond = proj[site] * proj[nb];
-                if bond <= 0.0 {
-                    continue;
-                }
-                let p_add = 1.0 - (-2.0 * beta * j * bond).exp();
-                if rng.gen::<f32>() < p_add {
-                    in_cluster[nb] = true;
-                    queue.push_back(nb);
-                }
-            }
-        }
-
-        // Flip cluster: S_i → S_i - 2(S_i · r)r
-        for i in 0..n_sites {
-            if in_cluster[i] {
-                for c in 0..nc {
-                    spins[i * nc + c] -= 2.0 * proj[i] * r[c];
-                }
-            }
-        }
-
-        // Copy back to GPU
+        wolff_cluster_flip_continuous(&mut spins, self.n, self.n_comp, beta, j, rng);
         self.device.htod_sync_copy_into(&spins, &mut self.spins)?;
-
         Ok(())
     }
 }

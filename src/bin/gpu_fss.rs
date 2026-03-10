@@ -816,7 +816,7 @@ fn run_continuous_fss(
     use ising::cuda::gpu_lattice_continuous::ContinuousGpuLattice;
     use ising::cuda::gpu_lattice_quantized::{Fp16HeisenbergLattice, XyAngleLattice};
     use ising::cuda::parallel_tempering::{linspace_temperatures, replica_exchange};
-    use rand::SeedableRng;
+    use rand::{Rng, SeedableRng};
     use rand_xoshiro::Xoshiro256PlusPlus;
     use std::io::{BufWriter, Write as IoWrite};
 
@@ -853,12 +853,34 @@ fn run_continuous_fss(
                     Lattice::Angle(l) => l.measure_gpu(j),
                 }
             }
-            fn wolff_step(&mut self, beta: f32, j: f32, rng: &mut Xoshiro256PlusPlus) -> anyhow::Result<()> {
+            fn download_spins_f32(&self) -> Vec<f32> {
                 match self {
-                    Lattice::Fp32(l) => l.wolff_step(beta, j, rng),
-                    Lattice::Fp16(l) => l.wolff_step(beta, j, rng),
-                    Lattice::Angle(l) => l.wolff_step(beta, j, rng),
+                    Lattice::Fp32(l) => l.device.dtoh_sync_copy(&l.spins).unwrap(),
+                    Lattice::Fp16(l) => {
+                        let u16s = l.device.dtoh_sync_copy(&l.spins).unwrap();
+                        u16s.iter().map(|&b| half::f16::from_bits(b).to_f32()).collect()
+                    }
+                    Lattice::Angle(l) => {
+                        let u16s = l.device.dtoh_sync_copy(&l.angles).unwrap();
+                        u16s.iter().map(|&b| half::f16::from_bits(b).to_f32()).collect()
+                    }
                 }
+            }
+            fn upload_spins_f32(&mut self, data: &[f32]) {
+                match self {
+                    Lattice::Fp32(l) => l.device.htod_sync_copy_into(data, &mut l.spins).unwrap(),
+                    Lattice::Fp16(l) => {
+                        let u16s: Vec<u16> = data.iter().map(|&v| half::f16::from_f32(v).to_bits()).collect();
+                        l.device.htod_sync_copy_into(&u16s, &mut l.spins).unwrap();
+                    }
+                    Lattice::Angle(l) => {
+                        let u16s: Vec<u16> = data.iter().map(|&v| half::f16::from_f32(v).to_bits()).collect();
+                        l.device.htod_sync_copy_into(&u16s, &mut l.angles).unwrap();
+                    }
+                }
+            }
+            fn is_angle(&self) -> bool {
+                matches!(self, Lattice::Angle(_))
             }
         }
 
@@ -935,11 +957,41 @@ fn run_continuous_fss(
             }
 
             if wolff_every > 0 && (sweep + 1) % wolff_every == 0 {
-                for (r, lat) in replicas.iter_mut().enumerate() {
-                    let t_idx = replica_to_temp[r];
-                    let beta = (1.0 / temperatures[t_idx]) as f32;
-                    lat.wolff_step(beta, 1.0, &mut rng)
-                        .expect("Wolff step failed");
+                // Parallel Wolff: download all spins, BFS in parallel, upload back
+                use ising::cuda::wolff::{wolff_cluster_flip_continuous, wolff_cluster_flip_angle};
+
+                let mut host_data: Vec<Vec<f32>> = replicas.iter()
+                    .map(|lat| lat.download_spins_f32())
+                    .collect();
+                let betas: Vec<f32> = (0..n_replicas)
+                    .map(|r| (1.0 / temperatures[replica_to_temp[r]]) as f32)
+                    .collect();
+                let is_angle_mode = replicas.first().map_or(false, |l| l.is_angle());
+
+                std::thread::scope(|s| {
+                    let mut handles = Vec::new();
+                    for (idx, spins) in host_data.iter_mut().enumerate() {
+                        let beta = betas[idx];
+                        let thread_seed = rng.gen::<u64>();
+                        let lat_n = n;
+                        let lat_nc = n_comp;
+                        let is_angle = is_angle_mode;
+                        handles.push(s.spawn(move || {
+                            let mut local_rng = Xoshiro256PlusPlus::seed_from_u64(thread_seed);
+                            if is_angle {
+                                wolff_cluster_flip_angle(spins, lat_n, beta, 1.0, &mut local_rng);
+                            } else {
+                                wolff_cluster_flip_continuous(spins, lat_n, lat_nc, beta, 1.0, &mut local_rng);
+                            }
+                        }));
+                    }
+                    for h in handles {
+                        h.join().unwrap();
+                    }
+                });
+
+                for (lat, data) in replicas.iter_mut().zip(host_data.iter()) {
+                    lat.upload_spins_f32(data);
                 }
             }
 
