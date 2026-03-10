@@ -442,6 +442,13 @@ fn run_ising_fss_msc(
         let mut temp_to_replica: Vec<usize> = (0..n_replicas).collect();
         let mut rng = Xoshiro256PlusPlus::seed_from_u64(seed.wrapping_add(n as u64));
 
+        // Set initial Boltzmann tables for each replica
+        for (r, lat) in replicas.iter_mut().enumerate() {
+            let t_idx = replica_to_temp[r];
+            let beta = 1.0 / temperatures[t_idx];
+            lat.set_temperature(beta as f32, 1.0).expect("set_temperature failed");
+        }
+
         // Warmup
         eprintln!("  N={n}: warming up {warmup} sweeps...");
         for w in 0..warmup {
@@ -504,6 +511,12 @@ fn run_ising_fss_msc(
                     &mut rng,
                     sweep / exchange_every,
                 );
+                // Update Boltzmann tables after temperature reassignment
+                for (r, lat) in replicas.iter_mut().enumerate() {
+                    let t_idx = replica_to_temp[r];
+                    let beta = 1.0 / temperatures[t_idx];
+                    lat.set_temperature(beta as f32, 1.0).expect("set_temperature failed");
+                }
             }
 
             if (sweep + 1) % 10000 == 0 {
