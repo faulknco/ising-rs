@@ -34,6 +34,7 @@ fn main() {
     let mut delta = 0.5_f64;
     let mut n_overrelax = 5usize;
     let mut measure_every = 1usize;
+    let mut wolff_every = 10usize;
 
     let mut i = 1;
     while i < args.len() {
@@ -94,6 +95,10 @@ fn main() {
                 measure_every = parse_arg(&args, i, "--measure-every");
                 i += 2;
             }
+            "--wolff-every" => {
+                wolff_every = parse_arg(&args, i, "--wolff-every");
+                i += 2;
+            }
             _ => {
                 i += 1;
             }
@@ -145,6 +150,7 @@ fn main() {
             delta as f32,
             n_overrelax,
             measure_every,
+            wolff_every,
         ),
         "heisenberg" => run_continuous_fss(
             &sizes,
@@ -160,6 +166,7 @@ fn main() {
             delta as f32,
             n_overrelax,
             measure_every,
+            wolff_every,
         ),
         _ => {
             eprintln!("Error: --model must be ising, xy, or heisenberg");
@@ -795,6 +802,7 @@ fn run_continuous_fss(
     delta: f32,
     n_overrelax: usize,
     measure_every: usize,
+    wolff_every: usize,
 ) {
     use cudarc::driver::CudaDevice;
     use ising::cuda::gpu_lattice_continuous::ContinuousGpuLattice;
@@ -859,14 +867,27 @@ fn run_continuous_fss(
             .collect();
         let mut energies = vec![0.0_f64; n_replicas]; // reused every sweep
 
+        if wolff_every > 0 {
+            eprintln!("  N={n}: Wolff embedding every {wolff_every} sweeps");
+        }
         eprintln!("  N={n}: sampling {samples} sweeps with PT (measure every {measure_every})...");
         for sweep in 0..samples {
-            // Sweep all replicas
+            // Sweep all replicas (Metropolis + over-relaxation)
             for (r, lat) in replicas.iter_mut().enumerate() {
                 let t_idx = replica_to_temp[r];
                 let beta = (1.0 / temperatures[t_idx]) as f32;
                 lat.sweep(beta, 1.0, delta, n_overrelax)
                     .expect("sweep failed");
+            }
+
+            // Wolff embedding cluster step for global decorrelation
+            if wolff_every > 0 && (sweep + 1) % wolff_every == 0 {
+                for (r, lat) in replicas.iter_mut().enumerate() {
+                    let t_idx = replica_to_temp[r];
+                    let beta = (1.0 / temperatures[t_idx]) as f32;
+                    lat.wolff_step(beta, 1.0, &mut rng)
+                        .expect("Wolff step failed");
+                }
             }
 
             let do_measure = (sweep + 1) % measure_every == 0;
@@ -981,6 +1002,7 @@ fn run_continuous_fss(
     _: u64,
     _: &str,
     _: f32,
+    _: usize,
     _: usize,
     _: usize,
 ) {
