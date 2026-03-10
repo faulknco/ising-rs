@@ -411,7 +411,7 @@ fn run_ising_fss_msc(
     measure_every: usize,
 ) {
     use cudarc::driver::CudaDevice;
-    use ising::cuda::msc_lattice::MscLattice;
+    use ising::cuda::msc_lattice::BatchedMscLattice;
     use ising::cuda::parallel_tempering::{linspace_temperatures, replica_exchange};
     use rand::SeedableRng;
     use rand_xoshiro::Xoshiro256PlusPlus;
@@ -420,43 +420,36 @@ fn run_ising_fss_msc(
     let temperatures = linspace_temperatures(t_min, t_max, n_replicas);
     let device = CudaDevice::new(0).expect("CUDA init failed");
 
+    // Helper: build betas array from current replica-to-temp mapping
+    let build_betas = |replica_to_temp: &[usize], temps: &[f64]| -> Vec<f32> {
+        replica_to_temp
+            .iter()
+            .map(|&t_idx| (1.0 / temps[t_idx]) as f32)
+            .collect()
+    };
+
     for &n in sizes {
         if n % 32 != 0 {
             eprintln!("Error: --algorithm msc requires N to be a multiple of 32, got {n}");
             std::process::exit(1);
         }
 
-        eprintln!("  N={n}: creating {n_replicas} MSC replicas...");
-        let mut replicas: Vec<MscLattice> = (0..n_replicas)
-            .map(|r| {
-                MscLattice::new(
-                    n,
-                    seed.wrapping_add(r as u64 * 1000 + n as u64),
-                    device.clone(),
-                )
-                .expect("failed to create MSC lattice")
-            })
-            .collect();
+        eprintln!("  N={n}: creating batched MSC lattice ({n_replicas} replicas, single kernel launch)...");
+        let mut lattice = BatchedMscLattice::new(n, n_replicas, seed.wrapping_add(n as u64), device.clone())
+            .expect("failed to create batched MSC lattice");
 
         let mut replica_to_temp: Vec<usize> = (0..n_replicas).collect();
         let mut temp_to_replica: Vec<usize> = (0..n_replicas).collect();
         let mut rng = Xoshiro256PlusPlus::seed_from_u64(seed.wrapping_add(n as u64));
 
-        // Set initial Boltzmann tables for each replica
-        for (r, lat) in replicas.iter_mut().enumerate() {
-            let t_idx = replica_to_temp[r];
-            let beta = 1.0 / temperatures[t_idx];
-            lat.set_temperature(beta as f32, 1.0).expect("set_temperature failed");
-        }
+        // Set initial Boltzmann tables for all replicas in one upload
+        let betas = build_betas(&replica_to_temp, &temperatures);
+        lattice.set_temperatures(&betas, 1.0).expect("set_temperatures failed");
 
-        // Warmup
+        // Warmup — single kernel launch per sweep for all replicas
         eprintln!("  N={n}: warming up {warmup} sweeps...");
         for w in 0..warmup {
-            for (r, lat) in replicas.iter_mut().enumerate() {
-                let t_idx = replica_to_temp[r];
-                let beta = 1.0 / temperatures[t_idx];
-                lat.step(beta as f32, 1.0).expect("MSC step failed");
-            }
+            lattice.step_all().expect("batched MSC step failed");
             if (w + 1) % 1000 == 0 {
                 eprintln!("    warmup {}/{warmup}", w + 1);
             }
@@ -479,19 +472,15 @@ fn run_ising_fss_msc(
 
         eprintln!("  N={n}: sampling {samples} sweeps with PT exchange every {exchange_every}...");
         for sweep in 0..samples {
-            for (r, lat) in replicas.iter_mut().enumerate() {
-                let t_idx = replica_to_temp[r];
-                let beta = 1.0 / temperatures[t_idx];
-                lat.step(beta as f32, 1.0).expect("MSC step failed");
-            }
+            lattice.step_all().expect("batched MSC step failed");
 
             let do_measure = (sweep + 1) % measure_every == 0;
             let do_exchange = (sweep + 1) % exchange_every == 0;
 
             if do_measure || do_exchange {
-                for (r, lat) in replicas.iter_mut().enumerate() {
+                for r in 0..n_replicas {
                     let t_idx = replica_to_temp[r];
-                    let (e_per, m_per) = lat.measure_gpu(1.0).expect("MSC measure failed");
+                    let (e_per, m_per) = lattice.measure_replica(r, 1.0).expect("MSC measure failed");
                     energies[r] = e_per * n3;
 
                     if do_measure {
@@ -511,12 +500,9 @@ fn run_ising_fss_msc(
                     &mut rng,
                     sweep / exchange_every,
                 );
-                // Update Boltzmann tables after temperature reassignment
-                for (r, lat) in replicas.iter_mut().enumerate() {
-                    let t_idx = replica_to_temp[r];
-                    let beta = 1.0 / temperatures[t_idx];
-                    lat.set_temperature(beta as f32, 1.0).expect("set_temperature failed");
-                }
+                // Update all Boltzmann tables in one upload after PT exchange
+                let betas = build_betas(&replica_to_temp, &temperatures);
+                lattice.set_temperatures(&betas, 1.0).expect("set_temperatures failed");
             }
 
             if (sweep + 1) % 10000 == 0 {
