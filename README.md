@@ -113,7 +113,36 @@ python analysis/scripts/analyze_gpu_fss.py
 ```
 
 GPU features: checkerboard Metropolis, parallel tempering (replica exchange),
-GPU-side observable reduction for the FSS path, and pre-allocated buffers.
+fused mag+energy reduction kernels with warp-level shuffles, and pre-allocated buffers.
+
+### Anisotropy Crossover Campaign (GPU)
+
+Study universality crossover in the 3D Heisenberg model with uniaxial anisotropy D:
+
+```bash
+# Run the full 7-value GPU campaign (D = -2, -1, -0.5, 0, 0.5, 1, 2)
+python analysis/scripts/reproduce_heisenberg_anisotropy_campaign.py \
+  --gpu --sizes 16,32,64,128 --samples 20000 --warmup 5000 --steps 16
+
+# Or run a single anisotropy point manually
+cargo run --release --features cuda --bin gpu_fss -- \
+  --model heisenberg \
+  --anisotropy-d 2.0 \
+  --init-state cold \
+  --sizes 16,32,64,128 \
+  --tmin 0.78 --tmax 1.05 \
+  --replicas 16 \
+  --warmup 5000 --samples 20000 \
+  --outdir analysis/data/anisotropy_dp2
+
+# Analyze crossover results
+python analysis/scripts/analyze_heisenberg_anisotropy.py \
+  --root analysis/data/anisotropy_campaign_gpu_prod
+```
+
+The GPU pipeline automatically selects initial state (cold for D>0, planar for D<0),
+disables Wolff embedding and overrelaxation for D!=0, and outputs 28-column summary
+CSVs with Mz/Mxy component observables compatible with the analysis scripts.
 
 See [analysis/REPRODUCIBILITY.md](analysis/REPRODUCIBILITY.md) for detailed
 reproduction steps, parameters, and expected results.
@@ -253,7 +282,7 @@ The manifest schema lives at [analysis/specs/run-manifest.schema.json](analysis/
 ## Current Limitations
 
 - GPU support is focused on 3D cubic-lattice FSS workflows; arbitrary graph workflows are CPU-only
-- GPU Wolff cluster updates are not implemented
+- GPU Wolff cluster updates use CPU-side embedding (download, BFS, upload); full GPU-resident Wolff is not yet implemented
 - Some historical CSV files predate the reproducibility cleanup; the scripted result packs are the authoritative outputs
 
 ## Contributing

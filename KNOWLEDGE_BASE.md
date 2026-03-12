@@ -99,6 +99,25 @@ For each temperature point, we measure:
 
 The connected susceptibility uses `<m_signed^2> - <m_signed>^2` (not `<|m|>`), which is important for avoiding systematic bias.
 
+### Anisotropy Component Observables (GPU)
+
+For the Heisenberg model with uniaxial anisotropy `H = -J S_i.S_j - D (S_i^z)^2`, the GPU pipeline tracks:
+
+- **Mz**: `|sum_i S_i^z| / N` — easy-axis order parameter (D > 0)
+- **Mxy**: `sqrt(sum_i S_i^x)^2 + (sum_i S_i^y)^2) / N` — easy-plane order parameter (D < 0)
+- **chi_z**: `beta * (<Mz^2> - <Mz>^2) * N` — z-component susceptibility
+- **chi_xy**: `beta * (<Mxy^2> - <Mxy>^2) * N` — in-plane susceptibility
+
+The analysis pipeline (`analyze_heisenberg_anisotropy.py`) auto-selects the correct observable:
+- D > 0: uses Mz, chi_z (easy-axis regime)
+- D < 0: uses Mxy, chi_xy (easy-plane regime)
+- D = 0: uses M, chi (isotropic Heisenberg)
+
+The `--init-state` flag controls spin initialization:
+- `cold`: all spins along z — best for D > 0 (easy-axis)
+- `planar`: all spins along x — best for D < 0 (easy-plane)
+- `random`: uniformly random on S2/S1 — default for D = 0
+
 ### Kibble-Zurek Mechanism
 
 When cooling through T_c at a finite rate, the system cannot keep up with the diverging relaxation time. The defect (domain wall) density scales as:

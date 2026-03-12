@@ -1,5 +1,10 @@
 # GPU Anisotropy Implementation Checklist
 
+**Status: COMPLETE (2026-03-12)**
+
+All steps implemented and validated. Production campaign completed with 7 D values,
+sizes 16-128, 20k samples. Results in `analysis/data/anisotropy_campaign_gpu_prod/`.
+
 ## Objective
 
 Add `--anisotropy-d` support to the cubic GPU Heisenberg path and make the
@@ -64,62 +69,37 @@ Changes:
 
 ## Implementation Steps
 
-### Step 1
+### Step 1 -- DONE
 Add `D` to the CUDA Metropolis kernel signature.
 
-Done means:
-- kernel compiles
-- `D=0` path behaves exactly as before
-
-### Step 2
+### Step 2 -- DONE
 Add `D` to GPU continuous energy measurement.
 
-Done means:
-- Heisenberg energy from GPU matches CPU for `D=-2,0,+2`
-
-### Step 3
+### Step 3 -- DONE
 Update the Rust GPU wrapper API.
 
-Done means:
-- `ContinuousGpuLattice::sweep(...)` takes `D`
-- `ContinuousGpuLattice::measure_gpu(...)` takes `D`
-
-### Step 4
+### Step 4 -- DONE
 Disable overrelaxation for `D != 0`.
 
-Done means:
-- no anisotropic run performs overrelax sweeps
-- `D=0` still can
-
-### Step 5
+### Step 5 -- DONE
 Expose `--anisotropy-d` in `gpu_fss`.
 
-Done means:
-- `gpu_fss --model heisenberg --anisotropy-d ...` runs
+### Step 6 -- DONE
+Add parity checks. Validated D=-2, D=0, D=+2 on N=8 and N=16.
 
-### Step 6
-Add parity checks.
+### Step 7 -- DONE
+Add a GPU anisotropy campaign runner (`--gpu` flag in reproduce_heisenberg_anisotropy_campaign.py).
 
-Minimum cases:
-- `D=-2.0`, `L=16`
-- `D=0.0`, `L=16`
-- `D=+2.0`, `L=16`
-
-Compare CPU vs GPU:
-- `E`
-- `M`
-- `Mz`
-- `Mxy`
-
-### Step 7
-Add a GPU anisotropy campaign runner.
-
-It should mirror the CPU campaign style:
-- one directory per `D`
-- `campaign_manifest.json`
-- `campaign_plan.csv`
-- `campaign_status.csv`
-- analysis refresh after each completed dataset
+### Step 8 -- DONE (Phase 2 additions, 2026-03-12)
+- Component observables: Mz, Mxy tracked in measurement loop with 28-column summary CSV
+- `jackknife_observables_components` for Mz/Mxy/chi_z/chi_xy error bars
+- Fused `reduce_mag_energy_continuous` and `reduce_mag_energy_fp16` CUDA kernels with warp-level `__shfl_down_sync`
+- `--init-state {random|cold|planar}` CLI flag with cold/planar starts in all lattice types
+- Auto-disable Wolff for D!=0 (broken O(n) symmetry)
+- Per-replica high-T Wolff skip (beta*J*6 < 0.5)
+- Heisenberg summary filename compatibility (`heisenberg_fss_N{n}.csv`)
+- Windows .exe path fix in campaign script
+- Production campaign: 7 D values × 4 sizes (16,32,64,128) × 16 replicas × 20k samples
 
 ## Test Plan
 

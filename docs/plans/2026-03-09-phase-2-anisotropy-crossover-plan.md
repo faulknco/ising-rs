@@ -254,13 +254,38 @@ crossover in the 3D classical Heisenberg model."
 
 ## Sequencing
 
-1. finish current `L <= 192` GPU benchmark analysis
-2. add anisotropy term and limiting-case validation
-3. run a small pilot grid in `D`
-4. decide where crossover is sharpest
-5. run the full large-size campaign only in the informative region
+1. finish current `L <= 192` GPU benchmark analysis -- DONE
+2. add anisotropy term and limiting-case validation -- DONE (2026-03-09)
+3. run a small pilot grid in `D` -- DONE (validation campaign 2026-03-12)
+4. decide where crossover is sharpest -- DONE (production campaign 2026-03-12)
+5. run the full large-size campaign only in the informative region -- IN PROGRESS
 6. freeze a result pack
 7. then decide whether the next extension is materials-inspired or quantum
+
+## Production Campaign Results (2026-03-12)
+
+Campaign: `analysis/data/anisotropy_campaign_gpu_prod/`
+Parameters: 7 D values (-2,-1,-0.5,0,0.5,1,2), sizes 16/32/64/128, 16 replicas, 20k samples, 5k warmup
+
+### Key Findings
+
+| D | Regime | Tc (Binder) | chi scaling | Order parameter |
+|---|--------|------------|-------------|-----------------|
+| -2.0 | easy-plane | ~0.60 (64,128) | flat (crossover) | Mxy=0.89 |
+| -1.0 | easy-plane | no crossing | growing | Mxy=0.80 |
+| -0.5 | easy-plane | no crossing | growing | Mxy=0.79 |
+| 0.0 | isotropic | 1.440 (16,32)(32,64) | strong divergence | M=0.51 |
+| +0.5 | easy-axis | ~0.98 (64,128) | flat (crossover) | Mz=0.81 |
+| +1.0 | easy-axis | ~1.00 (64,128) | flat | Mz=0.83 |
+| +2.0 | easy-axis | 0.79-0.85 (32-128) | flat | Mz=0.90 |
+
+### Next Steps
+
+- Extend to L=192 for D=0 (tighter T grid around Tc=1.443)
+- Refine T windows for D=-1, D=-0.5 where Binder crossings are missing
+- Add L=96 for intermediate finite-size window
+- Extract gamma/nu and beta/nu exponents from chi peak scaling
+- Freeze result pack once exponents are stable
 
 ## Success Metrics
 
