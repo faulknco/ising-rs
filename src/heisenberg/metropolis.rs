@@ -6,8 +6,15 @@ use rand::Rng;
 /// be skipped or updated multiple times in a single call.
 ///
 /// delta: cap angle for proposed rotation (radians). Tune to ~50% acceptance.
-/// ΔE = −J [ (S'ᵢ − Sᵢ) · Σⱼ Sⱼ ]
-pub fn sweep(lat: &mut HeisenbergLattice, beta: f64, j: f64, delta: f64, rng: &mut impl Rng) {
+/// ΔE = −J [ (S'ᵢ − Sᵢ) · Σⱼ Sⱼ ] − D[(s'_z)^2 − (s_z)^2]
+pub fn sweep(
+    lat: &mut HeisenbergLattice,
+    beta: f64,
+    j: f64,
+    d: f64,
+    delta: f64,
+    rng: &mut impl Rng,
+) {
     let size = lat.size();
     for _ in 0..size {
         let idx = rng.gen_range(0..size);
@@ -23,11 +30,11 @@ pub fn sweep(lat: &mut HeisenbergLattice, beta: f64, j: f64, delta: f64, rng: &m
         }
 
         let s = lat.spins[idx];
-        let e_old = -j * (s[0] * hx + s[1] * hy + s[2] * hz);
+        let e_old = -j * (s[0] * hx + s[1] * hy + s[2] * hz) - d * s[2] * s[2];
 
         // Propose new spin: rotate by random angle <= delta from current
         let s_new = propose_rotation(&s, delta, rng);
-        let e_new = -j * (s_new[0] * hx + s_new[1] * hy + s_new[2] * hz);
+        let e_new = -j * (s_new[0] * hx + s_new[1] * hy + s_new[2] * hz) - d * s_new[2] * s_new[2];
 
         let delta_e = e_new - e_old;
         if delta_e < 0.0 || rng.gen::<f64>() < (-beta * delta_e).exp() {
@@ -41,12 +48,13 @@ pub fn warm_up(
     lat: &mut HeisenbergLattice,
     beta: f64,
     j: f64,
+    d: f64,
     delta: f64,
     steps: usize,
     rng: &mut impl Rng,
 ) {
     for _ in 0..steps {
-        sweep(lat, beta, j, delta, rng);
+        sweep(lat, beta, j, d, delta, rng);
     }
 }
 
@@ -127,7 +135,7 @@ mod tests {
         let mut lat = ring(20);
         lat.randomise(&mut rng);
         for _ in 0..100 {
-            sweep(&mut lat, 0.5, 1.0, 0.3, &mut rng);
+            sweep(&mut lat, 0.5, 1.0, 0.0, 0.3, &mut rng);
         }
         for s in &lat.spins {
             let norm = (s[0] * s[0] + s[1] * s[1] + s[2] * s[2]).sqrt();
@@ -141,7 +149,7 @@ mod tests {
         let mut lat = cubic3d(4);
         // start ordered (all spins (0,0,1) from new())
         for _ in 0..500 {
-            sweep(&mut lat, 100.0, 1.0, 0.05, &mut rng);
+            sweep(&mut lat, 100.0, 1.0, 0.0, 0.05, &mut rng);
         }
         let m = magnetisation_per_spin(&lat);
         assert!(m > 0.95, "at T≈0 |m| should be >0.95, got {m}");
@@ -153,9 +161,24 @@ mod tests {
         let mut lat = cubic3d(6);
         lat.randomise(&mut rng);
         for _ in 0..1000 {
-            sweep(&mut lat, 0.01, 1.0, 1.0, &mut rng);
+            sweep(&mut lat, 0.01, 1.0, 0.0, 1.0, &mut rng);
         }
         let m = magnetisation_per_spin(&lat);
         assert!(m < 0.3, "at T→∞ |m| should be small, got {m}");
+    }
+
+    #[test]
+    fn easy_plane_anisotropy_suppresses_z_component() {
+        let mut rng = rand_xoshiro::Xoshiro256PlusPlus::seed_from_u64(7);
+        let mut lat = cubic3d(4);
+        for _ in 0..2000 {
+            sweep(&mut lat, 5.0, 1.0, -5.0, 0.8, &mut rng);
+        }
+        let mean_abs_sz =
+            lat.spins.iter().map(|s| s[2].abs()).sum::<f64>() / lat.spins.len() as f64;
+        assert!(
+            mean_abs_sz < 0.6,
+            "easy-plane anisotropy should suppress |sz|, got {mean_abs_sz}"
+        );
     }
 }
