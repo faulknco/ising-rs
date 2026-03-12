@@ -107,13 +107,15 @@ impl Fp16HeisenbergLattice {
         j: f32,
         delta: f32,
         n_overrelax: usize,
+        d: f32,
     ) -> anyhow::Result<()> {
         let grid = (self.n_threads + BLOCK_SIZE - 1) / BLOCK_SIZE;
         let n = self.n as i32;
         let nc = 3i32;
 
-        // Overrelaxation sweeps
-        for _ in 0..n_overrelax {
+        // Overrelaxation sweeps — disabled when D != 0
+        let effective_overrelax = if d != 0.0 { 0 } else { n_overrelax };
+        for _ in 0..effective_overrelax {
             for parity in [0i32, 1i32] {
                 let f = self
                     .device
@@ -154,6 +156,7 @@ impl Fp16HeisenbergLattice {
                         j,
                         delta,
                         parity,
+                        d,
                     ),
                 )?;
             }
@@ -161,7 +164,7 @@ impl Fp16HeisenbergLattice {
         Ok(())
     }
 
-    pub fn measure_gpu(&mut self, j: f32) -> anyhow::Result<(f64, f64, f64, f64)> {
+    pub fn measure_gpu(&mut self, j: f32, d: f32) -> anyhow::Result<(f64, f64, f64, f64)> {
         let n_sites = self.n * self.n * self.n;
         let n_blocks = ((n_sites as u32) + BLOCK_SIZE - 1) / BLOCK_SIZE;
         let nc = 3i32;
@@ -200,7 +203,7 @@ impl Fp16HeisenbergLattice {
                     block_dim: (BLOCK_SIZE, 1, 1),
                     shared_mem_bytes: shared_e,
                 },
-                (&self.spins, &mut self.reduce_partial_e, self.n as i32, nc, j),
+                (&self.spins, &mut self.reduce_partial_e, self.n as i32, nc, j, d),
             )?;
         }
 
@@ -325,6 +328,7 @@ impl XyAngleLattice {
         j: f32,
         delta: f32,
         n_overrelax: usize,
+        _d: f32,
     ) -> anyhow::Result<()> {
         let grid = (self.n_threads + BLOCK_SIZE - 1) / BLOCK_SIZE;
         let n = self.n as i32;
@@ -378,7 +382,7 @@ impl XyAngleLattice {
     }
 
     /// Returns (energy, mx, my, 0.0) — mz is always 0 for XY.
-    pub fn measure_gpu(&mut self, j: f32) -> anyhow::Result<(f64, f64, f64, f64)> {
+    pub fn measure_gpu(&mut self, j: f32, _d: f32) -> anyhow::Result<(f64, f64, f64, f64)> {
         let n_sites = self.n * self.n * self.n;
         let n_blocks = ((n_sites as u32) + BLOCK_SIZE - 1) / BLOCK_SIZE;
 

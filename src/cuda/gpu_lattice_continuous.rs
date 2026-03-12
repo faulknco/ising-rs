@@ -112,19 +112,23 @@ impl ContinuousGpuLattice {
 
     /// One Metropolis sweep (black + white) with n_or overrelaxation sweeps interleaved.
     /// Does NOT synchronize — caller should sync only when needed (before measurement).
+    /// When d != 0 (anisotropy), overrelaxation is automatically skipped.
     pub fn sweep(
         &mut self,
         beta: f32,
         j: f32,
         delta: f32,
         n_overrelax: usize,
+        d: f32,
     ) -> anyhow::Result<()> {
         let grid = (self.n_threads + BLOCK_SIZE - 1) / BLOCK_SIZE;
         let n = self.n as i32;
         let nc = self.n_comp as i32;
 
         // Overrelaxation sweeps (no RNG, deterministic)
-        for _ in 0..n_overrelax {
+        // SAFETY: overrelaxation is only valid for isotropic Hamiltonian (D=0)
+        let effective_overrelax = if d != 0.0 { 0 } else { n_overrelax };
+        for _ in 0..effective_overrelax {
             for parity in [0i32, 1i32] {
                 let f = self
                     .device
@@ -165,6 +169,7 @@ impl ContinuousGpuLattice {
                         j,
                         delta,
                         parity,
+                        d,
                     ),
                 )?;
             }
@@ -177,7 +182,7 @@ impl ContinuousGpuLattice {
 
     /// Compute (E, mx, my, mz) using GPU reduction with pre-allocated buffers.
     /// No host↔device spin transfer.
-    pub fn measure_gpu(&mut self, j: f32) -> anyhow::Result<(f64, f64, f64, f64)> {
+    pub fn measure_gpu(&mut self, j: f32, d: f32) -> anyhow::Result<(f64, f64, f64, f64)> {
         let n_sites = self.n * self.n * self.n;
         let n_blocks = ((n_sites as u32) + BLOCK_SIZE - 1) / BLOCK_SIZE;
 
@@ -224,6 +229,7 @@ impl ContinuousGpuLattice {
                     self.n as i32,
                     self.n_comp as i32,
                     j,
+                    d,
                 ),
             )?;
         }
@@ -244,7 +250,7 @@ impl ContinuousGpuLattice {
 
     /// Legacy measure_raw — now delegates to measure_gpu with pre-allocated buffers.
     pub fn measure_raw(&mut self) -> anyhow::Result<(f64, f64, f64, f64)> {
-        self.measure_gpu(1.0)
+        self.measure_gpu(1.0, 0.0)
     }
 
     pub fn device(&self) -> &Arc<CudaDevice> {

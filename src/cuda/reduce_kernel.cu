@@ -107,13 +107,14 @@ extern "C" __global__ void reduce_mag_continuous(
     }
 }
 
-// --- Continuous spins: partial energy (sum of -J * S_i · S_j, forward neighbours only) ---
+// --- Continuous spins: partial energy (sum of -J * S_i · S_j - D * sz^2, forward neighbours only) ---
 extern "C" __global__ void reduce_energy_continuous(
     const float* spins,
     float* partial_energy,
     int    N,
     int    n_comp,
-    float  J
+    float  J,
+    float  D           // uniaxial anisotropy (Heisenberg only)
 ) {
     int gid = blockIdx.x * blockDim.x + threadIdx.x;
     int n_sites = N * N * N;
@@ -139,6 +140,12 @@ extern "C" __global__ void reduce_energy_continuous(
                 dot += spins[gid * n_comp + c] * spins[fwd[f] * n_comp + c];
             }
             val -= J * dot;
+        }
+
+        // Anisotropy: -D * sz^2 (per site, not per bond)
+        if (n_comp == 3) {
+            float sz = spins[gid * n_comp + 2];
+            val -= D * sz * sz;
         }
     }
 
@@ -199,7 +206,8 @@ extern "C" __global__ void reduce_energy_fp16(
     float* partial_energy,
     int    N,
     int    n_comp,
-    float  J
+    float  J,
+    float  D
 ) {
     int gid = blockIdx.x * blockDim.x + threadIdx.x;
     int n_sites = N * N * N;
@@ -226,6 +234,11 @@ extern "C" __global__ void reduce_energy_fp16(
                        __half2float(spins[fwd[f] * n_comp + c]);
             }
             val -= J * dot;
+        }
+
+        if (n_comp == 3) {
+            float sz = __half2float(spins[gid * n_comp + 2]);
+            val -= D * sz * sz;
         }
     }
 

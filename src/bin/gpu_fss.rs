@@ -36,6 +36,7 @@ fn main() {
     let mut measure_every = 1usize;
     let mut wolff_every = 10usize;
     let mut quantize = false;
+    let mut anisotropy_d = 0.0_f64;
 
     let mut i = 1;
     while i < args.len() {
@@ -104,6 +105,10 @@ fn main() {
                 quantize = true;
                 i += 1;
             }
+            "--anisotropy-d" => {
+                anisotropy_d = parse_arg(&args, i, "--anisotropy-d");
+                i += 2;
+            }
             _ => {
                 i += 1;
             }
@@ -157,6 +162,7 @@ fn main() {
             measure_every,
             wolff_every,
             quantize,
+            anisotropy_d as f32,
         ),
         "heisenberg" => run_continuous_fss(
             &sizes,
@@ -174,6 +180,7 @@ fn main() {
             measure_every,
             wolff_every,
             quantize,
+            anisotropy_d as f32,
         ),
         _ => {
             eprintln!("Error: --model must be ising, xy, or heisenberg");
@@ -811,6 +818,7 @@ fn run_continuous_fss(
     measure_every: usize,
     wolff_every: usize,
     quantize: bool,
+    d: f32,
 ) {
     use cudarc::driver::CudaDevice;
     use ising::cuda::gpu_lattice_continuous::ContinuousGpuLattice;
@@ -821,6 +829,9 @@ fn run_continuous_fss(
     use std::io::{BufWriter, Write as IoWrite};
 
     let model_name = if n_comp == 2 { "xy" } else { "heisenberg" };
+    if d != 0.0 {
+        eprintln!("  Anisotropy D={d} (overrelaxation disabled)");
+    }
     let temperatures = linspace_temperatures(t_min, t_max, n_replicas);
     let device = CudaDevice::new(0).expect("failed to init CUDA device");
 
@@ -839,18 +850,18 @@ fn run_continuous_fss(
             Angle(XyAngleLattice),
         }
         impl Lattice {
-            fn sweep(&mut self, beta: f32, j: f32, delta: f32, n_or: usize) -> anyhow::Result<()> {
+            fn sweep(&mut self, beta: f32, j: f32, delta: f32, n_or: usize, d: f32) -> anyhow::Result<()> {
                 match self {
-                    Lattice::Fp32(l) => l.sweep(beta, j, delta, n_or),
-                    Lattice::Fp16(l) => l.sweep(beta, j, delta, n_or),
-                    Lattice::Angle(l) => l.sweep(beta, j, delta, n_or),
+                    Lattice::Fp32(l) => l.sweep(beta, j, delta, n_or, d),
+                    Lattice::Fp16(l) => l.sweep(beta, j, delta, n_or, d),
+                    Lattice::Angle(l) => l.sweep(beta, j, delta, n_or, d),
                 }
             }
-            fn measure_gpu(&mut self, j: f32) -> anyhow::Result<(f64, f64, f64, f64)> {
+            fn measure_gpu(&mut self, j: f32, d: f32) -> anyhow::Result<(f64, f64, f64, f64)> {
                 match self {
-                    Lattice::Fp32(l) => l.measure_gpu(j),
-                    Lattice::Fp16(l) => l.measure_gpu(j),
-                    Lattice::Angle(l) => l.measure_gpu(j),
+                    Lattice::Fp32(l) => l.measure_gpu(j, d),
+                    Lattice::Fp16(l) => l.measure_gpu(j, d),
+                    Lattice::Angle(l) => l.measure_gpu(j, d),
                 }
             }
             fn download_spins_f32(&self) -> Vec<f32> {
@@ -918,7 +929,7 @@ fn run_continuous_fss(
             for (r, lat) in replicas.iter_mut().enumerate() {
                 let t_idx = replica_to_temp[r];
                 let beta = (1.0 / temperatures[t_idx]) as f32;
-                lat.sweep(beta, 1.0, delta, n_overrelax)
+                lat.sweep(beta, 1.0, delta, n_overrelax, d)
                     .expect("sweep failed");
             }
             if (w + 1) % 1000 == 0 {
@@ -952,7 +963,7 @@ fn run_continuous_fss(
             for (r, lat) in replicas.iter_mut().enumerate() {
                 let t_idx = replica_to_temp[r];
                 let beta = (1.0 / temperatures[t_idx]) as f32;
-                lat.sweep(beta, 1.0, delta, n_overrelax)
+                lat.sweep(beta, 1.0, delta, n_overrelax, d)
                     .expect("sweep failed");
             }
 
@@ -1001,7 +1012,7 @@ fn run_continuous_fss(
             if do_measure || do_exchange {
                 for (r, lat) in replicas.iter_mut().enumerate() {
                     let t_idx = replica_to_temp[r];
-                    let (e, mx, my, mz) = lat.measure_gpu(1.0).expect("GPU measure failed");
+                    let (e, mx, my, mz) = lat.measure_gpu(1.0, d).expect("GPU measure failed");
                     let e_per = e / n3;
                     let m_abs = ((mx * mx + my * my + mz * mz).sqrt()) / n3;
                     energies[r] = e;
@@ -1111,6 +1122,7 @@ fn run_continuous_fss(
     _: usize,
     _: usize,
     _: bool,
+    _: f32,
 ) {
     eprintln!("Error: gpu_fss requires --features cuda");
     std::process::exit(1);

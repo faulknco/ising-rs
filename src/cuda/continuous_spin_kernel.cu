@@ -16,7 +16,8 @@ extern "C" __global__ void continuous_metropolis_kernel(
     float        beta,
     float        J,
     float        delta,      // proposal cone half-angle
-    int          parity      // 0=black, 1=white
+    int          parity,     // 0=black, 1=white
+    float        D           // uniaxial anisotropy: -D*sz^2 (Heisenberg only)
 ) {
     int tid = blockIdx.x * blockDim.x + threadIdx.x;
     int total = (N * N * N) / 2;
@@ -56,6 +57,7 @@ extern "C" __global__ void continuous_metropolis_kernel(
     float sz = (n_comp == 3) ? spins[idx * n_comp + 2] : 0.0f;
 
     float e_old = -(sx * hx + sy * hy + sz * hz);
+    if (n_comp == 3) e_old -= D * sz * sz;
 
     // Propose: perturb current spin by small random rotation
     RngState local_rng = rng_states[tid];
@@ -73,6 +75,7 @@ extern "C" __global__ void continuous_metropolis_kernel(
     nx /= norm; ny /= norm; nz /= norm;
 
     float e_new = -(nx * hx + ny * hy + nz * hz);
+    if (n_comp == 3) e_new -= D * nz * nz;
     float de = e_new - e_old;
 
     if (de < 0.0f || curand_uniform(&local_rng) < expf(-beta * de)) {
@@ -167,7 +170,8 @@ extern "C" __global__ void continuous_metropolis_fp16_kernel(
     float        beta,
     float        J,
     float        delta,
-    int          parity
+    int          parity,
+    float        D
 ) {
     int tid = blockIdx.x * blockDim.x + threadIdx.x;
     int total = (N * N * N) / 2;
@@ -204,6 +208,7 @@ extern "C" __global__ void continuous_metropolis_fp16_kernel(
     float sz = (n_comp == 3) ? __half2float(spins[idx * n_comp + 2]) : 0.0f;
 
     float e_old = -(sx * hx + sy * hy + sz * hz);
+    if (n_comp == 3) e_old -= D * sz * sz;
 
     RngState local_rng = rng_states[tid];
     float dx = delta * (2.0f * curand_uniform(&local_rng) - 1.0f);
@@ -219,6 +224,7 @@ extern "C" __global__ void continuous_metropolis_fp16_kernel(
     nx /= norm; ny /= norm; nz /= norm;
 
     float e_new = -(nx * hx + ny * hy + nz * hz);
+    if (n_comp == 3) e_new -= D * nz * nz;
     float de = e_new - e_old;
 
     if (de < 0.0f || curand_uniform(&local_rng) < expf(-beta * de)) {
