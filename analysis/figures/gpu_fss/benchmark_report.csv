@@ -1,7 +1,7 @@
 model,quantity,measured,theory,abs_error,rel_error_pct,method,fit_sizes,status
-heisenberg,Tc,1.438018,1.443,0.004982,0.35,Binder crossing,all,OK
-heisenberg,gamma/nu,2.016069,1.96288,0.05319,2.71,single reweighting,"8,16,32,64,128,192",OK
-heisenberg,beta/nu,0.367069,0.518701,0.151632,29.23,single reweighting,"8,16,32,64,128,192",FAIL
-heisenberg,beta/nu,0.491965,0.518701,0.026735,5.15,hyperscaling,d=3,WEAK
-heisenberg,nu,0.364671,0.7112,0.346529,48.72,collapse,"8,16,32,64,128,192",FAIL
-heisenberg,nu,-21.285157,0.7112,21.996357,3092.85,Binder slope,"8,16,32,64,128,192",FAIL
+xy,Tc,2.201914,2.2019,1.4e-05,0.0,Binder crossing,all,OK
+xy,gamma/nu,1.976744,1.961888,0.014856,0.76,single reweighting,"8,16,32,64,128",OK
+xy,beta/nu,0.524362,0.518982,0.00538,1.04,single reweighting,"8,16,32,64,128",OK
+xy,beta/nu,0.511628,0.518982,0.007354,1.42,hyperscaling,d=3,OK
+xy,nu,0.687157,0.6717,0.015457,2.3,collapse,"8,16,32,64,128",OK
+xy,nu,0.770632,0.6717,0.098932,14.73,Binder slope,"8,16,32,64,128",WEAK
