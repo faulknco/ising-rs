@@ -1,7 +1,7 @@
 # Submission Checklist — ising-rs Paper
 
 **Target:** Physical Review E (primary) / Computer Physics Communications (backup)
-**Current status:** Draft complete, compiles cleanly, awaiting cleaner GPU data from Windows machine.
+**Current status:** Phase 1 data complete for all three universality classes. Ising and XY at publication quality. Heisenberg usable (N=192 re-run with narrower T window backburnered). Phase 2 anisotropy crossover work starting.
 
 ---
 
@@ -17,19 +17,26 @@
 - [x] Reproducibility guide: `analysis/REPRODUCIBILITY.md`
 - [x] Summary CSVs + figures committed to `gpu-windows-pipeline` branch
 
-### Results (current)
-| Model | Tc error | gamma/nu | nu | beta/nu |
-|-------|----------|----------|-----|---------|
-| Ising | 0.02% | 2.5% | 1.2% | 12.6% |
-| Heisenberg | 0.04% | 1.6% | 18% | 1.9% |
-| XY | 0.001% | 0.5% | 3.7% | 2.0% |
+### Results (updated 2026-03-12)
+| Model | Tc error | gamma/nu | nu | beta/nu | Sizes | Status |
+|-------|----------|----------|-----|---------|-------|--------|
+| Ising | **0.015%** | 2.6% | **0.1%** | **0.3%** | 8-192 | **Publication quality** |
+| XY | **0.001%** | **0.8%** | **2.3%** | **1.0%** | 8-128 | **Publication quality** |
+| Heisenberg | **0.3%** | **1.1%** | 11.6% | **2.0%**† | 16-128 | Usable (ν weak) |
 
-### Improving weak exponents (in progress)
-- [ ] Run Ising N=192 (100k samples) — running now
-- [ ] Rerun Ising N=128 with 500k samples for better statistics
-- [ ] Rerun Heisenberg N=128 with 500k samples
-- [ ] Re-run analysis with additional sizes → update figures and tables
-- [ ] Target: Ising beta/nu < 5%, Heisenberg nu < 5%
+† Heisenberg beta/nu via hyperscaling (d=3). Direct fit fails due to coarse T grid.
+
+### Heisenberg N=192 issue
+- [x] Run completed (50k samples, 16 replicas, ~24h with Wolff embedding)
+- [ ] **Backburnered:** T grid too coarse (dT=0.013, 16 replicas over [1.4,1.6]). No replica in critical fluctuation zone. Fix: re-run with `--tmin 1.42 --tmax 1.48` (~24h).
+- Best fit sizes: `--fit-sizes 16,32,64,128` (exclude N=8 finite-size corrections, N=192 coarse grid)
+
+### Completed data improvements
+- [x] Ising N=192 with MSC batched kernel
+- [x] Heisenberg N=128 with Wolff embedding (50k samples)
+- [x] Heisenberg N=192 with Wolff embedding (50k samples, 16 replicas)
+- [x] XY all sizes (N=8-128, 200k samples each)
+- [x] All analysis figures updated in `analysis/figures/gpu_fss/`
 
 ### Remaining figure tasks
 - [ ] Re-run `analysis/kz.ipynb` if KZ data changed → regenerate `kz_fit.png`
@@ -85,11 +92,13 @@
 
 ## Future Work (Paper 2 / extensions — do not block submission)
 
+- **Phase 2 (active):** Anisotropy-driven crossover in 3D Heisenberg (branch: `feature/gpu-anisotropy-port`)
+  - CPU implementation complete (Phases A-B), GPU porting needed (Phase C)
+  - Campaign scripts ready: 7 D values × 5 sizes × 49 temps
 - Multi-GPU support for N≥256 lattices
-- Wolff cluster algorithm on GPU (currently CPU Wolff, GPU checkerboard Metropolis)
+- GPU Wolff cluster algorithm (currently CPU Wolff via embedding)
 - GPU-side parallel tempering exchange (currently CPU-mediated)
 - Kibble-Zurek quench on GPU for larger N
 - Domain coarsening dynamics on GPU
 - BCC/FCC lattice GPU kernels for J-fitting
-- Heisenberg model on same BCC/FCC graphs → better J-fitting for Fe/Ni
-- Spin glass on network topologies → cybersecurity bridge paper
+- Spin glass on network topologies

@@ -493,4 +493,79 @@ Not `<|m|^2> - <|m|>^2`. The absolute value introduces a positive bias.
 
 ---
 
-*Last updated: 2026-03-07 (v0.1.0 release)*
+---
+
+## GPU Pipeline (added 2026-03-12)
+
+### Overview
+
+The GPU pipeline (`src/bin/gpu_fss.rs`) runs parallel tempering FSS simulations on NVIDIA GPUs via CUDA. It supports all three universality classes with model-specific optimizations.
+
+### Architecture
+
+- **Ising (Z2):** Multi-site coded (MSC) lattice — 32 spins packed per u32 word. Batched kernel launches all replicas simultaneously. ~30x speedup over single-spin GPU.
+- **Heisenberg (O(3)):** 3-component f32 Cartesian spins. Checkerboard Metropolis + microcanonical over-relaxation (5 sweeps per Metropolis). CPU-side Wolff embedding every 10 sweeps.
+- **XY (O(2)):** Same as Heisenberg with n_comp=2.
+- **Quantized variants:** FP16 Heisenberg (48 bits/spin vs 96) and angle-only XY (16 bits/spin). Compute in f32, store in f16.
+
+### Wolff Embedding for O(n) Models
+
+CPU-side cluster algorithm that dramatically reduces critical slowing down (z ≈ 0.1 vs z ≈ 2 for Metropolis):
+
+1. Download all spins from GPU to host
+2. For each replica (parallel via `std::thread::scope`):
+   - Choose random unit vector **r**
+   - Project all spins onto r: σ_i = S_i · r
+   - Build Wolff cluster on projected ±1 variables (DFS + u64-packed bitset)
+   - Reflect cluster spins: S_i → S_i − 2(S_i · r)r
+3. Upload modified spins back to GPU
+
+Implementation: `src/cuda/wolff.rs` (shared module for Cartesian + angle representations).
+
+### Key GPU Gotchas
+
+- **curandStatePhilox4_32_10** is 64 bytes per state (not 16 or 48)
+- RNG states dominate VRAM: 226 MB/replica at N=192 vs 85 MB for spins
+- RTX 2060 (6GB): max 16 replicas at N=192 (f32), ~20 with FP16
+- Windows WDDM silently pages GPU memory when VRAM exceeded — causes massive slowdown with no error
+- Windows working set trimming pages host RAM to disk when process is idle — degraded Wolff performance
+
+### Current Results (2026-03-12)
+
+| Model | Tc Error | γ/ν | ν | β/ν | Sizes | Status |
+|-------|----------|-----|---|-----|-------|--------|
+| Ising | 0.015% | 2.6% | 0.1% | 0.3% | 8-192 | Publication quality |
+| XY | 0.001% | 0.8% | 2.3% | 1.0% | 8-128 | Publication quality |
+| Heisenberg | 0.3% | 1.1% | 11.6% | 2.0%† | 16-128 | Usable |
+
+† β/ν via hyperscaling. Direct fit needs narrower T grid for N=192.
+
+### Analysis
+
+Use `analysis/scripts/analyze_gpu_fss.py` with `--method single` (single-histogram reweighting). WHAM fails for N≥64.
+
+Key flags: `--fit-sizes` to exclude problematic sizes, `--collapse-sizes` for scaling collapse subset.
+
+---
+
+## Anisotropy Crossover (Phase 2, started 2026-03-12)
+
+### Physics
+
+3D Heisenberg model with uniaxial anisotropy: H = −J Σ S_i·S_j − D Σ (S_i^z)²
+
+- D > 0: easy-axis → Ising universality class at large D
+- D = 0: isotropic → Heisenberg universality class
+- D < 0: easy-plane → XY universality class at large |D|
+
+The crossover between universality classes as D varies is the target of Phase 2 research.
+
+### Implementation Status (branch: `feature/gpu-anisotropy-port`)
+
+- **CPU complete:** Metropolis with D, component-resolved observables (M_z, M_xy, χ_z, χ_xy), overrelaxation disabled for D≠0
+- **GPU not started:** CUDA kernels need D parameter threaded through
+- **Campaign scripts ready:** 7 D values × 5 sizes × 49 temps
+
+---
+
+*Last updated: 2026-03-12*
