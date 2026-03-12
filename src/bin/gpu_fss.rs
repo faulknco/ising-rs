@@ -37,6 +37,7 @@ fn main() {
     let mut wolff_every = 10usize;
     let mut quantize = false;
     let mut anisotropy_d = 0.0_f64;
+    let mut init_state = String::from("random");
 
     let mut i = 1;
     while i < args.len() {
@@ -109,6 +110,10 @@ fn main() {
                 anisotropy_d = parse_arg(&args, i, "--anisotropy-d");
                 i += 2;
             }
+            "--init-state" => {
+                init_state = get_arg(&args, i, "--init-state");
+                i += 2;
+            }
             _ => {
                 i += 1;
             }
@@ -163,6 +168,7 @@ fn main() {
             wolff_every,
             quantize,
             anisotropy_d as f32,
+            &init_state,
         ),
         "heisenberg" => run_continuous_fss(
             &sizes,
@@ -181,6 +187,7 @@ fn main() {
             wolff_every,
             quantize,
             anisotropy_d as f32,
+            &init_state,
         ),
         _ => {
             eprintln!("Error: --model must be ising, xy, or heisenberg");
@@ -801,6 +808,173 @@ fn jackknife_observables(ts: &[(f64, f64)], beta: f64, n3: f64, n_blocks: usize)
     ]
 }
 
+/// Jackknife analysis with component observables for anisotropy studies.
+/// Input: &[(e, m_abs, mz, mxy)] per-spin quantities.
+/// Returns 28 columns: existing 12 + Mz,Mz_err,Mz2,Mz2_err,Mz4,Mz4_err,chi_z,chi_z_err,
+///                                   Mxy,Mxy_err,Mxy2,Mxy2_err,Mxy4,Mxy4_err,chi_xy,chi_xy_err
+fn jackknife_observables_components(
+    ts: &[(f64, f64, f64, f64)],
+    beta: f64,
+    n3: f64,
+    n_blocks: usize,
+) -> [f64; 28] {
+    let n = ts.len();
+    if n < n_blocks || n_blocks < 2 {
+        return [0.0; 28];
+    }
+    let block_size = n / n_blocks;
+    let n_used = block_size * n_blocks;
+
+    // Full-sample sums
+    let (sum_e, sum_e2, sum_m, sum_m2, sum_m4, sum_mz, sum_mz2, sum_mz4, sum_mxy, sum_mxy2, sum_mxy4) =
+        ts[..n_used].iter().fold(
+            (0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0),
+            |(se, se2, sm, sm2, sm4, smz, smz2, smz4, smxy, smxy2, smxy4), &(e, m, mz, mxy)| {
+                (
+                    se + e,
+                    se2 + e * e,
+                    sm + m,
+                    sm2 + m * m,
+                    sm4 + m.powi(4),
+                    smz + mz,
+                    smz2 + mz * mz,
+                    smz4 + mz.powi(4),
+                    smxy + mxy,
+                    smxy2 + mxy * mxy,
+                    smxy4 + mxy.powi(4),
+                )
+            },
+        );
+    let s = n_used as f64;
+    let avg_e = sum_e / s;
+    let avg_e2 = sum_e2 / s;
+    let avg_m = sum_m / s;
+    let avg_m2 = sum_m2 / s;
+    let avg_m4 = sum_m4 / s;
+    let avg_mz = sum_mz / s;
+    let avg_mz2 = sum_mz2 / s;
+    let avg_mz4 = sum_mz4 / s;
+    let avg_mxy = sum_mxy / s;
+    let avg_mxy2 = sum_mxy2 / s;
+    let avg_mxy4 = sum_mxy4 / s;
+    let cv = beta * beta * (avg_e2 - avg_e * avg_e) * n3;
+    let chi = beta * (avg_m2 - avg_m * avg_m) * n3;
+    let chi_z = beta * (avg_mz2 - avg_mz * avg_mz) * n3;
+    let chi_xy = beta * (avg_mxy2 - avg_mxy * avg_mxy) * n3;
+
+    // Jackknife: leave-one-block-out
+    let mut jk_e = Vec::with_capacity(n_blocks);
+    let mut jk_m = Vec::with_capacity(n_blocks);
+    let mut jk_m2 = Vec::with_capacity(n_blocks);
+    let mut jk_m4 = Vec::with_capacity(n_blocks);
+    let mut jk_cv = Vec::with_capacity(n_blocks);
+    let mut jk_chi = Vec::with_capacity(n_blocks);
+    let mut jk_mz = Vec::with_capacity(n_blocks);
+    let mut jk_mz2 = Vec::with_capacity(n_blocks);
+    let mut jk_mz4 = Vec::with_capacity(n_blocks);
+    let mut jk_chi_z = Vec::with_capacity(n_blocks);
+    let mut jk_mxy = Vec::with_capacity(n_blocks);
+    let mut jk_mxy2 = Vec::with_capacity(n_blocks);
+    let mut jk_mxy4 = Vec::with_capacity(n_blocks);
+    let mut jk_chi_xy = Vec::with_capacity(n_blocks);
+
+    for b in 0..n_blocks {
+        let start = b * block_size;
+        let end = start + block_size;
+        let mut be = 0.0;
+        let mut be2 = 0.0;
+        let mut bm = 0.0;
+        let mut bm2 = 0.0;
+        let mut bm4 = 0.0;
+        let mut bmz = 0.0;
+        let mut bmz2 = 0.0;
+        let mut bmz4 = 0.0;
+        let mut bmxy = 0.0;
+        let mut bmxy2 = 0.0;
+        let mut bmxy4 = 0.0;
+        for i in 0..n_used {
+            if i >= start && i < end {
+                continue;
+            }
+            let (e, m, mz, mxy) = ts[i];
+            be += e;
+            be2 += e * e;
+            bm += m;
+            bm2 += m * m;
+            bm4 += m.powi(4);
+            bmz += mz;
+            bmz2 += mz * mz;
+            bmz4 += mz.powi(4);
+            bmxy += mxy;
+            bmxy2 += mxy * mxy;
+            bmxy4 += mxy.powi(4);
+        }
+        let sj = (n_used - block_size) as f64;
+        let je = be / sj;
+        let je2 = be2 / sj;
+        let jm = bm / sj;
+        let jm2 = bm2 / sj;
+        let jm4 = bm4 / sj;
+        let jmz = bmz / sj;
+        let jmz2 = bmz2 / sj;
+        let jmz4 = bmz4 / sj;
+        let jmxy = bmxy / sj;
+        let jmxy2 = bmxy2 / sj;
+        let jmxy4 = bmxy4 / sj;
+        jk_e.push(je);
+        jk_m.push(jm);
+        jk_m2.push(jm2);
+        jk_m4.push(jm4);
+        jk_cv.push(beta * beta * (je2 - je * je) * n3);
+        jk_chi.push(beta * (jm2 - jm * jm) * n3);
+        jk_mz.push(jmz);
+        jk_mz2.push(jmz2);
+        jk_mz4.push(jmz4);
+        jk_chi_z.push(beta * (jmz2 - jmz * jmz) * n3);
+        jk_mxy.push(jmxy);
+        jk_mxy2.push(jmxy2);
+        jk_mxy4.push(jmxy4);
+        jk_chi_xy.push(beta * (jmxy2 - jmxy * jmxy) * n3);
+    }
+
+    let jk_err = |full: f64, jk: &[f64]| -> f64 {
+        let nb = jk.len() as f64;
+        let var: f64 = jk.iter().map(|&x| (x - full).powi(2)).sum::<f64>() * (nb - 1.0) / nb;
+        var.sqrt()
+    };
+
+    [
+        avg_e,
+        jk_err(avg_e, &jk_e),
+        avg_m,
+        jk_err(avg_m, &jk_m),
+        avg_m2,
+        jk_err(avg_m2, &jk_m2),
+        avg_m4,
+        jk_err(avg_m4, &jk_m4),
+        cv,
+        jk_err(cv, &jk_cv),
+        chi,
+        jk_err(chi, &jk_chi),
+        avg_mz,
+        jk_err(avg_mz, &jk_mz),
+        avg_mz2,
+        jk_err(avg_mz2, &jk_mz2),
+        avg_mz4,
+        jk_err(avg_mz4, &jk_mz4),
+        chi_z,
+        jk_err(chi_z, &jk_chi_z),
+        avg_mxy,
+        jk_err(avg_mxy, &jk_mxy),
+        avg_mxy2,
+        jk_err(avg_mxy2, &jk_mxy2),
+        avg_mxy4,
+        jk_err(avg_mxy4, &jk_mxy4),
+        chi_xy,
+        jk_err(chi_xy, &jk_chi_xy),
+    ]
+}
+
 #[cfg(feature = "cuda")]
 fn run_continuous_fss(
     sizes: &[usize],
@@ -819,6 +993,7 @@ fn run_continuous_fss(
     wolff_every: usize,
     quantize: bool,
     d: f32,
+    init_state: &str,
 ) {
     use cudarc::driver::CudaDevice;
     use ising::cuda::gpu_lattice_continuous::ContinuousGpuLattice;
@@ -900,17 +1075,17 @@ fn run_continuous_fss(
                 let s = seed.wrapping_add(r as u64 * 1000 + n as u64);
                 if quantize && n_comp == 3 {
                     Lattice::Fp16(
-                        Fp16HeisenbergLattice::new(n, s, device.clone())
+                        Fp16HeisenbergLattice::new(n, s, device.clone(), init_state)
                             .expect("failed to create FP16 Heisenberg lattice"),
                     )
                 } else if quantize && n_comp == 2 {
                     Lattice::Angle(
-                        XyAngleLattice::new(n, s, device.clone())
+                        XyAngleLattice::new(n, s, device.clone(), init_state)
                             .expect("failed to create XY angle lattice"),
                     )
                 } else {
                     Lattice::Fp32(
-                        ContinuousGpuLattice::new(n, n_comp, s, device.clone())
+                        ContinuousGpuLattice::new(n, n_comp, s, device.clone(), init_state)
                             .expect("failed to create continuous GPU lattice"),
                     )
                 }
@@ -941,20 +1116,22 @@ fn run_continuous_fss(
         let ts_path = Path::new(outdir).join(format!("gpu_fss_{model_name}_N{n}_timeseries.csv"));
         let ts_file = fs::File::create(&ts_path).expect("create timeseries file failed");
         let mut ts_writer = BufWriter::new(ts_file);
-        writeln!(ts_writer, "temp_idx,E,M").expect("write header failed");
+        writeln!(ts_writer, "temp_idx,E,M,Mz,Mxy").expect("write header failed");
 
-        // Accumulators
-        let mut sum_e = vec![0.0_f64; n_replicas];
-        let mut sum_e2 = vec![0.0_f64; n_replicas];
-        let mut sum_m = vec![0.0_f64; n_replicas];
-        let mut sum_m2 = vec![0.0_f64; n_replicas];
-        let mut sum_m4 = vec![0.0_f64; n_replicas];
-        let mut count = vec![0usize; n_replicas];
-        let mut ts_data: Vec<Vec<(f64, f64)>> = (0..n_replicas)
+        // Accumulators: 4-tuple (e_per, m_abs, mz_per, mxy_per)
+        let mut ts_data: Vec<Vec<(f64, f64, f64, f64)>> = (0..n_replicas)
             .map(|_| Vec::with_capacity(samples / measure_every + 1))
             .collect();
         let mut energies = vec![0.0_f64; n_replicas];
 
+        // Auto-disable Wolff for D≠0: anisotropy breaks O(n) symmetry that
+        // the Wolff embedding projection relies on
+        let wolff_every = if d != 0.0 {
+            eprintln!("  N={n}: Wolff embedding disabled (D={d} breaks O(n) symmetry)");
+            0
+        } else {
+            wolff_every
+        };
         if wolff_every > 0 {
             eprintln!("  N={n}: Wolff embedding every {wolff_every} sweeps");
         }
@@ -988,6 +1165,10 @@ fn run_continuous_fss(
                         let lat_nc = n_comp;
                         let is_angle = is_angle_mode;
                         handles.push(s.spawn(move || {
+                            // Skip Wolff at high T: clusters span the whole lattice
+                            if beta * 1.0 * 6.0 < 0.5 {
+                                return;
+                            }
                             let mut local_rng = Xoshiro256PlusPlus::seed_from_u64(thread_seed);
                             if is_angle {
                                 wolff_cluster_flip_angle(spins, lat_n, beta, 1.0, &mut local_rng);
@@ -1014,21 +1195,15 @@ fn run_continuous_fss(
                     let t_idx = replica_to_temp[r];
                     let (e, mx, my, mz) = lat.measure_gpu(1.0, d).expect("GPU measure failed");
                     let e_per = e / n3;
-                    let m_abs = ((mx * mx + my * my + mz * mz).sqrt()) / n3;
+                    let m_abs = (mx * mx + my * my + mz * mz).sqrt() / n3;
+                    let mz_per = mz.abs() / n3;
+                    let mxy_per = (mx * mx + my * my).sqrt() / n3;
                     energies[r] = e;
 
                     if do_measure {
-                        sum_e[t_idx] += e_per;
-                        sum_e2[t_idx] += e_per * e_per;
-                        sum_m[t_idx] += m_abs;
-                        sum_m2[t_idx] += m_abs * m_abs;
-                        sum_m4[t_idx] += m_abs.powi(4);
-                        count[t_idx] += 1;
+                        ts_data[t_idx].push((e_per, m_abs, mz_per, mxy_per));
 
-                        ts_data[t_idx].push((e_per, m_abs));
-
-                        // Stream to disk immediately
-                        writeln!(ts_writer, "{t_idx},{e_per:.8},{m_abs:.8}")
+                        writeln!(ts_writer, "{t_idx},{e_per:.8},{m_abs:.8},{mz_per:.8},{mxy_per:.8}")
                             .expect("write timeseries row failed");
                     }
                 }
@@ -1055,9 +1230,15 @@ fn run_continuous_fss(
         drop(ts_writer);
         eprintln!("  Wrote {}", ts_path.display());
 
-        // Write summary CSV with jackknife error bars
-        let summary_path = Path::new(outdir).join(format!("gpu_fss_{model_name}_N{n}_summary.csv"));
-        let mut csv = String::from("T,E,E_err,M,M_err,M2,M2_err,M4,M4_err,Cv,Cv_err,chi,chi_err\n");
+        // Write summary CSV with jackknife error bars (28 columns for component observables)
+        // Use heisenberg_fss-compatible filename for Heisenberg model to match analysis scripts
+        let summary_filename = if model_name == "heisenberg" {
+            format!("heisenberg_fss_N{n}.csv")
+        } else {
+            format!("gpu_fss_{model_name}_N{n}_summary.csv")
+        };
+        let summary_path = Path::new(outdir).join(&summary_filename);
+        let mut csv = String::from("T,E,E_err,M,M_err,M2,M2_err,M4,M4_err,Cv,Cv_err,chi,chi_err,Mz,Mz_err,Mz2,Mz2_err,Mz4,Mz4_err,chi_z,chi_z_err,Mxy,Mxy_err,Mxy2,Mxy2_err,Mxy4,Mxy4_err,chi_xy,chi_xy_err\n");
         for t_idx in 0..n_replicas {
             if ts_data[t_idx].is_empty() {
                 continue;
@@ -1065,22 +1246,9 @@ fn run_continuous_fss(
             let t = temperatures[t_idx];
             let beta = 1.0 / t;
             let n_blocks = 20.min(ts_data[t_idx].len());
-            let obs = jackknife_observables(&ts_data[t_idx], beta, n3, n_blocks);
-            csv.push_str(&format!(
-                "{t:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6}\n",
-                obs[0],
-                obs[1],
-                obs[2],
-                obs[3],
-                obs[4],
-                obs[5],
-                obs[6],
-                obs[7],
-                obs[8],
-                obs[9],
-                obs[10],
-                obs[11],
-            ));
+            let obs = jackknife_observables_components(&ts_data[t_idx], beta, n3, n_blocks);
+            let vals: Vec<String> = obs.iter().map(|v| format!("{v:.6}")).collect();
+            csv.push_str(&format!("{t:.6},{}\n", vals.join(",")));
         }
         fs::write(&summary_path, &csv).expect("write summary failed");
         eprintln!("  Wrote {}", summary_path.display());
@@ -1123,6 +1291,7 @@ fn run_continuous_fss(
     _: usize,
     _: bool,
     _: f32,
+    _: &str,
 ) {
     eprintln!("Error: gpu_fss requires --features cuda");
     std::process::exit(1);

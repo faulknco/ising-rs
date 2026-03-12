@@ -16,6 +16,8 @@ pub fn load_reduce_kernels(device: &Arc<CudaDevice>) -> anyhow::Result<()> {
             "reduce_energy_continuous",
             "reduce_mag_fp16",
             "reduce_energy_fp16",
+            "reduce_mag_energy_continuous",
+            "reduce_mag_energy_fp16",
             "reduce_mag_xy_angle",
             "reduce_energy_xy_angle",
         ],

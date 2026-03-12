@@ -26,7 +26,7 @@ pub struct Fp16HeisenbergLattice {
 }
 
 impl Fp16HeisenbergLattice {
-    pub fn new(n: usize, seed: u64, device: Arc<CudaDevice>) -> anyhow::Result<Self> {
+    pub fn new(n: usize, seed: u64, device: Arc<CudaDevice>, init_state: &str) -> anyhow::Result<Self> {
         device.load_ptx(
             CONTINUOUS_PTX.into(),
             "continuous",
@@ -42,16 +42,30 @@ impl Fp16HeisenbergLattice {
         let n_comp = 3;
         let n_threads = (n_sites / 2) as u32;
 
-        // Random initial spins on host (unit vectors), stored as f16
+        // Initial spins on host (unit vectors), stored as f16
         let mut host_spins = vec![f16::ZERO; n_sites * n_comp];
-        let mut rng = rand::thread_rng();
-        for i in 0..n_sites {
-            let z: f32 = rng.gen_range(-1.0..1.0);
-            let phi: f32 = rng.gen_range(0.0..std::f32::consts::TAU);
-            let r = (1.0 - z * z).sqrt();
-            host_spins[i * n_comp] = f16::from_f32(r * phi.cos());
-            host_spins[i * n_comp + 1] = f16::from_f32(r * phi.sin());
-            host_spins[i * n_comp + 2] = f16::from_f32(z);
+        match init_state {
+            "cold" => {
+                for i in 0..n_sites {
+                    host_spins[i * n_comp + 2] = f16::from_f32(1.0); // (0, 0, 1)
+                }
+            }
+            "planar" => {
+                for i in 0..n_sites {
+                    host_spins[i * n_comp] = f16::from_f32(1.0); // (1, 0, 0)
+                }
+            }
+            _ => {
+                let mut rng = rand::thread_rng();
+                for i in 0..n_sites {
+                    let z: f32 = rng.gen_range(-1.0..1.0);
+                    let phi: f32 = rng.gen_range(0.0..std::f32::consts::TAU);
+                    let r = (1.0 - z * z).sqrt();
+                    host_spins[i * n_comp] = f16::from_f32(r * phi.cos());
+                    host_spins[i * n_comp + 1] = f16::from_f32(r * phi.sin());
+                    host_spins[i * n_comp + 2] = f16::from_f32(z);
+                }
+            }
         }
 
         // Upload as u16 (same bit representation as __half)
@@ -169,41 +183,27 @@ impl Fp16HeisenbergLattice {
         let n_blocks = ((n_sites as u32) + BLOCK_SIZE - 1) / BLOCK_SIZE;
         let nc = 3i32;
 
-        // Magnetisation
-        let shared_mag = BLOCK_SIZE as u32 * 4 * 3;
-        let f_mag = self.device.get_func("reduce", "reduce_mag_fp16").unwrap();
+        // Fused mag+energy kernel
+        let shared = BLOCK_SIZE as u32 * 4 * 4;
+        let f_fused = self.device.get_func("reduce", "reduce_mag_energy_fp16").unwrap();
         unsafe {
-            f_mag.launch(
+            f_fused.launch(
                 LaunchConfig {
                     grid_dim: (n_blocks, 1, 1),
                     block_dim: (BLOCK_SIZE, 1, 1),
-                    shared_mem_bytes: shared_mag,
+                    shared_mem_bytes: shared,
                 },
                 (
                     &self.spins,
                     &mut self.reduce_partial_mx,
                     &mut self.reduce_partial_my,
                     &mut self.reduce_partial_mz,
-                    n_sites as i32,
+                    &mut self.reduce_partial_e,
+                    self.n as i32,
                     nc,
+                    j,
+                    d,
                 ),
-            )?;
-        }
-
-        // Energy
-        let shared_e = BLOCK_SIZE as u32 * 4;
-        let f_energy = self
-            .device
-            .get_func("reduce", "reduce_energy_fp16")
-            .unwrap();
-        unsafe {
-            f_energy.launch(
-                LaunchConfig {
-                    grid_dim: (n_blocks, 1, 1),
-                    block_dim: (BLOCK_SIZE, 1, 1),
-                    shared_mem_bytes: shared_e,
-                },
-                (&self.spins, &mut self.reduce_partial_e, self.n as i32, nc, j, d),
             )?;
         }
 
@@ -256,7 +256,7 @@ pub struct XyAngleLattice {
 }
 
 impl XyAngleLattice {
-    pub fn new(n: usize, seed: u64, device: Arc<CudaDevice>) -> anyhow::Result<Self> {
+    pub fn new(n: usize, seed: u64, device: Arc<CudaDevice>, init_state: &str) -> anyhow::Result<Self> {
         device.load_ptx(
             CONTINUOUS_PTX.into(),
             "continuous",
@@ -271,14 +271,22 @@ impl XyAngleLattice {
         let n_sites = n * n * n;
         let n_threads = (n_sites / 2) as u32;
 
-        // Random initial angles
-        let mut rng = rand::thread_rng();
-        let host_angles: Vec<u16> = (0..n_sites)
-            .map(|_| {
-                let angle: f32 = rng.gen_range(0.0..std::f32::consts::TAU);
-                f16::from_f32(angle).to_bits()
-            })
-            .collect();
+        // Initial angles
+        let host_angles: Vec<u16> = match init_state {
+            "cold" | "planar" => {
+                // All spins at angle=0 → (1, 0)
+                vec![f16::from_f32(0.0).to_bits(); n_sites]
+            }
+            _ => {
+                let mut rng = rand::thread_rng();
+                (0..n_sites)
+                    .map(|_| {
+                        let angle: f32 = rng.gen_range(0.0..std::f32::consts::TAU);
+                        f16::from_f32(angle).to_bits()
+                    })
+                    .collect()
+            }
+        };
 
         let angles = device.htod_sync_copy(&host_angles)?;
         let rng_states = device.alloc_zeros::<u8>((n_threads as usize) * 64)?;

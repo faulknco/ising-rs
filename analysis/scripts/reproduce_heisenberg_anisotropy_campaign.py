@@ -15,7 +15,9 @@ from common import resolve_python
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_OUTPUT_ROOT = REPO_ROOT / "analysis" / "data" / "anisotropy_campaign_cpu"
-HEIS_FSS_BIN = REPO_ROOT / "target" / "release" / "heisenberg_fss"
+_EXE = ".exe" if __import__("sys").platform == "win32" else ""
+HEIS_FSS_BIN = REPO_ROOT / "target" / "release" / f"heisenberg_fss{_EXE}"
+GPU_FSS_BIN = REPO_ROOT / "target" / "release" / f"gpu_fss{_EXE}"
 ANALYSIS_SCRIPT = REPO_ROOT / "analysis" / "scripts" / "analyze_heisenberg_anisotropy.py"
 
 # Stage-1-informed production windows. These are intended for the first real
@@ -138,6 +140,11 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Skip all simulations and only regenerate the anisotropy analysis.",
     )
+    parser.add_argument(
+        "--gpu",
+        action="store_true",
+        help="Use gpu_fss binary instead of heisenberg_fss for GPU-accelerated runs.",
+    )
     return parser.parse_args()
 
 
@@ -259,33 +266,61 @@ def run_dataset(
         return
 
     dataset_root.mkdir(parents=True, exist_ok=True)
-    cmd = [
-        str(args.heisenberg_fss_bin),
-        "--sizes",
-        ",".join(str(n) for n in sizes),
-        "--anisotropy-d",
-        str(d_value),
-        "--tmin",
-        str(tmin),
-        "--tmax",
-        str(tmax),
-        "--steps",
-        str(args.steps),
-        "--warmup",
-        str(args.warmup),
-        "--samples",
-        str(args.samples),
-        "--delta",
-        str(args.delta),
-        "--overrelax",
-        str(args.overrelax),
-        "--j",
-        str(args.j),
-        "--seed",
-        str(args.seed),
-        "--outdir",
-        str(dataset_root),
-    ]
+
+    if args.gpu:
+        # Auto-select init-state based on D sign
+        if d_value > 0:
+            init_state = "cold"
+        elif d_value < 0:
+            init_state = "planar"
+        else:
+            init_state = "random"
+
+        gpu_bin = GPU_FSS_BIN
+        cmd = [
+            str(gpu_bin),
+            "--model", "heisenberg",
+            "--sizes", ",".join(str(n) for n in sizes),
+            "--anisotropy-d", str(d_value),
+            "--tmin", str(tmin),
+            "--tmax", str(tmax),
+            "--replicas", str(args.steps),
+            "--warmup", str(args.warmup),
+            "--samples", str(args.samples),
+            "--delta", str(args.delta),
+            "--overrelax", str(args.overrelax),
+            "--seed", str(args.seed),
+            "--outdir", str(dataset_root),
+            "--init-state", init_state,
+        ]
+    else:
+        cmd = [
+            str(args.heisenberg_fss_bin),
+            "--sizes",
+            ",".join(str(n) for n in sizes),
+            "--anisotropy-d",
+            str(d_value),
+            "--tmin",
+            str(tmin),
+            "--tmax",
+            str(tmax),
+            "--steps",
+            str(args.steps),
+            "--warmup",
+            str(args.warmup),
+            "--samples",
+            str(args.samples),
+            "--delta",
+            str(args.delta),
+            "--overrelax",
+            str(args.overrelax),
+            "--j",
+            str(args.j),
+            "--seed",
+            str(args.seed),
+            "--outdir",
+            str(dataset_root),
+        ]
 
     started_at = utc_now_iso()
     append_campaign_row(
@@ -349,10 +384,16 @@ def main() -> int:
         run_analysis(campaign_root)
         return 0
 
-    if not args.heisenberg_fss_bin.exists():
-        raise SystemExit(
-            f"{args.heisenberg_fss_bin} not found. Build it first with: cargo build --release --bin heisenberg_fss"
-        )
+    if args.gpu:
+        if not GPU_FSS_BIN.exists():
+            raise SystemExit(
+                f"{GPU_FSS_BIN} not found. Build it first with: cargo build --release --bin gpu_fss --features cuda"
+            )
+    else:
+        if not args.heisenberg_fss_bin.exists():
+            raise SystemExit(
+                f"{args.heisenberg_fss_bin} not found. Build it first with: cargo build --release --bin heisenberg_fss"
+            )
 
     for d_value in d_values:
         tmin, tmax = windows[d_value]

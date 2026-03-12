@@ -28,6 +28,7 @@ impl ContinuousGpuLattice {
         n_comp: usize,
         seed: u64,
         device: Arc<CudaDevice>,
+        init_state: &str,
     ) -> anyhow::Result<Self> {
         device.load_ptx(
             CONTINUOUS_PTX.into(),
@@ -43,23 +44,43 @@ impl ContinuousGpuLattice {
         let n_sites = n * n * n;
         let n_threads = (n_sites / 2) as u32;
 
-        // Random initial spins on host (unit vectors)
+        // Initial spins on host (unit vectors)
         let mut host_spins = vec![0.0f32; n_sites * n_comp];
-        let mut rng = rand::thread_rng();
-        use rand::Rng;
-        for i in 0..n_sites {
-            if n_comp == 3 {
-                // Random point on S2
-                let z: f32 = rng.gen_range(-1.0..1.0);
-                let phi: f32 = rng.gen_range(0.0..std::f32::consts::TAU);
-                let r = (1.0 - z * z).sqrt();
-                host_spins[i * n_comp] = r * phi.cos();
-                host_spins[i * n_comp + 1] = r * phi.sin();
-                host_spins[i * n_comp + 2] = z;
-            } else {
-                let angle: f32 = rng.gen_range(0.0..std::f32::consts::TAU);
-                host_spins[i * n_comp] = angle.cos();
-                host_spins[i * n_comp + 1] = angle.sin();
+        match init_state {
+            "cold" => {
+                // All spins aligned along z-axis (or x-axis for XY)
+                for i in 0..n_sites {
+                    if n_comp == 3 {
+                        host_spins[i * n_comp + 2] = 1.0; // (0, 0, 1)
+                    } else {
+                        host_spins[i * n_comp] = 1.0; // (1, 0)
+                    }
+                }
+            }
+            "planar" => {
+                // All spins aligned along x-axis (in xy-plane)
+                for i in 0..n_sites {
+                    host_spins[i * n_comp] = 1.0; // (1, 0, 0) or (1, 0)
+                }
+            }
+            _ => {
+                // Random
+                let mut rng = rand::thread_rng();
+                use rand::Rng;
+                for i in 0..n_sites {
+                    if n_comp == 3 {
+                        let z: f32 = rng.gen_range(-1.0..1.0);
+                        let phi: f32 = rng.gen_range(0.0..std::f32::consts::TAU);
+                        let r = (1.0 - z * z).sqrt();
+                        host_spins[i * n_comp] = r * phi.cos();
+                        host_spins[i * n_comp + 1] = r * phi.sin();
+                        host_spins[i * n_comp + 2] = z;
+                    } else {
+                        let angle: f32 = rng.gen_range(0.0..std::f32::consts::TAU);
+                        host_spins[i * n_comp] = angle.cos();
+                        host_spins[i * n_comp + 1] = angle.sin();
+                    }
+                }
             }
         }
 
@@ -180,51 +201,30 @@ impl ContinuousGpuLattice {
         Ok(())
     }
 
-    /// Compute (E, mx, my, mz) using GPU reduction with pre-allocated buffers.
-    /// No host↔device spin transfer.
+    /// Compute (E, mx, my, mz) using fused GPU reduction with pre-allocated buffers.
+    /// Single kernel launch for both magnetisation and energy (halves memory bandwidth).
     pub fn measure_gpu(&mut self, j: f32, d: f32) -> anyhow::Result<(f64, f64, f64, f64)> {
         let n_sites = self.n * self.n * self.n;
         let n_blocks = ((n_sites as u32) + BLOCK_SIZE - 1) / BLOCK_SIZE;
 
-        // --- Magnetisation (3-component) ---
-        let shared_mag = BLOCK_SIZE as u32 * 4 * 3; // 3 float arrays in shared mem
-        let f_mag = self
+        // Fused mag+energy kernel: 4 shared mem arrays (mx, my, mz, energy)
+        let shared = BLOCK_SIZE as u32 * 4 * 4;
+        let f_fused = self
             .device
-            .get_func("reduce", "reduce_mag_continuous")
+            .get_func("reduce", "reduce_mag_energy_continuous")
             .unwrap();
         unsafe {
-            f_mag.launch(
+            f_fused.launch(
                 LaunchConfig {
                     grid_dim: (n_blocks, 1, 1),
                     block_dim: (BLOCK_SIZE, 1, 1),
-                    shared_mem_bytes: shared_mag,
+                    shared_mem_bytes: shared,
                 },
                 (
                     &self.spins,
                     &mut self.reduce_partial_mx,
                     &mut self.reduce_partial_my,
                     &mut self.reduce_partial_mz,
-                    n_sites as i32,
-                    self.n_comp as i32,
-                ),
-            )?;
-        }
-
-        // --- Energy ---
-        let shared_e = BLOCK_SIZE as u32 * 4;
-        let f_energy = self
-            .device
-            .get_func("reduce", "reduce_energy_continuous")
-            .unwrap();
-        unsafe {
-            f_energy.launch(
-                LaunchConfig {
-                    grid_dim: (n_blocks, 1, 1),
-                    block_dim: (BLOCK_SIZE, 1, 1),
-                    shared_mem_bytes: shared_e,
-                },
-                (
-                    &self.spins,
                     &mut self.reduce_partial_e,
                     self.n as i32,
                     self.n_comp as i32,
