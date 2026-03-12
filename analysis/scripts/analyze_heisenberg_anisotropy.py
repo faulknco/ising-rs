@@ -274,6 +274,118 @@ def plot_binder_curves(spec: DatasetSpec, tables: dict[int, pd.DataFrame], outpu
     plt.close(fig)
 
 
+def extract_exponents(
+    spec: DatasetSpec,
+    tables: dict[int, pd.DataFrame],
+    crossings_df: pd.DataFrame,
+) -> dict[str, object]:
+    """Extract gamma/nu from chi peak scaling and beta/nu from M(Tc) scaling.
+
+    gamma/nu: log(chi_peak) vs log(L) slope
+    beta/nu: -log(M(Tc)) vs log(L) slope (from Binder crossing temperature)
+    """
+    observable_key, order_col, chi_col, regime = choose_observable(spec.d_value)
+    sizes = sorted(tables)
+    result: dict[str, object] = {
+        "label": spec.label,
+        "d_value": spec.d_value,
+        "regime": regime,
+    }
+
+    # gamma/nu from chi_peak ~ L^(gamma/nu)
+    log_L = []
+    log_chi_peak = []
+    for n in sizes:
+        df = tables[n]
+        peak_chi = float(df[chi_col].max())
+        if peak_chi > 0:
+            log_L.append(np.log(n))
+            log_chi_peak.append(np.log(peak_chi))
+
+    if len(log_L) >= 3:
+        log_L_arr = np.array(log_L)
+        log_chi_arr = np.array(log_chi_peak)
+        # OLS fit: log(chi) = (gamma/nu) * log(L) + const
+        A = np.vstack([log_L_arr, np.ones(len(log_L_arr))]).T
+        slope, intercept = np.linalg.lstsq(A, log_chi_arr, rcond=None)[0]
+        result["gamma_over_nu"] = round(float(slope), 4)
+        result["gamma_over_nu_sizes"] = f"{min(sizes)}-{max(sizes)}"
+
+        # Also fit excluding smallest size
+        if len(log_L) >= 4:
+            A2 = np.vstack([log_L_arr[1:], np.ones(len(log_L_arr) - 1)]).T
+            slope2, _ = np.linalg.lstsq(A2, log_chi_arr[1:], rcond=None)[0]
+            result["gamma_over_nu_large"] = round(float(slope2), 4)
+            result["gamma_over_nu_large_sizes"] = f"{sizes[1]}-{max(sizes)}"
+    else:
+        result["gamma_over_nu"] = None
+
+    # beta/nu from M(Tc) ~ L^(-beta/nu)
+    # Use the best Binder crossing Tc: prefer linear_interp from largest pair
+    spec_crossings = crossings_df[
+        (crossings_df["label"] == spec.label) & (crossings_df["method"] != "no_crossing")
+    ]
+    interp_crossings = spec_crossings[spec_crossings["method"] == "linear_interp"]
+    best_source = interp_crossings if not interp_crossings.empty else spec_crossings
+    if not best_source.empty:
+        best = best_source.iloc[-1]  # largest pair with preferred method
+        tc = float(best["tc_crossing"])
+        result["tc_used"] = round(tc, 6)
+
+        log_L_m = []
+        log_M_tc = []
+        for n in sizes:
+            df = tables[n]
+            # Interpolate M at Tc
+            if df["T"].min() <= tc <= df["T"].max():
+                m_at_tc = float(np.interp(tc, df["T"], df[order_col]))
+                if m_at_tc > 0:
+                    log_L_m.append(np.log(n))
+                    log_M_tc.append(np.log(m_at_tc))
+
+        if len(log_L_m) >= 3:
+            log_L_m_arr = np.array(log_L_m)
+            log_M_arr = np.array(log_M_tc)
+            A = np.vstack([log_L_m_arr, np.ones(len(log_L_m_arr))]).T
+            slope, _ = np.linalg.lstsq(A, log_M_arr, rcond=None)[0]
+            result["beta_over_nu"] = round(float(-slope), 4)  # negative because M decreases
+            result["beta_over_nu_sizes"] = f"{min(sizes)}-{max(sizes)}"
+        else:
+            result["beta_over_nu"] = None
+    else:
+        result["tc_used"] = None
+        result["beta_over_nu"] = None
+
+    # nu from Binder slope: |dU/dT|_max ~ L^(1/nu)
+    log_L_slope = []
+    log_binder_slope = []
+    for n in sizes:
+        df = tables[n]
+        binder = df["binder_rel"].values
+        T = df["T"].values
+        if len(T) >= 3:
+            # Numerical derivative, take max absolute slope
+            dU_dT = np.gradient(binder, T)
+            max_slope = float(np.max(np.abs(dU_dT)))
+            if max_slope > 0:
+                log_L_slope.append(np.log(n))
+                log_binder_slope.append(np.log(max_slope))
+
+    if len(log_L_slope) >= 3:
+        log_L_s = np.array(log_L_slope)
+        log_s = np.array(log_binder_slope)
+        A = np.vstack([log_L_s, np.ones(len(log_L_s))]).T
+        slope, _ = np.linalg.lstsq(A, log_s, rcond=None)[0]
+        result["one_over_nu"] = round(float(slope), 4)
+        result["nu"] = round(1.0 / float(slope), 4) if abs(slope) > 0.01 else None
+        result["nu_sizes"] = f"{min(sizes)}-{max(sizes)}"
+    else:
+        result["one_over_nu"] = None
+        result["nu"] = None
+
+    return result
+
+
 def plot_susceptibility_curves(spec: DatasetSpec, tables: dict[int, pd.DataFrame], output_path: Path) -> None:
     _, order_col, chi_col, regime = choose_observable(spec.d_value)
     fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
@@ -299,9 +411,11 @@ def main() -> None:
     peak_frames = []
     crossing_frames = []
     summary_rows: list[dict[str, object]] = []
+    all_tables: dict[str, dict[int, pd.DataFrame]] = {}
 
     for spec in specs:
         tables = load_dataset(spec)
+        all_tables[spec.label] = tables
         peaks, crossings = summarise_dataset(spec, tables)
         peak_frames.append(peaks)
         crossing_frames.append(crossings)
@@ -327,18 +441,29 @@ def main() -> None:
         ["d_value", "size_a", "size_b"]
     )
 
+    # Extract critical exponents for each dataset
+    exponent_rows = []
+    for spec in specs:
+        tables = all_tables[spec.label]
+        exponents = extract_exponents(spec, tables, crossings_df)
+        exponent_rows.append(exponents)
+    exponents_df = pd.DataFrame(exponent_rows).sort_values("d_value")
+
     peaks_path = output_dir / "anisotropy_peak_summary.csv"
     crossings_path = output_dir / "anisotropy_binder_crossings.csv"
+    exponents_path = output_dir / "anisotropy_exponents.csv"
     summary_path = output_dir / "anisotropy_summary.json"
 
     peaks_df.to_csv(peaks_path, index=False)
     crossings_df.to_csv(crossings_path, index=False)
+    exponents_df.to_csv(exponents_path, index=False)
     summary_path.write_text(
         json.dumps(
             {
                 "datasets": summary_rows,
                 "peak_summary_csv": str(peaks_path),
                 "binder_crossings_csv": str(crossings_path),
+                "exponents_csv": str(exponents_path),
             },
             indent=2,
         )
@@ -348,6 +473,7 @@ def main() -> None:
 
     print(f"wrote {peaks_path}")
     print(f"wrote {crossings_path}")
+    print(f"wrote {exponents_path}")
     print(f"wrote {summary_path}")
 
 
