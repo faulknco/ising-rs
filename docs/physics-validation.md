@@ -27,7 +27,7 @@ It is intentionally conservative.
 | Kibble-Zurek | Exploratory | Backend protocol and scripted analysis now exist; larger reruns and stronger datasets are still missing |
 | Coarsening | Exploratory | Useful workflow, but not yet packaged as benchmark physics |
 | Heisenberg workflows | Active but not yet benchmarked here | Substantial code exists; should get its own validation track |
-| Heisenberg anisotropy crossover (GPU) | Production campaign complete | 7 D values (-2..+2), sizes 16-128, 20k samples. Easy-axis/easy-plane symmetry breaking validated. Binder crossings extracted for D=0 (Tc=1.440). Component observables (Mz, Mxy) with jackknife errors. See `analysis/data/anisotropy_campaign_gpu_prod/` |
+| Heisenberg anisotropy crossover (GPU) | V2 campaign complete + N=192 | 7 D values (-2..+2), sizes 16-128 + N=192 for D=0, 20k samples. Exponent extraction: D=0 gamma/nu=1.60 (theory 1.96), nu=1.00 (theory 0.71). Easy-axis gamma/nu~0 (Ising-like crossover). Easy-plane gamma/nu=0.05-0.33 (XY-like). See `analysis/data/anisotropy_campaign_gpu_v2/`. Known gap: (128,192) Binder crossing missing, D=0 exponents not yet publication quality. |
 
 ## Current Ground Truth
 

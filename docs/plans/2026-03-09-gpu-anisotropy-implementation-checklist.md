@@ -100,6 +100,10 @@ Add a GPU anisotropy campaign runner (`--gpu` flag in reproduce_heisenberg_aniso
 - Heisenberg summary filename compatibility (`heisenberg_fss_N{n}.csv`)
 - Windows .exe path fix in campaign script
 - Production campaign: 7 D values × 4 sizes (16,32,64,128) × 16 replicas × 20k samples
+- V2 campaign: 7 D values × 5 sizes (16,32,64,96,128) + N=192 for D=0
+- Critical exponent extraction with OLS log-log fits (gamma/nu, beta/nu, 1/nu)
+- Three fit windows: all sizes, excluding smallest, sizes>=64
+- N=192 D=0 run completed 2026-03-14 (~24h on RTX 2060)
 
 ## Test Plan
 

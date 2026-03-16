@@ -258,34 +258,55 @@ crossover in the 3D classical Heisenberg model."
 2. add anisotropy term and limiting-case validation -- DONE (2026-03-09)
 3. run a small pilot grid in `D` -- DONE (validation campaign 2026-03-12)
 4. decide where crossover is sharpest -- DONE (production campaign 2026-03-12)
-5. run the full large-size campaign only in the informative region -- IN PROGRESS
-6. freeze a result pack
+5. run the full large-size campaign only in the informative region -- DONE (V2 campaign 2026-03-12, N=192 completed 2026-03-14)
+6. freeze a result pack -- PENDING
 7. then decide whether the next extension is materials-inspired or quantum
 
-## Production Campaign Results (2026-03-12)
+## V2 Campaign Results (2026-03-12 to 2026-03-14)
 
-Campaign: `analysis/data/anisotropy_campaign_gpu_prod/`
-Parameters: 7 D values (-2,-1,-0.5,0,0.5,1,2), sizes 16/32/64/128, 16 replicas, 20k samples, 5k warmup
+Campaign: `analysis/data/anisotropy_campaign_gpu_v2/`
+Parameters: 7 D values (-2,-1,-0.5,0,0.5,1,2), sizes 16/32/64/96/128, 16 replicas, 20k samples
+N=192 added for D=0 with fine T grid (1.42-1.48, dT=0.004), completed 2026-03-14
 
-### Key Findings
+### Critical Exponents (D=0 Isotropic Heisenberg)
 
-| D | Regime | Tc (Binder) | chi scaling | Order parameter |
-|---|--------|------------|-------------|-----------------|
-| -2.0 | easy-plane | ~0.60 (64,128) | flat (crossover) | Mxy=0.89 |
-| -1.0 | easy-plane | no crossing | growing | Mxy=0.80 |
-| -0.5 | easy-plane | no crossing | growing | Mxy=0.79 |
-| 0.0 | isotropic | 1.440 (16,32)(32,64) | strong divergence | M=0.51 |
-| +0.5 | easy-axis | ~0.98 (64,128) | flat (crossover) | Mz=0.81 |
-| +1.0 | easy-axis | ~1.00 (64,128) | flat | Mz=0.83 |
-| +2.0 | easy-axis | 0.79-0.85 (32-128) | flat | Mz=0.90 |
+| Exponent | All sizes (16-192) | 64+ restricted | Theory |
+|----------|-------------------|----------------|--------|
+| gamma/nu | 1.60 | 2.55 | 1.963 |
+| beta/nu | 0.24 | 0.13 | 0.519 |
+| nu | 1.00 | 0.85 | 0.711 |
 
-### Next Steps
+N=192 substantially improved fits (gamma/nu: 1.12 -> 1.60, nu: 1.33 -> 1.00).
+64+ restricted fits overshoot, indicating corrections to scaling are still present.
 
-- Extend to L=192 for D=0 (tighter T grid around Tc=1.443)
-- Refine T windows for D=-1, D=-0.5 where Binder crossings are missing
-- Add L=96 for intermediate finite-size window
-- Extract gamma/nu and beta/nu exponents from chi peak scaling
-- Freeze result pack once exponents are stable
+### Anisotropic D != 0 Summary
+
+| D | Regime | Tc (Binder) | gamma/nu | beta/nu |
+|---|--------|------------|----------|---------|
+| -2.0 | easy-plane | 0.571 | 0.19 | 0.001 |
+| -1.0 | easy-plane | 1.059 | 0.33 | 0.003 |
+| -0.5 | easy-plane | 1.039 | 0.29 | 0.003 |
+| 0.0 | isotropic | 1.437 | 1.60 | 0.237 |
+| +0.5 | easy-axis | 0.909 | 0.009 | 0.000 |
+| +1.0 | easy-axis | 0.981 | -0.008 | 0.000 |
+| +2.0 | easy-axis | 0.807 | 0.018 | 0.000 |
+
+Easy-axis: gamma/nu ~ 0, beta/nu ~ 0 — consistent with Ising-like crossover.
+Easy-plane: weak ordering with small gamma/nu — XY-like crossover.
+
+### Known Issues
+
+- (128,192) Binder crossing missing for D=0 — T grids don't overlap between sizes
+- D=0 exponents improved but not yet publication quality
+- Easy-plane Binder crossings only found for largest size pairs
+
+### Remaining Work for Publication Quality
+
+1. Re-run N=128 D=0 with T grid matching N=192 (1.42-1.48) to get (128,192) crossing
+2. Run N=192 for D!=0 values (at least D=+2, D=-2 for limiting cases)
+3. Consider N=256 for D=0 to extend asymptotic window
+4. Tighter T windows for easy-plane (D<0) to improve Binder crossings
+5. Systematic error analysis (autocorrelation time, thermalization checks)
 
 ## Success Metrics
 

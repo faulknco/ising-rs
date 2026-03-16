@@ -302,21 +302,30 @@ def extract_exponents(
             log_L.append(np.log(n))
             log_chi_peak.append(np.log(peak_chi))
 
+    def ols_slope(x: np.ndarray, y: np.ndarray) -> float:
+        A = np.vstack([x, np.ones(len(x))]).T
+        return float(np.linalg.lstsq(A, y, rcond=None)[0][0])
+
     if len(log_L) >= 3:
         log_L_arr = np.array(log_L)
         log_chi_arr = np.array(log_chi_peak)
-        # OLS fit: log(chi) = (gamma/nu) * log(L) + const
-        A = np.vstack([log_L_arr, np.ones(len(log_L_arr))]).T
-        slope, intercept = np.linalg.lstsq(A, log_chi_arr, rcond=None)[0]
-        result["gamma_over_nu"] = round(float(slope), 4)
+        result["gamma_over_nu"] = round(ols_slope(log_L_arr, log_chi_arr), 4)
         result["gamma_over_nu_sizes"] = f"{min(sizes)}-{max(sizes)}"
 
-        # Also fit excluding smallest size
+        # Fit excluding smallest size
         if len(log_L) >= 4:
-            A2 = np.vstack([log_L_arr[1:], np.ones(len(log_L_arr) - 1)]).T
-            slope2, _ = np.linalg.lstsq(A2, log_chi_arr[1:], rcond=None)[0]
-            result["gamma_over_nu_large"] = round(float(slope2), 4)
+            result["gamma_over_nu_large"] = round(ols_slope(log_L_arr[1:], log_chi_arr[1:]), 4)
             result["gamma_over_nu_large_sizes"] = f"{sizes[1]}-{max(sizes)}"
+
+        # Fit using only sizes >= 64 (asymptotic window)
+        mask_64 = np.array([s >= 64 for s in sizes if s in [sizes[i] for i, _ in enumerate(log_L)]])
+        sizes_with_chi = [s for s in sizes if tables[s][chi_col].max() > 0]
+        idx_64 = [i for i, s in enumerate(sizes_with_chi) if s >= 64]
+        if len(idx_64) >= 2:
+            ll64 = log_L_arr[idx_64]
+            lc64 = log_chi_arr[idx_64]
+            result["gamma_over_nu_64plus"] = round(ols_slope(ll64, lc64), 4)
+            result["gamma_over_nu_64plus_sizes"] = ",".join(str(sizes_with_chi[i]) for i in idx_64)
     else:
         result["gamma_over_nu"] = None
 
@@ -346,10 +355,18 @@ def extract_exponents(
         if len(log_L_m) >= 3:
             log_L_m_arr = np.array(log_L_m)
             log_M_arr = np.array(log_M_tc)
-            A = np.vstack([log_L_m_arr, np.ones(len(log_L_m_arr))]).T
-            slope, _ = np.linalg.lstsq(A, log_M_arr, rcond=None)[0]
-            result["beta_over_nu"] = round(float(-slope), 4)  # negative because M decreases
+            result["beta_over_nu"] = round(-ols_slope(log_L_m_arr, log_M_arr), 4)
             result["beta_over_nu_sizes"] = f"{min(sizes)}-{max(sizes)}"
+
+            # Restricted fit: sizes >= 64
+            sizes_m = [s for s in sizes if tables[s]["T"].min() <= tc <= tables[s]["T"].max()
+                       and float(np.interp(tc, tables[s]["T"], tables[s][order_col])) > 0]
+            idx_64m = [i for i, s in enumerate(sizes_m) if s >= 64]
+            if len(idx_64m) >= 2:
+                ll64m = log_L_m_arr[idx_64m]
+                lm64 = log_M_arr[idx_64m]
+                result["beta_over_nu_64plus"] = round(-ols_slope(ll64m, lm64), 4)
+                result["beta_over_nu_64plus_sizes"] = ",".join(str(sizes_m[i]) for i in idx_64m)
         else:
             result["beta_over_nu"] = None
     else:
@@ -374,11 +391,21 @@ def extract_exponents(
     if len(log_L_slope) >= 3:
         log_L_s = np.array(log_L_slope)
         log_s = np.array(log_binder_slope)
-        A = np.vstack([log_L_s, np.ones(len(log_L_s))]).T
-        slope, _ = np.linalg.lstsq(A, log_s, rcond=None)[0]
-        result["one_over_nu"] = round(float(slope), 4)
-        result["nu"] = round(1.0 / float(slope), 4) if abs(slope) > 0.01 else None
+        slope_val = ols_slope(log_L_s, log_s)
+        result["one_over_nu"] = round(slope_val, 4)
+        result["nu"] = round(1.0 / slope_val, 4) if abs(slope_val) > 0.01 else None
         result["nu_sizes"] = f"{min(sizes)}-{max(sizes)}"
+
+        # Restricted fit: sizes >= 64
+        sizes_slope = [s for s in sizes if len(tables[s]) >= 3]
+        idx_64s = [i for i, s in enumerate(sizes_slope) if s >= 64]
+        if len(idx_64s) >= 2:
+            ll64s = log_L_s[idx_64s]
+            ls64 = log_s[idx_64s]
+            slope_64 = ols_slope(ll64s, ls64)
+            result["one_over_nu_64plus"] = round(slope_64, 4)
+            result["nu_64plus"] = round(1.0 / slope_64, 4) if abs(slope_64) > 0.01 else None
+            result["nu_64plus_sizes"] = ",".join(str(sizes_slope[i]) for i in idx_64s)
     else:
         result["one_over_nu"] = None
         result["nu"] = None

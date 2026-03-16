@@ -1,5 +1,23 @@
 # Changelog
 
+## 2026-03-16 — V2 Campaign + N=192 + Exponent Extraction
+
+### Added
+- **Critical exponent extraction** in `analyze_heisenberg_anisotropy.py`: OLS log-log fits for gamma/nu, beta/nu, 1/nu with three fit windows (all sizes, excluding smallest, sizes>=64)
+- **`ols_slope()` helper** for cleaner regression code
+
+### Changed
+- V2 campaign with 5 sizes (16,32,64,96,128) + N=192 for D=0
+- Analysis now prefers `linear_interp` Binder crossings over `exact_grid`
+
+### Production Results (V2 Campaign)
+- 7 D values x 5 sizes (16,32,64,96,128) + N=192 for D=0
+- D=0 isotropic with N=192: gamma/nu=1.60 (16-192), 2.55 (64+); nu=1.00 (16-192), 0.85 (64+)
+- Easy-axis (D>0): gamma/nu~0, beta/nu~0 — Ising-like crossover confirmed
+- Easy-plane (D<0): gamma/nu=0.05-0.33 — XY-like weak ordering
+- N=192 substantially improved D=0 fits (gamma/nu: 1.12 -> 1.60, nu: 1.33 -> 1.00)
+- Known issue: (128,192) Binder crossing missing — T grids don't overlap
+
 ## 2026-03-12 — GPU Anisotropy Component Observables + Performance (Phase 2)
 
 ### Added
