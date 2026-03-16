@@ -6,7 +6,7 @@ use ising::heisenberg::fss::{run_heisenberg_fss, HeisFssConfig};
 ///   cargo run --release --bin heisenberg_fss -- --sizes 8,12,16,20 --outdir analysis/data
 ///
 /// Output: one CSV per size at <outdir>/heisenberg_fss_N<n>.csv
-/// Columns: T,E,E_err,M,M_err,M2,M2_err,M4,M4_err,Cv,Cv_err,chi,chi_err
+/// Columns: T,E,E_err,M,M_err,M2,M2_err,M4,M4_err,Cv,Cv_err,chi,chi_err,Mz,Mz_err,Mz2,Mz2_err,Mz4,Mz4_err,chi_z,chi_z_err,Mxy,Mxy_err,Mxy2,Mxy2_err,Mxy4,Mxy4_err,chi_xy,chi_xy_err
 use std::env;
 use std::fs;
 use std::path::Path;
@@ -88,6 +88,10 @@ fn main() {
                 config.j = parse_flag::<f64>(&args, i, "--j");
                 i += 2;
             }
+            "--anisotropy-d" => {
+                config.d = parse_flag::<f64>(&args, i, "--anisotropy-d");
+                i += 2;
+            }
             "--outdir" => {
                 outdir = get_arg(&args, i, "--outdir");
                 i += 2;
@@ -104,10 +108,12 @@ fn main() {
 
     for (n, obs_list) in &results {
         let path = Path::new(&outdir).join(format!("heisenberg_fss_N{n}.csv"));
-        let mut csv = String::from("T,E,E_err,M,M_err,M2,M2_err,M4,M4_err,Cv,Cv_err,chi,chi_err\n");
+        let mut csv = String::from(
+            "T,E,E_err,M,M_err,M2,M2_err,M4,M4_err,Cv,Cv_err,chi,chi_err,Mz,Mz_err,Mz2,Mz2_err,Mz4,Mz4_err,chi_z,chi_z_err,Mxy,Mxy_err,Mxy2,Mxy2_err,Mxy4,Mxy4_err,chi_xy,chi_xy_err\n",
+        );
         for o in obs_list {
             csv.push_str(&format!(
-                "{:.4},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6}\n",
+                "{:.4},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6}\n",
                 o.temperature,
                 o.energy,
                 o.energy_err,
@@ -121,6 +127,22 @@ fn main() {
                 o.heat_capacity_err,
                 o.susceptibility,
                 o.susceptibility_err,
+                o.mz,
+                o.mz_err,
+                o.mz2,
+                o.mz2_err,
+                o.mz4,
+                o.mz4_err,
+                o.chi_z,
+                o.chi_z_err,
+                o.mxy,
+                o.mxy_err,
+                o.mxy2,
+                o.mxy2_err,
+                o.mxy4,
+                o.mxy4_err,
+                o.chi_xy,
+                o.chi_xy_err,
             ));
         }
         fs::write(&path, &csv).expect("failed to write CSV");

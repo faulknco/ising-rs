@@ -11,6 +11,8 @@ pub struct HeisSweepConfig {
     pub delta: f64,
     /// Exchange coupling constant in units of k_B (dimensionless in simulation units).
     pub j: f64,
+    /// Uniaxial onsite anisotropy coefficient in units of J.
+    pub d: f64,
     /// Minimum temperature of the sweep range (units: J/k_B).
     pub t_min: f64,
     /// Maximum temperature of the sweep range (units: J/k_B).
@@ -31,6 +33,7 @@ impl Default for HeisSweepConfig {
             n_overrelax: 5,
             delta: 0.5,
             j: 1.0,
+            d: 0.0,
             t_min: 0.8,
             t_max: 2.0,
             t_steps: 41,
@@ -51,12 +54,15 @@ pub fn combined_sweep(
     lat: &mut HeisenbergLattice,
     beta: f64,
     j: f64,
+    d: f64,
     delta: f64,
     n_overrelax: usize,
     rng: &mut impl Rng,
 ) {
-    metropolis::sweep(lat, beta, j, delta, rng);
-    for _ in 0..n_overrelax {
-        overrelax::sweep(lat, j);
+    metropolis::sweep(lat, beta, j, d, delta, rng);
+    if d == 0.0 {
+        for _ in 0..n_overrelax {
+            overrelax::sweep(lat, j);
+        }
     }
 }

@@ -1,0 +1,7 @@
+model,quantity,measured,theory,abs_error,rel_error_pct,method,fit_sizes,status
+xy,Tc,2.201914,2.2019,1.4e-05,0.0,Binder crossing,all,OK
+xy,gamma/nu,1.976744,1.961888,0.014856,0.76,single reweighting,"8,16,32,64,128",OK
+xy,beta/nu,0.524362,0.518982,0.00538,1.04,single reweighting,"8,16,32,64,128",OK
+xy,beta/nu,0.511628,0.518982,0.007354,1.42,hyperscaling,d=3,OK
+xy,nu,0.687157,0.6717,0.015457,2.3,collapse,"8,16,32,64,128",OK
+xy,nu,0.770632,0.6717,0.098932,14.73,Binder slope,"8,16,32,64,128",WEAK

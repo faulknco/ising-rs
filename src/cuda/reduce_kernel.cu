@@ -1,4 +1,5 @@
 #include <math.h>
+#include <cuda_fp16.h>
 
 // Block-wide reduction using shared memory.
 // Each block reduces its portion; host does final sum over partial results.
@@ -106,13 +107,14 @@ extern "C" __global__ void reduce_mag_continuous(
     }
 }
 
-// --- Continuous spins: partial energy (sum of -J * S_i · S_j, forward neighbours only) ---
+// --- Continuous spins: partial energy (sum of -J * S_i · S_j - D * sz^2, forward neighbours only) ---
 extern "C" __global__ void reduce_energy_continuous(
     const float* spins,
     float* partial_energy,
     int    N,
     int    n_comp,
-    float  J
+    float  J,
+    float  D           // uniaxial anisotropy (Heisenberg only)
 ) {
     int gid = blockIdx.x * blockDim.x + threadIdx.x;
     int n_sites = N * N * N;
@@ -138,6 +140,370 @@ extern "C" __global__ void reduce_energy_continuous(
                 dot += spins[gid * n_comp + c] * spins[fwd[f] * n_comp + c];
             }
             val -= J * dot;
+        }
+
+        // Anisotropy: -D * sz^2 (per site, not per bond)
+        if (n_comp == 3) {
+            float sz = spins[gid * n_comp + 2];
+            val -= D * sz * sz;
+        }
+    }
+
+    sdata[tid] = val;
+    __syncthreads();
+    for (int s = blockDim.x / 2; s > 0; s >>= 1) {
+        if (tid < s) sdata[tid] += sdata[tid + s];
+        __syncthreads();
+    }
+    if (tid == 0) partial_energy[blockIdx.x] = sdata[0];
+}
+
+// ============================================================
+// Fused mag+energy reduction for continuous spins (f32)
+// Combines both magnetisation and energy reduction into a single kernel launch.
+// Uses warp-level __shfl_down_sync for final 32 threads.
+// ============================================================
+
+extern "C" __global__ void reduce_mag_energy_continuous(
+    const float* spins,
+    float* partial_mx,
+    float* partial_my,
+    float* partial_mz,
+    float* partial_energy,
+    int    N,
+    int    n_comp,
+    float  J,
+    float  D
+) {
+    extern __shared__ float sdata[];  // 4 * blockDim.x
+    int tid = threadIdx.x;
+    int gid = blockIdx.x * blockDim.x + threadIdx.x;
+    int bd = blockDim.x;
+    int n_sites = N * N * N;
+
+    float mx = 0.0f, my = 0.0f, mz = 0.0f, eval = 0.0f;
+    if (gid < n_sites) {
+        mx = spins[gid * n_comp + 0];
+        my = spins[gid * n_comp + 1];
+        if (n_comp == 3) mz = spins[gid * n_comp + 2];
+
+        // Energy: forward neighbours only
+        int z = gid / (N * N);
+        int r = gid % (N * N);
+        int y = r / N;
+        int x = r % N;
+
+        int fwd[3];
+        fwd[0] = z*N*N + y*N + (x+1)%N;
+        fwd[1] = z*N*N + ((y+1)%N)*N + x;
+        fwd[2] = ((z+1)%N)*N*N + y*N + x;
+
+        for (int f = 0; f < 3; f++) {
+            float dot = 0.0f;
+            for (int c = 0; c < n_comp; c++) {
+                dot += spins[gid * n_comp + c] * spins[fwd[f] * n_comp + c];
+            }
+            eval -= J * dot;
+        }
+
+        if (n_comp == 3) {
+            float sz = spins[gid * n_comp + 2];
+            eval -= D * sz * sz;
+        }
+    }
+
+    sdata[tid]        = mx;
+    sdata[tid + bd]   = my;
+    sdata[tid + 2*bd] = mz;
+    sdata[tid + 3*bd] = eval;
+    __syncthreads();
+
+    // Shared memory reduction down to warp size
+    for (int s = bd / 2; s > 32; s >>= 1) {
+        if (tid < s) {
+            sdata[tid]        += sdata[tid + s];
+            sdata[tid + bd]   += sdata[tid + s + bd];
+            sdata[tid + 2*bd] += sdata[tid + s + 2*bd];
+            sdata[tid + 3*bd] += sdata[tid + s + 3*bd];
+        }
+        __syncthreads();
+    }
+
+    // Warp-level reduction (final 32 threads) using shuffle
+    if (tid < 32) {
+        // Load from shared memory (volatile not needed with __syncwarp)
+        float wmx  = sdata[tid]        + sdata[tid + 32];
+        float wmy  = sdata[tid + bd]   + sdata[tid + 32 + bd];
+        float wmz  = sdata[tid + 2*bd] + sdata[tid + 32 + 2*bd];
+        float weval = sdata[tid + 3*bd] + sdata[tid + 32 + 3*bd];
+
+        for (int offset = 16; offset > 0; offset >>= 1) {
+            wmx   += __shfl_down_sync(0xFFFFFFFF, wmx,   offset);
+            wmy   += __shfl_down_sync(0xFFFFFFFF, wmy,   offset);
+            wmz   += __shfl_down_sync(0xFFFFFFFF, wmz,   offset);
+            weval += __shfl_down_sync(0xFFFFFFFF, weval, offset);
+        }
+
+        if (tid == 0) {
+            partial_mx[blockIdx.x]     = wmx;
+            partial_my[blockIdx.x]     = wmy;
+            partial_mz[blockIdx.x]     = wmz;
+            partial_energy[blockIdx.x] = weval;
+        }
+    }
+}
+
+// ============================================================
+// FP16 continuous spin reductions
+// ============================================================
+
+extern "C" __global__ void reduce_mag_fp16(
+    const __half* spins,
+    float* partial_mx,
+    float* partial_my,
+    float* partial_mz,
+    int    n_sites,
+    int    n_comp
+) {
+    extern __shared__ float sdata[];
+    int tid = threadIdx.x;
+    int gid = blockIdx.x * blockDim.x + threadIdx.x;
+    int bd = blockDim.x;
+
+    float mx = 0.0f, my = 0.0f, mz = 0.0f;
+    if (gid < n_sites) {
+        mx = __half2float(spins[gid * n_comp + 0]);
+        my = __half2float(spins[gid * n_comp + 1]);
+        if (n_comp == 3) mz = __half2float(spins[gid * n_comp + 2]);
+    }
+    sdata[tid]        = mx;
+    sdata[tid + bd]   = my;
+    sdata[tid + 2*bd] = mz;
+    __syncthreads();
+
+    for (int s = bd / 2; s > 0; s >>= 1) {
+        if (tid < s) {
+            sdata[tid]        += sdata[tid + s];
+            sdata[tid + bd]   += sdata[tid + s + bd];
+            sdata[tid + 2*bd] += sdata[tid + s + 2*bd];
+        }
+        __syncthreads();
+    }
+    if (tid == 0) {
+        partial_mx[blockIdx.x] = sdata[0];
+        partial_my[blockIdx.x] = sdata[bd];
+        partial_mz[blockIdx.x] = sdata[2*bd];
+    }
+}
+
+extern "C" __global__ void reduce_energy_fp16(
+    const __half* spins,
+    float* partial_energy,
+    int    N,
+    int    n_comp,
+    float  J,
+    float  D
+) {
+    int gid = blockIdx.x * blockDim.x + threadIdx.x;
+    int n_sites = N * N * N;
+
+    extern __shared__ float sdata[];
+    int tid = threadIdx.x;
+
+    float val = 0.0f;
+    if (gid < n_sites) {
+        int z = gid / (N * N);
+        int r = gid % (N * N);
+        int y = r / N;
+        int x = r % N;
+
+        int fwd[3];
+        fwd[0] = z*N*N + y*N + (x+1)%N;
+        fwd[1] = z*N*N + ((y+1)%N)*N + x;
+        fwd[2] = ((z+1)%N)*N*N + y*N + x;
+
+        for (int f = 0; f < 3; f++) {
+            float dot = 0.0f;
+            for (int c = 0; c < n_comp; c++) {
+                dot += __half2float(spins[gid * n_comp + c]) *
+                       __half2float(spins[fwd[f] * n_comp + c]);
+            }
+            val -= J * dot;
+        }
+
+        if (n_comp == 3) {
+            float sz = __half2float(spins[gid * n_comp + 2]);
+            val -= D * sz * sz;
+        }
+    }
+
+    sdata[tid] = val;
+    __syncthreads();
+    for (int s = blockDim.x / 2; s > 0; s >>= 1) {
+        if (tid < s) sdata[tid] += sdata[tid + s];
+        __syncthreads();
+    }
+    if (tid == 0) partial_energy[blockIdx.x] = sdata[0];
+}
+
+// ============================================================
+// Fused mag+energy reduction for FP16 continuous spins
+// ============================================================
+
+extern "C" __global__ void reduce_mag_energy_fp16(
+    const __half* spins,
+    float* partial_mx,
+    float* partial_my,
+    float* partial_mz,
+    float* partial_energy,
+    int    N,
+    int    n_comp,
+    float  J,
+    float  D
+) {
+    extern __shared__ float sdata[];
+    int tid = threadIdx.x;
+    int gid = blockIdx.x * blockDim.x + threadIdx.x;
+    int bd = blockDim.x;
+    int n_sites = N * N * N;
+
+    float mx = 0.0f, my = 0.0f, mz = 0.0f, eval = 0.0f;
+    if (gid < n_sites) {
+        mx = __half2float(spins[gid * n_comp + 0]);
+        my = __half2float(spins[gid * n_comp + 1]);
+        if (n_comp == 3) mz = __half2float(spins[gid * n_comp + 2]);
+
+        int z = gid / (N * N);
+        int r = gid % (N * N);
+        int y = r / N;
+        int x = r % N;
+
+        int fwd[3];
+        fwd[0] = z*N*N + y*N + (x+1)%N;
+        fwd[1] = z*N*N + ((y+1)%N)*N + x;
+        fwd[2] = ((z+1)%N)*N*N + y*N + x;
+
+        for (int f = 0; f < 3; f++) {
+            float dot = 0.0f;
+            for (int c = 0; c < n_comp; c++) {
+                dot += __half2float(spins[gid * n_comp + c]) *
+                       __half2float(spins[fwd[f] * n_comp + c]);
+            }
+            eval -= J * dot;
+        }
+
+        if (n_comp == 3) {
+            float sz = __half2float(spins[gid * n_comp + 2]);
+            eval -= D * sz * sz;
+        }
+    }
+
+    sdata[tid]        = mx;
+    sdata[tid + bd]   = my;
+    sdata[tid + 2*bd] = mz;
+    sdata[tid + 3*bd] = eval;
+    __syncthreads();
+
+    for (int s = bd / 2; s > 32; s >>= 1) {
+        if (tid < s) {
+            sdata[tid]        += sdata[tid + s];
+            sdata[tid + bd]   += sdata[tid + s + bd];
+            sdata[tid + 2*bd] += sdata[tid + s + 2*bd];
+            sdata[tid + 3*bd] += sdata[tid + s + 3*bd];
+        }
+        __syncthreads();
+    }
+
+    if (tid < 32) {
+        float wmx   = sdata[tid]        + sdata[tid + 32];
+        float wmy   = sdata[tid + bd]   + sdata[tid + 32 + bd];
+        float wmz   = sdata[tid + 2*bd] + sdata[tid + 32 + 2*bd];
+        float weval = sdata[tid + 3*bd] + sdata[tid + 32 + 3*bd];
+
+        for (int offset = 16; offset > 0; offset >>= 1) {
+            wmx   += __shfl_down_sync(0xFFFFFFFF, wmx,   offset);
+            wmy   += __shfl_down_sync(0xFFFFFFFF, wmy,   offset);
+            wmz   += __shfl_down_sync(0xFFFFFFFF, wmz,   offset);
+            weval += __shfl_down_sync(0xFFFFFFFF, weval, offset);
+        }
+
+        if (tid == 0) {
+            partial_mx[blockIdx.x]     = wmx;
+            partial_my[blockIdx.x]     = wmy;
+            partial_mz[blockIdx.x]     = wmz;
+            partial_energy[blockIdx.x] = weval;
+        }
+    }
+}
+
+// ============================================================
+// XY angle-only reductions (1 angle per spin as __half)
+// ============================================================
+
+extern "C" __global__ void reduce_mag_xy_angle(
+    const __half* angles,
+    float* partial_mx,
+    float* partial_my,
+    int    n_sites
+) {
+    extern __shared__ float sdata[];
+    int tid = threadIdx.x;
+    int gid = blockIdx.x * blockDim.x + threadIdx.x;
+    int bd = blockDim.x;
+
+    float mx = 0.0f, my = 0.0f;
+    if (gid < n_sites) {
+        float theta = __half2float(angles[gid]);
+        mx = cosf(theta);
+        my = sinf(theta);
+    }
+    sdata[tid]      = mx;
+    sdata[tid + bd] = my;
+    __syncthreads();
+
+    for (int s = bd / 2; s > 0; s >>= 1) {
+        if (tid < s) {
+            sdata[tid]      += sdata[tid + s];
+            sdata[tid + bd] += sdata[tid + s + bd];
+        }
+        __syncthreads();
+    }
+    if (tid == 0) {
+        partial_mx[blockIdx.x] = sdata[0];
+        partial_my[blockIdx.x] = sdata[bd];
+    }
+}
+
+extern "C" __global__ void reduce_energy_xy_angle(
+    const __half* angles,
+    float* partial_energy,
+    int    N,
+    float  J
+) {
+    int gid = blockIdx.x * blockDim.x + threadIdx.x;
+    int n_sites = N * N * N;
+
+    extern __shared__ float sdata[];
+    int tid = threadIdx.x;
+
+    float val = 0.0f;
+    if (gid < n_sites) {
+        int z = gid / (N * N);
+        int r = gid % (N * N);
+        int y = r / N;
+        int x = r % N;
+
+        float theta_i = __half2float(angles[gid]);
+        float ci = cosf(theta_i), si = sinf(theta_i);
+
+        int fwd[3];
+        fwd[0] = z*N*N + y*N + (x+1)%N;
+        fwd[1] = z*N*N + ((y+1)%N)*N + x;
+        fwd[2] = ((z+1)%N)*N*N + y*N + x;
+
+        for (int f = 0; f < 3; f++) {
+            float theta_j = __half2float(angles[fwd[f]]);
+            val -= J * (ci * cosf(theta_j) + si * sinf(theta_j));
         }
     }
 

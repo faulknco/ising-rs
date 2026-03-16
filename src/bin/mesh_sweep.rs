@@ -8,15 +8,53 @@ use std::env;
 use std::fs;
 use std::path::Path;
 
-use ising::cli::{get_arg, parse_arg};
+use ising::cli::{
+    check_help, get_arg, parse_arg, validate_samples, validate_t_steps, validate_temp_range,
+    warn_unknown_flags,
+};
 use ising::graph::GraphDef;
 use ising::metropolis::warm_up;
 use ising::observables::measure;
 use rand::SeedableRng;
 use rand_xoshiro::Xoshiro256PlusPlus;
 
+const USAGE: &str = "\
+mesh_sweep — Temperature sweep on an arbitrary graph
+
+USAGE:
+    mesh_sweep --graph <PATH> [OPTIONS]
+
+OPTIONS:
+    --graph <PATH>       Path to graph file (JSON or edge CSV) [required]
+    --j <J>              Coupling constant [default: 1.0]
+    --tmin <T>           Minimum temperature [default: 3.5]
+    --tmax <T>           Maximum temperature [default: 5.5]
+    --steps <N>          Number of temperature points (>=2) [default: 41]
+    --warmup <N>         Warmup sweeps per temperature [default: 2000]
+    --samples <N>        Measurement sweeps per temperature [default: 1000]
+    --seed <N>           RNG seed [default: 42]
+    --outdir <DIR>       Output directory [default: analysis/data]
+    --prefix <STR>       Output filename prefix [default: graph filename stem]
+    --help, -h           Show this help message";
+
+const KNOWN_FLAGS: &[&str] = &[
+    "--graph",
+    "--j",
+    "--tmin",
+    "--tmax",
+    "--steps",
+    "--warmup",
+    "--samples",
+    "--seed",
+    "--outdir",
+    "--prefix",
+    "--help",
+];
+
 fn main() {
     let args: Vec<String> = env::args().collect();
+    check_help(&args, USAGE);
+    warn_unknown_flags(&args, KNOWN_FLAGS);
 
     let mut graph_path = String::new();
     let mut j: f64 = 1.0;
@@ -78,10 +116,15 @@ fn main() {
         }
     }
 
+    // Validation
     if graph_path.is_empty() {
-        eprintln!("Error: --graph <path> is required");
+        eprintln!("Error: --graph <path> is required (try --help for usage)");
         std::process::exit(1);
     }
+    validate_t_steps(t_steps);
+    validate_temp_range(t_min, t_max);
+    validate_samples(samples, "--samples");
+    validate_samples(warmup, "--warmup");
 
     let content = fs::read_to_string(&graph_path).unwrap_or_else(|e| {
         eprintln!("Cannot read {graph_path}: {e}");

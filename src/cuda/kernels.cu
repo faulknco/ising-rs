@@ -1,14 +1,16 @@
 #include <curand_kernel.h>
 #include <math.h>
 
+typedef curandStatePhilox4_32_10 RngState;
+
 // Checkerboard Metropolis kernel for 3D cubic Ising model.
 // parity=0: update black sites (x+y+z even), parity=1: white sites (x+y+z odd).
 // spins: device array of int8_t, size N*N*N.
-// rng_states: per-thread curandState.
+// rng_states: per-thread Philox RNG state (16 bytes).
 
 extern "C" __global__ void metropolis_sweep_kernel(
     signed char* spins,
-    curandState*  rng_states,
+    RngState*     rng_states,
     int           N,
     float         beta,
     float         J,
@@ -46,7 +48,7 @@ extern "C" __global__ void metropolis_sweep_kernel(
     float spin_f = (float)spins[idx];
     float delta_e = 2.0f * spin_f * (J * nb_sum + h);
 
-    curandState local_rng = rng_states[tid];
+    RngState local_rng = rng_states[tid];
     float u = curand_uniform(&local_rng);
     rng_states[tid] = local_rng;
 
@@ -55,7 +57,7 @@ extern "C" __global__ void metropolis_sweep_kernel(
     }
 }
 
-extern "C" __global__ void init_rng_kernel(curandState* states, unsigned long long seed, int n) {
+extern "C" __global__ void init_rng_kernel(RngState* states, unsigned long long seed, int n) {
     int tid = blockIdx.x * blockDim.x + threadIdx.x;
     if (tid >= n) return;
     curand_init(seed, tid, 0, &states[tid]);

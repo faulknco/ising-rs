@@ -1,0 +1,106 @@
+{
+  "datasets": [
+    {
+      "label": "d0",
+      "d_value": 0.0,
+      "regime": "isotropic",
+      "observable": "M",
+      "chi_column": "chi",
+      "sizes": [
+        16,
+        32,
+        64,
+        96,
+        128,
+        192
+      ]
+    },
+    {
+      "label": "dm0p5",
+      "d_value": -0.5,
+      "regime": "easy_plane",
+      "observable": "Mxy",
+      "chi_column": "chi_xy",
+      "sizes": [
+        16,
+        32,
+        64,
+        96,
+        128
+      ]
+    },
+    {
+      "label": "dm1p0",
+      "d_value": -1.0,
+      "regime": "easy_plane",
+      "observable": "Mxy",
+      "chi_column": "chi_xy",
+      "sizes": [
+        16,
+        32,
+        64,
+        96,
+        128
+      ]
+    },
+    {
+      "label": "dm2p0",
+      "d_value": -2.0,
+      "regime": "easy_plane",
+      "observable": "Mxy",
+      "chi_column": "chi_xy",
+      "sizes": [
+        16,
+        32,
+        64,
+        96,
+        128
+      ]
+    },
+    {
+      "label": "dp0p5",
+      "d_value": 0.5,
+      "regime": "easy_axis",
+      "observable": "Mz",
+      "chi_column": "chi_z",
+      "sizes": [
+        16,
+        32,
+        64,
+        96,
+        128
+      ]
+    },
+    {
+      "label": "dp1p0",
+      "d_value": 1.0,
+      "regime": "easy_axis",
+      "observable": "Mz",
+      "chi_column": "chi_z",
+      "sizes": [
+        16,
+        32,
+        64,
+        96,
+        128
+      ]
+    },
+    {
+      "label": "dp2p0",
+      "d_value": 2.0,
+      "regime": "easy_axis",
+      "observable": "Mz",
+      "chi_column": "chi_z",
+      "sizes": [
+        16,
+        32,
+        64,
+        96,
+        128
+      ]
+    }
+  ],
+  "peak_summary_csv": "analysis\\data\\anisotropy_campaign_gpu_v2\\analysis\\anisotropy_peak_summary.csv",
+  "binder_crossings_csv": "analysis\\data\\anisotropy_campaign_gpu_v2\\analysis\\anisotropy_binder_crossings.csv",
+  "exponents_csv": "analysis\\data\\anisotropy_campaign_gpu_v2\\analysis\\anisotropy_exponents.csv"
+}

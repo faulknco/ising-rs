@@ -9,6 +9,7 @@ www/pkg/.gitignore
 
 # Analysis data (large CSV files — regenerate with cargo run --bin fss)
 analysis/data/*.csv
+analysis/data/anisotropy_*/
 analysis/data/archive_*/
 analysis/data/hires/
 analysis/data/jfit/
@@ -21,6 +22,13 @@ analysis/data/manifests/*
 !analysis/data/manifests/README.md
 analysis/figures/generated/*
 !analysis/figures/generated/README.md
+
+# Anisotropy work-in-progress plans
+docs/plans/2026-03-09-anisotropy-stage1b-light.md
+
+# Python virtual environments
+.venv/
+analysis/.venv/
 
 # Python / Jupyter artifacts
 analysis/__pycache__/
@@ -37,6 +45,15 @@ paper/*.blg
 paper/*.log
 paper/*.out
 paper/*Notes.bib
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
 
 # Figures copied by build.sh (duplicates of paper/figures/)
 paper/fss_*.png

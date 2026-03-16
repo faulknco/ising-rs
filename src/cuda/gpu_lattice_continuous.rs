@@ -1,7 +1,9 @@
 use cudarc::driver::{CudaDevice, CudaSlice, LaunchAsync, LaunchConfig};
+use rand::Rng;
 use std::sync::Arc;
 
 use crate::cuda::reduce_gpu;
+use crate::cuda::wolff::wolff_cluster_flip_continuous;
 
 const CONTINUOUS_PTX: &str = include_str!(concat!(env!("OUT_DIR"), "/continuous_spin_kernel.ptx"));
 const BLOCK_SIZE: u32 = 256;
@@ -9,7 +11,7 @@ const BLOCK_SIZE: u32 = 256;
 pub struct ContinuousGpuLattice {
     pub n: usize,
     pub n_comp: usize, // 2 = XY, 3 = Heisenberg
-    device: Arc<CudaDevice>,
+    pub device: Arc<CudaDevice>,
     pub spins: CudaSlice<f32>,
     rng_states: CudaSlice<u8>,
     n_threads: u32,
@@ -26,6 +28,7 @@ impl ContinuousGpuLattice {
         n_comp: usize,
         seed: u64,
         device: Arc<CudaDevice>,
+        init_state: &str,
     ) -> anyhow::Result<Self> {
         device.load_ptx(
             CONTINUOUS_PTX.into(),
@@ -41,28 +44,49 @@ impl ContinuousGpuLattice {
         let n_sites = n * n * n;
         let n_threads = (n_sites / 2) as u32;
 
-        // Random initial spins on host (unit vectors)
+        // Initial spins on host (unit vectors)
         let mut host_spins = vec![0.0f32; n_sites * n_comp];
-        let mut rng = rand::thread_rng();
-        use rand::Rng;
-        for i in 0..n_sites {
-            if n_comp == 3 {
-                // Random point on S2
-                let z: f32 = rng.gen_range(-1.0..1.0);
-                let phi: f32 = rng.gen_range(0.0..std::f32::consts::TAU);
-                let r = (1.0 - z * z).sqrt();
-                host_spins[i * n_comp] = r * phi.cos();
-                host_spins[i * n_comp + 1] = r * phi.sin();
-                host_spins[i * n_comp + 2] = z;
-            } else {
-                let angle: f32 = rng.gen_range(0.0..std::f32::consts::TAU);
-                host_spins[i * n_comp] = angle.cos();
-                host_spins[i * n_comp + 1] = angle.sin();
+        match init_state {
+            "cold" => {
+                // All spins aligned along z-axis (or x-axis for XY)
+                for i in 0..n_sites {
+                    if n_comp == 3 {
+                        host_spins[i * n_comp + 2] = 1.0; // (0, 0, 1)
+                    } else {
+                        host_spins[i * n_comp] = 1.0; // (1, 0)
+                    }
+                }
+            }
+            "planar" => {
+                // All spins aligned along x-axis (in xy-plane)
+                for i in 0..n_sites {
+                    host_spins[i * n_comp] = 1.0; // (1, 0, 0) or (1, 0)
+                }
+            }
+            _ => {
+                // Random
+                let mut rng = rand::thread_rng();
+                use rand::Rng;
+                for i in 0..n_sites {
+                    if n_comp == 3 {
+                        let z: f32 = rng.gen_range(-1.0..1.0);
+                        let phi: f32 = rng.gen_range(0.0..std::f32::consts::TAU);
+                        let r = (1.0 - z * z).sqrt();
+                        host_spins[i * n_comp] = r * phi.cos();
+                        host_spins[i * n_comp + 1] = r * phi.sin();
+                        host_spins[i * n_comp + 2] = z;
+                    } else {
+                        let angle: f32 = rng.gen_range(0.0..std::f32::consts::TAU);
+                        host_spins[i * n_comp] = angle.cos();
+                        host_spins[i * n_comp + 1] = angle.sin();
+                    }
+                }
             }
         }
 
         let spins = device.htod_sync_copy(&host_spins)?;
-        let rng_states = device.alloc_zeros::<u8>((n_threads as usize) * 48)?;
+        // sizeof(curandStatePhilox4_32_10) = 64 bytes per thread
+        let rng_states = device.alloc_zeros::<u8>((n_threads as usize) * 64)?;
 
         // Pre-allocate reduction buffers
         let n_blocks = ((n_sites as u32) + BLOCK_SIZE - 1) / BLOCK_SIZE;
@@ -109,19 +133,23 @@ impl ContinuousGpuLattice {
 
     /// One Metropolis sweep (black + white) with n_or overrelaxation sweeps interleaved.
     /// Does NOT synchronize — caller should sync only when needed (before measurement).
+    /// When d != 0 (anisotropy), overrelaxation is automatically skipped.
     pub fn sweep(
         &mut self,
         beta: f32,
         j: f32,
         delta: f32,
         n_overrelax: usize,
+        d: f32,
     ) -> anyhow::Result<()> {
         let grid = (self.n_threads + BLOCK_SIZE - 1) / BLOCK_SIZE;
         let n = self.n as i32;
         let nc = self.n_comp as i32;
 
         // Overrelaxation sweeps (no RNG, deterministic)
-        for _ in 0..n_overrelax {
+        // SAFETY: overrelaxation is only valid for isotropic Hamiltonian (D=0)
+        let effective_overrelax = if d != 0.0 { 0 } else { n_overrelax };
+        for _ in 0..effective_overrelax {
             for parity in [0i32, 1i32] {
                 let f = self
                     .device
@@ -162,6 +190,7 @@ impl ContinuousGpuLattice {
                         j,
                         delta,
                         parity,
+                        d,
                     ),
                 )?;
             }
@@ -172,55 +201,35 @@ impl ContinuousGpuLattice {
         Ok(())
     }
 
-    /// Compute (E, mx, my, mz) using GPU reduction with pre-allocated buffers.
-    /// No host↔device spin transfer.
-    pub fn measure_gpu(&mut self, j: f32) -> anyhow::Result<(f64, f64, f64, f64)> {
+    /// Compute (E, mx, my, mz) using fused GPU reduction with pre-allocated buffers.
+    /// Single kernel launch for both magnetisation and energy (halves memory bandwidth).
+    pub fn measure_gpu(&mut self, j: f32, d: f32) -> anyhow::Result<(f64, f64, f64, f64)> {
         let n_sites = self.n * self.n * self.n;
         let n_blocks = ((n_sites as u32) + BLOCK_SIZE - 1) / BLOCK_SIZE;
 
-        // --- Magnetisation (3-component) ---
-        let shared_mag = BLOCK_SIZE as u32 * 4 * 3; // 3 float arrays in shared mem
-        let f_mag = self
+        // Fused mag+energy kernel: 4 shared mem arrays (mx, my, mz, energy)
+        let shared = BLOCK_SIZE as u32 * 4 * 4;
+        let f_fused = self
             .device
-            .get_func("reduce", "reduce_mag_continuous")
+            .get_func("reduce", "reduce_mag_energy_continuous")
             .unwrap();
         unsafe {
-            f_mag.launch(
+            f_fused.launch(
                 LaunchConfig {
                     grid_dim: (n_blocks, 1, 1),
                     block_dim: (BLOCK_SIZE, 1, 1),
-                    shared_mem_bytes: shared_mag,
+                    shared_mem_bytes: shared,
                 },
                 (
                     &self.spins,
                     &mut self.reduce_partial_mx,
                     &mut self.reduce_partial_my,
                     &mut self.reduce_partial_mz,
-                    n_sites as i32,
-                    self.n_comp as i32,
-                ),
-            )?;
-        }
-
-        // --- Energy ---
-        let shared_e = BLOCK_SIZE as u32 * 4;
-        let f_energy = self
-            .device
-            .get_func("reduce", "reduce_energy_continuous")
-            .unwrap();
-        unsafe {
-            f_energy.launch(
-                LaunchConfig {
-                    grid_dim: (n_blocks, 1, 1),
-                    block_dim: (BLOCK_SIZE, 1, 1),
-                    shared_mem_bytes: shared_e,
-                },
-                (
-                    &self.spins,
                     &mut self.reduce_partial_e,
                     self.n as i32,
                     self.n_comp as i32,
                     j,
+                    d,
                 ),
             )?;
         }
@@ -241,11 +250,26 @@ impl ContinuousGpuLattice {
 
     /// Legacy measure_raw — now delegates to measure_gpu with pre-allocated buffers.
     pub fn measure_raw(&mut self) -> anyhow::Result<(f64, f64, f64, f64)> {
-        self.measure_gpu(1.0)
+        self.measure_gpu(1.0, 0.0)
     }
 
     pub fn device(&self) -> &Arc<CudaDevice> {
         &self.device
+    }
+
+    /// Wolff embedding cluster step for O(n) models.
+    ///
+    /// Chooses a random unit vector r, projects all spins onto r to get
+    /// effective Ising variables, builds a Wolff cluster on the projected
+    /// system, then reflects cluster spins: S_i → S_i - 2(S_i·r)r.
+    ///
+    /// This dramatically reduces critical slowing down (z ≈ 0.1 vs z ≈ 2
+    /// for Metropolis) at the cost of a GPU→CPU→GPU round-trip.
+    pub fn wolff_step<R: Rng>(&mut self, beta: f32, j: f32, rng: &mut R) -> anyhow::Result<()> {
+        let mut spins = self.device.dtoh_sync_copy(&self.spins)?;
+        wolff_cluster_flip_continuous(&mut spins, self.n, self.n_comp, beta, j, rng);
+        self.device.htod_sync_copy_into(&spins, &mut self.spins)?;
+        Ok(())
     }
 }
 
