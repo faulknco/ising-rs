@@ -47,7 +47,7 @@ pub fn run_kz(config: &KzConfig) -> KzResult {
 
     // Linear ramp T from t_start to t_end over tau_q sweeps
     for step in 0..config.tau_q {
-        let frac = step as f64 / config.tau_q as f64;
+        let frac = step as f64 / (config.tau_q as f64 - 1.0).max(1.0);
         let t = config.t_start + (config.t_end - config.t_start) * frac;
         let beta = 1.0 / t.max(0.01);
         sweep(&mut lattice, beta, config.j, 0.0, &mut rng);
