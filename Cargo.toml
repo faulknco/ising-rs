@@ -21,6 +21,7 @@ anyhow = "1"
 [dependencies.cudarc]
 version = "0.12"
 optional = true
+features = ["cuda-12060"]
 
 [features]
 cuda = ["dep:cudarc"]

@@ -3,6 +3,7 @@
 /// Usage:
 ///   cargo run --release --bin fss
 ///   cargo run --release --bin fss -- --sizes 8,12,16,20 --wolff --outdir analysis/data
+///   cargo run --release --features cuda --bin fss -- --sizes 8,12,16,20 --gpu --outdir analysis/data
 ///
 /// Output: one CSV per size at <outdir>/fss_N<n>.csv
 /// Columns: T,E,M,M2,M4,Cv,chi
@@ -62,17 +63,11 @@ fn main() {
 
     fs::create_dir_all(&outdir).expect("failed to create outdir");
 
-    let results = run_fss(&config);
-
-    #[cfg(feature = "cuda")]
-    if use_gpu {
-        eprintln!("GPU mode: CUDA checkerboard Metropolis (RTX 2060 target)");
-        eprintln!("Note: full GPU FSS path not yet implemented — using CPU");
-    }
-    #[cfg(not(feature = "cuda"))]
-    if use_gpu {
-        eprintln!("Warning: --gpu specified but binary was not compiled with --features cuda");
-    }
+    let results = if use_gpu {
+        run_fss_with_gpu(&config)
+    } else {
+        run_fss(&config)
+    };
 
     for (n, obs_list) in &results {
         let path = Path::new(&outdir).join(format!("fss_N{n}.csv"));
@@ -86,5 +81,19 @@ fn main() {
         }
         fs::write(&path, &csv).expect("failed to write CSV");
         eprintln!("Wrote {}", path.display());
+    }
+}
+
+fn run_fss_with_gpu(config: &FssConfig) -> Vec<(usize, Vec<ising::observables::Observables>)> {
+    #[cfg(feature = "cuda")]
+    {
+        eprintln!("GPU mode: CUDA checkerboard Metropolis");
+        ising::cuda::fss_gpu::run_fss_gpu(config)
+    }
+    #[cfg(not(feature = "cuda"))]
+    {
+        eprintln!("Warning: --gpu specified but binary was not compiled with --features cuda");
+        eprintln!("Falling back to CPU");
+        ising::fss::run_fss(config)
     }
 }
