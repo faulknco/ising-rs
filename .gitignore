@@ -59,3 +59,12 @@ Thumbs.db
 paper/fss_*.png
 paper/val_*.png
 paper/kz_*.png
+
+# Environment / secrets
+.env
+.env.*
+
+# Beads / Dolt files (added by bd init)
+.dolt/
+*.db
+.beads-credential-key
