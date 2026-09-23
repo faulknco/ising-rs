@@ -14,6 +14,8 @@ pub struct HeisFssConfig {
     pub geometry: Geometry,
     /// Exchange coupling J.
     pub j: f64,
+    /// Uniaxial onsite anisotropy coefficient D.
+    pub d: f64,
     /// Minimum temperature (units J/k_B).
     pub t_min: f64,
     /// Maximum temperature (units J/k_B).
@@ -38,6 +40,7 @@ impl Default for HeisFssConfig {
             sizes: vec![8, 12, 16, 20, 24],
             geometry: Geometry::Cubic3D,
             j: 1.0,
+            d: 0.0,
             t_min: 0.8,
             t_max: 2.0,
             t_steps: 41,
@@ -87,6 +90,7 @@ pub fn run_heisenberg_fss(config: &HeisFssConfig) -> Vec<(usize, Vec<HeisenbergO
                         &mut lat,
                         beta,
                         config.j,
+                        config.d,
                         config.delta,
                         config.n_overrelax,
                         config.warmup_sweeps,

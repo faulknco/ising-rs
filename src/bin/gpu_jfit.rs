@@ -449,7 +449,7 @@ fn run_heisenberg_jfit(
         for r in 0..n_replicas {
             let t_idx = replica_to_temp[r];
             let beta = 1.0 / temperatures[t_idx];
-            heisenberg_sweep(&mut replicas[r], beta, j, 0.5, &mut rng);
+            heisenberg_sweep(&mut replicas[r], beta, j, 0.0, 0.5, &mut rng);
         }
     }
 
@@ -467,7 +467,7 @@ fn run_heisenberg_jfit(
         for r in 0..n_replicas {
             let t_idx = replica_to_temp[r];
             let beta = 1.0 / temperatures[t_idx];
-            heisenberg_sweep(&mut replicas[r], beta, j, 0.5, &mut rng);
+            heisenberg_sweep(&mut replicas[r], beta, j, 0.0, 0.5, &mut rng);
 
             let (e, mag) = energy_magnetisation(&replicas[r], j);
             let e_per = e / n_f64;

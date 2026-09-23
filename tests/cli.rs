@@ -493,6 +493,8 @@ fn heisenberg_fss_smoke() {
         .args([
             "--sizes",
             "4",
+            "--anisotropy-d",
+            "0.0",
             "--tmin",
             "1.0",
             "--tmax",
@@ -526,6 +528,10 @@ fn heisenberg_fss_smoke() {
         rows[0].contains("E_err"),
         "CSV header missing error columns"
     );
+    assert!(
+        rows[0].contains("Mz") && rows[0].contains("Mxy"),
+        "CSV header missing anisotropy-aware columns"
+    );
     assert!(!csv.contains("NaN"), "CSV contains NaN values");
 }
 
@@ -540,6 +546,8 @@ fn heisenberg_jfit_smoke() {
         .args([
             "--graph",
             "analysis/graphs/bcc_N4.json",
+            "--anisotropy-d",
+            "0.0",
             "--tmin",
             "5.0",
             "--tmax",
@@ -573,6 +581,10 @@ fn heisenberg_jfit_smoke() {
         rows[0].starts_with("T,E,"),
         "unexpected CSV header: {}",
         rows[0]
+    );
+    assert!(
+        rows[0].contains("Mz") && rows[0].contains("Mxy"),
+        "CSV header missing anisotropy-aware columns"
     );
     assert!(!csv.contains("NaN"), "CSV contains NaN values");
 }

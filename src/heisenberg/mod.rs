@@ -54,15 +54,16 @@ pub fn random_unit_vector(rng: &mut impl Rng) -> Spin3 {
 }
 
 /// Total energy and magnetisation vector of the current configuration.
-/// E = −J Σ_{(i,j)} Sᵢ·Sⱼ  (each bond counted once via nb > idx)
-/// M = Σᵢ Sᵢ
-pub fn energy_magnetisation(lat: &HeisenbergLattice, j: f64) -> (f64, [f64; 3]) {
+/// E = −J Σ_{(i,j)} Sᵢ·Sⱼ − D Σ_i (S_i^z)^2
+/// with each bond counted once via `nb > idx`.
+pub fn energy_magnetisation_anisotropy(lat: &HeisenbergLattice, j: f64, d: f64) -> (f64, [f64; 3]) {
     let mut e = 0.0_f64;
     let mut m = [0.0_f64; 3];
     for (idx, s) in lat.spins.iter().enumerate() {
         m[0] += s[0];
         m[1] += s[1];
         m[2] += s[2];
+        e -= d * s[2] * s[2];
         for &nb in &lat.neighbours[idx] {
             if nb > idx {
                 let sn = &lat.spins[nb];
@@ -71,6 +72,11 @@ pub fn energy_magnetisation(lat: &HeisenbergLattice, j: f64) -> (f64, [f64; 3]) 
         }
     }
     (e, m)
+}
+
+/// Backward-compatible isotropic energy helper.
+pub fn energy_magnetisation(lat: &HeisenbergLattice, j: f64) -> (f64, [f64; 3]) {
+    energy_magnetisation_anisotropy(lat, j, 0.0)
 }
 
 /// |M| per spin.
