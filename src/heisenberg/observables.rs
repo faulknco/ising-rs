@@ -184,6 +184,7 @@ struct JackknifeErrors {
     mxy4_err: f64,
 }
 
+#[allow(clippy::too_many_arguments)]
 fn jackknife_errors(
     e: &[f64],
     m: &[f64],
